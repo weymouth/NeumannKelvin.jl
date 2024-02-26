@@ -36,6 +36,8 @@ end
 
     for x = (-1.,-4.,-16.), y = (0.,1.,4.,16.), z = (-1.,-0.1,-0.01)
         @test abs(NeumannKelvin.nearfield(x,y,z)/bruteN(x,y,z)-1)<0.01
-        @test abs(NeumannKelvin.wavelike(x,y,z)/bruteW(x,y,z)-1)<0.1
+        r = abs(NeumannKelvin.wavelike(x,y,z)/bruteW(x,y,z)-1)
+        r>0.01 && @show x,y,z,r
+        @test r<0.03
     end
 end

@@ -32,8 +32,8 @@ end
 
 # Wave-like disturbance using Complex Gauss-Hermite points
 function wavelike(x,y,z)
-    x>0 && return 0
-	b = √(-3log(10)/z)
+    x≥0 && return 0
+	b = √max(-3log(10)/z,0)
 	T₀ = stat_points(x,abs(y),b)
 	4imag(NSD(T₀,t->exp(z*(1+t^2)),t->(x+abs(y)*t)*sqrt(1+t^2)))
 end

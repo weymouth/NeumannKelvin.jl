@@ -39,6 +39,7 @@ function NSD(x₀,f,g;xgH=xgH,wgH=wgH)
 
         # Find most stable approximation of h' at x
 		dh = [Inf,sqrt(2im/d2g(x)),(6im/d3g(x))^(1/3)]
+        dh[ isnan.(dh)] .= Inf
 		r = argmin(i->abs2(dh[i]),1:3)
 
         # Sum over Gauss-Hermite points

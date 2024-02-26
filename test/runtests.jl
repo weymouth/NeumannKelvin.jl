@@ -30,7 +30,12 @@ function bruteW(x,y,z)
 end
 @testset "green.jl" begin
     @test NeumannKelvin.stat_points(-1,1/sqrt(8),Inf)≈[1/sqrt(2)+0im]
-    x,y,z = -10,1,-1
-    @test abs(bruteN(x,y,z)-NeumannKelvin.nearfield(x,y,z))<1e-3
-    @test abs(bruteW(x,y,z)-NeumannKelvin.wavelike(x,y,z))<1e-3
+
+    @test NeumannKelvin.wavelike(10,0,0)==NeumannKelvin.wavelike(10,0,0)==0
+    @test abs(4π*bessely1(10)-NeumannKelvin.wavelike(-10,0,0))<1e-3
+
+    for x = (-1.,-4.,-16.), y = (0.,1.,4.,16.), z = (-1.,-0.1,-0.01)
+        @test abs(NeumannKelvin.nearfield(x,y,z)/bruteN(x,y,z)-1)<0.01
+        @test abs(NeumannKelvin.wavelike(x,y,z)/bruteW(x,y,z)-1)<0.1
+    end
 end

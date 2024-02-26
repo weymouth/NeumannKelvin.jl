@@ -5,15 +5,56 @@ Green function `G(x)` for a source at position `a`.
 source(x,a) = -1/hypot(x-a...)
 
 """
-    kelvin(ξ,a;Fn=1,ltol=-3log(10),kwargs...)
+    noblesse(ξ,a;Fn=1)
 
 Green Function `G(ξ)` for a source at position `α` moving with `Fn≡U/√gL` below 
 the free-surface. The free surface is ζ=0, the coordinates are scaled by L and
 the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981 for details.
+"""
+function noblesse(ξ,α;Fn=1)
+    α[3] ≥ 0 && throw(DomainError(α[3],"Source must be below the free surface at ζ=0"))
+
+    # Froude number scaled distances from the source's image
+    x,y,z = (ξ[1]-α[1])/Fn^2,abs(ξ[2]-α[2])/Fn^2,(ξ[3]+α[3])/Fn^2
+
+	return source(ξ,α)+(nearfield(x,y,z)+wavelike(x,y,z))/Fn^2
+end
+
+using Base.MathConstants: γ
+# Near-field disturbance using Gauss-Chebyshev points
+function nearfield(x,y,z;xgc=xgc,wgc=wgc)
+    r = hypot(x,y,z)
+    ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)
+	Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
+	f(t) = Ni(t)*√(1-t^2)
+	1/r-2*(1-z/(r+abs(x)))+2/π*wgc'*f.(xgc)
+end
+
+# Wave-like disturbance using Complex Gauss-Hermite points
+function wavelike(x,y,z)
+    x>0 && return 0
+	b = √(-3log(10)/z)
+	T₀ = stat_points(x,abs(y),b)
+	4imag(NSD(T₀,t->exp(z*(1+t^2)),t->(x+abs(y)*t)*sqrt(1+t^2)))
+end
+
+function stat_points(x,y,b)
+	y==0 && return [0]
+	diff = x^2-8y^2
+	diff≤1e-8 && return [(-x+√(diff+0im))/4y]
+	return filter(x->abs(x)<b, @. (-x+[-1,1]*√diff)/4y)
+end
+
+"""
+    furth(ξ,a;Fn=1,ltol=-3log(10),kwargs...)
+
+Green Function `G(ξ)` for a source at position `α` moving with `Fn≡U/√gL` below 
+the free-surface. The free surface is ζ=0, the coordinates are scaled by L and
+the apparent velocity direction is Û=[-1,0,0]. See Furth 2016 for details.
 Smaller log-tolerance `ltol` will only reduce errors when using a large number of
 Gauss-Legendre points. Otherwise, it leads to instability.
 """
-function kelvin(ξ,α;Fn=1,ltol=-3log(10),xgl=xgl32,wgl=wgl32)
+function furth(ξ,α;Fn=1,ltol=-3log(10),xgl=xgl,wgl=wgl)
     α[3] ≥ 0 && throw(DomainError(α[3],"Source must be below the free surface at ζ=0"))
 
     # Froude number scaled distances from the source's image

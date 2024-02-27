@@ -17,20 +17,18 @@ function noblesse(ξ,α;Fn=1)
     # Froude number scaled distances from the source's image
     x,y,z = (ξ[1]-α[1])/Fn^2,abs(ξ[2]-α[2])/Fn^2,(ξ[3]+α[3])/Fn^2
 
-	return source(ξ,α)+(nearfield(x,y,z)+wavelike(x,y,z))/Fn^2
+	return source(ξ,α)+(1/hypot(x,y,z)+nearfield(x,y,z)+wavelike(x,y,z))/Fn^2
 end
 
 using Base.MathConstants: γ
-# Near-field disturbance using Gauss-Chebyshev points
-function nearfield(x,y,z;xgc=xgc,wgc=wgc)
-    r = hypot(x,y,z)
+# Near-field disturbance
+function nearfield(x,y,z;xgl=xgl,wgl=wgl)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)
 	Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
-	f(t) = Ni(t)*√(1-t^2)
-	1/r-2*(1-z/(r+abs(x)))+2/π*wgc'*f.(xgc)
+	-2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;xgl,wgl)
 end
 
-# Wave-like disturbance using Complex Gauss-Hermite points
+# Wave-like disturbance
 function wavelike(x,y,z)
     x≥0 && return 0
     (x^2+y^2)/z^2<10 && return wavegl(x,y,z)

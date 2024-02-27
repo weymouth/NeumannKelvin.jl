@@ -1,6 +1,5 @@
 using FastGaussQuadrature
 xgl,wgl = gausslegendre(32)
-xgc,wgc = gausschebyshevt(32)
 xgH,wgH = gausshermite(4)
 """
     quadgl(f;wgl=[1,1],xgl=[-1/√3,1/√3])
@@ -59,7 +58,7 @@ function NSD(x₀,f,g;xgH=xgH,wgH=wgH)
 end
 
 using SpecialFunctions
-using ForwardDiff: derivative, gradient, value, partials, Dual
+using ForwardDiff: value, partials, Dual
 # Fix automatic differentiation of expintx(Complex(Dual))
 # https://discourse.julialang.org/t/add-forwarddiff-rule-to-allow-complex-arguments/108821
 function SpecialFunctions.expintx(ϕ::Complex{<:Dual{Tag}}) where {Tag}
@@ -71,12 +70,13 @@ end
 
 using ForwardDiff
 # Extend derivative to complex arguments
-function ForwardDiff.derivative(f,z::Complex)
+function derivative(f,z::Complex)
     x,y = reim(z)
-    ∂x = derivative(x->f(x+im*y),x)
-    ∂y = derivative(y->f(x+im*y),y)
+    ∂x = ForwardDiff.derivative(x->f(x+im*y),x)
+    ∂y = ForwardDiff.derivative(y->f(x+im*y),y)
     0.5(∂x-im*∂y)
 end
+derivative(f,x) = ForwardDiff.derivative(f,x)
 """
     NewtonRaphson(f, x₀, tol=1e-8, itr=0, itmax=20)
     

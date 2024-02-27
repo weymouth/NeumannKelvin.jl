@@ -20,9 +20,8 @@ end
 using QuadGK
 using SpecialFunctions
 function bruteN(x,y,z)
-    r = hypot(x,y,z)
     Ni(t) = imag(expintx((z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)))
-    1/r+2/π*quadgk(Ni,-1,1)[1]
+    2/π*quadgk(Ni,-1,1)[1]
 end
 function bruteW(x,y,z)
 	Wi(t) = exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t))

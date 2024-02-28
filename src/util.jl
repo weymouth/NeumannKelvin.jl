@@ -1,6 +1,10 @@
 using FastGaussQuadrature
-xgl,wgl = gausslegendre(32)
-xgH,wgH = gausshermite(4)
+xgl,wgl = gausslegendre(40)
+function posgausshermite(n)
+    xgH,wgH = gausshermite(2n)
+    xgH[n+1:end],wgH[n+1:end] # only return positive points
+end
+xgH,wgH = posgausshermite(3)
 """
     quadgl(f;wgl=[1,1],xgl=[-1/√3,1/√3])
 
@@ -31,30 +35,30 @@ Integrate `∫f(x)exp(im*g(x))dt` from `x=[-∞,∞]` with stationary points `g'
 Numerical Steepest Descent. See Deaño, Huybrechs, and Iserles (2018).
 """
 function NSD(x₀,f,g;xgH=xgH,wgH=wgH)
-	dg(x) = derivative(g,x); d2g(x) = derivative(dg,x); d3g(x) = derivative(d2g,x)
-
+    dg(x) = derivative(g,x); d2g(x) = derivative(dg,x); d3g(x) = derivative(d2g,x)
+    h = first(x₀)
     # Sum over stationary points
-	sum(x₀) do x
-
-        # Find most stable approximation of h' at x
-		dh = [Inf,sqrt(2im/d2g(x)),(6im/d3g(x))^(1/3)]
-        dh[ isnan.(dh)] .= Inf
-		r = argmin(i->abs2(dh[i]),1:3)
-
-        # Sum over Gauss-Hermite points
-		sum(zip(wgH,xgH)) do (w,p)
-
-            # Approximate h(p) as h₀ = x+p*h'
-			θ,ρ = angle(p*dh[2]),abs(p*dh[r])
-			h₀ = (r==2 || θ>0 || imag(x)>0 ) ? x+ρ*exp(im*θ) : x-ρ*im
-
-            # Find true h(p) to ensure stationary phase
-			h = NewtonRaphson(h->g(h)-g(x)-im*p^2,h₀)
-
-            # Evaluate w*f(h)*exp(im*g(h))*h'
-			2im*exp(im*g(x))*w*f(h)*p/dg(h)
-		end
-	end
+    sum(x₀) do x
+        # Sum over positive and negative directions
+        sum(-1:2:1) do signp
+            # Sum along branch
+            sum(eachindex(wgH)) do i
+                p,w = signp*xgH[i],wgH[i]
+                # Approximate first h = x+p*h'
+                if i==1
+                    dh = [Inf,sqrt(2im/d2g(x)),(6im/d3g(x))^(1/3)]
+                    dh[ isnan.(dh)] .= Inf
+                    r = argmin(i->abs2(dh[i]),1:3)
+                    θ,ρ = angle(p*dh[2]),abs(p*dh[r])
+                    h = (r==2 || θ>0 || imag(x)>0 ) ? x+ρ*exp(im*θ) : x-ρ*im
+                end
+                # Find true h(p) to ensure stationary phase
+                h,err = NewtonRaphson(h->g(h)-g(x)-im*p^2,h)
+                # Evaluate w*f(h)*exp(im*g(h))*h'
+                err > 1 ? 0. : exp(im*g(x))*w*f(h)*2im*p/dg(h)
+            end
+        end
+    end
 end
 
 using SpecialFunctions
@@ -82,12 +86,12 @@ derivative(f,x) = ForwardDiff.derivative(f,x)
     
 Find `f(x)=0` using initial guess `x₀` and AutoDiff
 """
-function NewtonRaphson(f, x, tol=1e-8, itr=0, itmax=20)
+function NewtonRaphson(f, x, tol=1e-8, itr=0, itmax=11)
     fx =  f(x)
     while abs2(fx) > tol && itr<itmax
         dx = fx/derivative(f,x)
         x -= dx/(1+abs(dx))
         itr+=1
         fx = f(x)
-    end; x
+    end; x,abs2(fx)
 end

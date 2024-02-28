@@ -29,18 +29,26 @@ function nearfield(x,y,z;xgl=xgl,wgl=wgl)
 end
 
 # Wave-like disturbance
-function wavelike(x,y,z)
+function wavelike(x,y,z; wavemax=10)
     x≥0 && return 0
-    (x^2+y^2)/z^2<10 && return wavegl(x,y,z)
-	b = √max(-3log(10)/z,0)
-	T₀ = stat_points(x,abs(y),b)
-	4imag(NSD(T₀,t->exp(z*(1+t^2)),t->(x+abs(y)*t)*sqrt(1+t^2)))
+    # Pick an integration method
+    count_waves(x,y,z)<wavemax ? wavegl(x,y,z) : waveNSD(x,y,z)
 end
-
+function count_waves(x,y,z)
+    ψ(t) = (x+abs(y)*t)*hypot(1,t)
+    b = √abs(-3log(10)/z)
+    T₀ = stat_points(x,abs(y),b)
+    sum(abs,ψ.([-b,real.(T₀)...,b]))/2π
+end
 function wavegl(x,y,z;xgl=xgl,wgl=wgl)
-    S = 1/√-z
-    Wi(t) = exp(z*(1+t^2))*sin((x+abs(y)*t)*sqrt(1+t^2))
-    4S*quadgl_inf(t->Wi(S*t);xgl,wgl)
+    b = √(-3log(10)/z)
+    Wi(t) = exp(z*(1+t^2))*sin((x+abs(y)*t)*hypot(1,t))
+    4b*quadgl(t->Wi(b*t);xgl,wgl)
+end
+function waveNSD(x,y,z) 
+    b = √abs(-3log(10)/z)
+	T₀ = stat_points(x,abs(y),b)
+    4imag(NSD(T₀,t->exp(z*(1+t^2)),t->(x+abs(y)*t)*sqrt(1+t^2)))
 end
 
 function stat_points(x,y,b)

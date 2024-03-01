@@ -1,5 +1,5 @@
 using FastGaussQuadrature
-xgl,wgl = gausslegendre(40)
+xgl,wgl = gausslegendre(32)
 function posgausshermite(n)
     xgH,wgH = gausshermite(2n)
     xgH[n+1:end],wgH[n+1:end] # only return positive points

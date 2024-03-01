@@ -13,22 +13,6 @@ Approximate ∫f(x)dx from x=[-1,1] using the Gauss-Legendre weights and points 
 @fastmath quadgl(f;wgl=SA[1,1],xgl=SA[-1/√3,1/√3]) = wgl'*f.(xgl)
 
 """
-    quadgl_inf(f;kwargs...)
-
-Approximate ∫f(x)dx from x=[-∞,∞] using `quadgl` with the change of variable x=t/(1-t^2).
-"""
-@fastmath quadgl_inf(f;kwargs...) = quadgl(t->f(t/(1-t^2))*(1+t^2)/(1-t^2)^2;kwargs...)
-
-"""
-    quadgl_ab(f,a,b;kwargs...)
-
-Approximate ∫f(x)dx from x=[a,b] using `quadgl` with the change of variable x=½(a+b+tb-ta).
-"""
-@fastmath function quadgl_ab(f,a,b;kwargs...)
-    h,j = (b-a)/2,(a+b)/2
-    h*quadgl(t->f(j+h*t);kwargs...)
-end
-"""
     NSD(x₀,f,g)
 
 Integrate `∫f(x)exp(im*g(x))dt` from `x=[-∞,∞]` with stationary points `g'(x₀)=0` using 
@@ -77,8 +61,8 @@ using ForwardDiff
 function derivative(f,z::Complex)
     x,y = reim(z)
     ∂x = ForwardDiff.derivative(x->f(x+im*y),x)
-    ∂y = ForwardDiff.derivative(y->f(x+im*y),y)
-    0.5(∂x-im*∂y)
+    # ∂y = ForwardDiff.derivative(y->f(x+im*y),y)
+    # 0.5(∂x-im*∂y)
 end
 derivative(f,x) = ForwardDiff.derivative(f,x)
 """

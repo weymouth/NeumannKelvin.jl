@@ -30,10 +30,13 @@ end
 @testset "green.jl" begin
     @test NeumannKelvin.wavelike(10,0,0)==NeumannKelvin.wavelike(10,0,0)==0
 
-    for x = (-1.,-4.,-16.), y = (0.,1.,4.,16.), z = (-1.,-0.1,-0.01)
+    for R = (0.0,0.1,0.5,2.0,8.0), a = (0.,0.1,0.3,1/sqrt(8),0.5,1.0), z = (-1.,-0.1,-0.02)
+        x = -R*cos(atan(a))
+        y = R*sin(atan(a))
+        x==y==0 && continue
         @test abs(NeumannKelvin.nearfield(x,y,z)/bruteN(x,y,z)-1)<0.01
-        r = abs(NeumannKelvin.wavelike(x,y,z)/bruteW(x,y,z)-1)
-        r>0.01 && @show x,y,z,r
+        r = abs(NeumannKelvin.wavelike(x,y,z)-bruteW(x,y,z))
+        r>0.01 && @show x,y,z
         @test r<0.03
     end
 end

@@ -1,5 +1,6 @@
 using FastGaussQuadrature
-xgl,wgl = gausslegendre(32)
+xgl32,wgl32 = gausslegendre(32)
+xgl128,wgl128 = gausslegendre(128)
 """
     quadgl(f;wgl=[1,1],xgl=[-1/√3,1/√3])
 

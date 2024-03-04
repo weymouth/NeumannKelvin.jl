@@ -26,7 +26,7 @@ end
 
 using Base.MathConstants: γ
 # Near-field disturbance
-function nearfield(x,y,z;xgl=xgl,wgl=wgl)
+function nearfield(x,y,z;xgl=xgl32,wgl=wgl32)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)
 	Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
 	-2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;xgl,wgl)
@@ -34,8 +34,17 @@ end
 
 using QuadGK
 # Wave-like disturbance
-function wavelike(x,y,z;rtol=1e-4)
+function wavelike(x,y,z;rtol=1e-4,xgl=xgl128,wgl=wgl128,GK=false)
     x≥0 && return 0
     Wi(t) = exp(z*(1+t^2))*sin((x+abs(y)*t)*hypot(1,t))
+    if abs(y)<-20z && !GK
+        b = √(-3log(10)/z)
+        return 4b*quadgl(t->Wi(b*t);xgl,wgl)
+    elseif z ≤ -0.025 && !GK
+        b = √(10π/abs(y))
+        dg4(x,y,t) = (x*t+y*(2*t^2+1))^4/(1+t^2)^2
+        sᵧ = dg4(x,y,-b)+dg4(x,y,b)
+        return 8b*quadgl(t->Wi(2b*t)*exp(-dg4(x,y,t)/sᵧ);xgl,wgl)    
+    end
     4/√-z*quadgk(t->Wi(t/√-z),-Inf,Inf;rtol)[1]
 end

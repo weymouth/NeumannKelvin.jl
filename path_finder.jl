@@ -13,30 +13,25 @@ begin
 	plotly()
 	f(z,t) = exp(z*(1+t^2))
 	g(x,y,t) = (x+y*t)*√(1+t^2)
-	r = range(3,10,100)
-	# a = range(1/sqrt(8)-0.1,1/sqrt(8)+0.1,100)
-	a = range(0,1,100)
-	x = 3 .-r*cos.(atan.(a))'
-	y = r*sin.(atan.(a))'
+		# r = range(3,38,200)
+	# a = 1 .- cos.(range(0,0.4π,100))
+	# x = 3 .-r*cos.(atan.(a))'
+	# y = r*sin.(atan.(a))'
+	x = range(-35,0,100)*ones(200)'
+	y = ones(100)*range(0,20,200)'
 	z = -0.1
 end
 
 # ╔═╡ 3a252968-b375-4ddb-b619-819259e32805
-# Plots.surface(x,y,full_path.(x,y,z) .- brute.(x,y,z),label=nothing) 
-
-# ╔═╡ a41bc958-a2c8-405c-944e-623a24caa0f9
-begin
-	brute(x,y,z) = x>0 ? 0 : quadgk(t->f(z,t)*sin(g(x,y,t)),-Inf,Inf)[1]
-	# Plots.surface(x,y,brute.(x,y,z),label=nothing)
-end
-
-# ╔═╡ 8ae26864-7ba8-4179-b7b4-101ef43993ea
-
+# ╠═╡ disabled = true
+#=╠═╡
+Plots.surface(x,y,full_path.(x,y,z) .- brute.(x,y,z),label=nothing)
+  ╠═╡ =#
 
 # ╔═╡ 813de6dd-c19a-43b0-afdd-62098126e298
 begin
 	R(z) = √(-5log(10)/z)
-	xgl,wgl = gausslegendre(32)
+	xgl,wgl = gausslegendre(48)
 	@fastmath function legendre(f,a,b;xgl=xgl,wgl=wgl)
 	    h,j = (b-a)/2,(a+b)/2
 	    h*(wgl'* @. f(j+h*xgl))
@@ -51,22 +46,21 @@ begin
 	stationary(x,y) = y==0 ? (0.,) : @. (-x+(-1,1)*√max(0,x^2-8y^2))/4y
 	nonzero(t::NTuple{2}) = t[2]>t[1]
 	function path_points(x,y,R,Δg=3π)
-		# Radius of Δg around 
-		rngs = map(stationary(x,y)) do s
-			ρ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
-			ϵ,dϵ = g(x,y,s)-g(x,y,s-ρ)-Δg,dg(x,y,s-ρ)
-			while abs(ϵ)>1
-				ρ -= ϵ/dϵ
-				ϵ,dϵ = g(x,y,s)-g(x,y,s-ρ)-Δg,dg(x,y,s-ρ)
-			end
-			ρ -= ϵ/dϵ; ρ = abs(ρ)
-			@. clamp(s-(ρ,-ρ),-R,R)
+		# Radius Δg around stationary points 
+		rngs = map(enumerate(stationary(x,y))) do (i,t₀)
+			s = (-1)^i
+			ϵ(ρ) = g(x,y,t₀)-g(x,y,t₀+s*ρ)+s*Δg
+			# ρ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
+			ρ = argmin(x->abs(ϵ(x)),filter(isfinite,
+				(1.,√(-2Δg/x+(Δg/x)^2),Δg/y,√(Δg/y))))
+			ρ += s*ϵ(ρ)/dg(x,y,t₀+s*ρ)
+			@. clamp(t₀-(ρ,-ρ),-R,R)
 		end |> x->filter(nonzero,x)
-
+		
 		# Merge close ranges
 		if length(rngs)>1
 			a,b = rngs
-			3(b[1]-a[2])<b[2]-a[1] && (rngs = ((a[1],b[2]),))
+			6(b[1]-a[2])<b[2]-a[1] && (rngs = ((a[1],b[2]),))
 		end
 		return rngs
 	end
@@ -85,7 +79,7 @@ begin
 	function end_point(h₀,g,dg,f;tol=1e-5,xlag=xlag,wlag=wlag)
 		f(h₀)≤tol && return 0.
 		# Sum over complex Gauss-Laguerre points
-		g₀,h,dϵ = g(h₀),h₀+0im,dg(h₀)
+		g₀,h,dϵ,f₀ = g(h₀),h₀+0im,dg(h₀),abs2(f(h₀))
 		sum(zip(xlag,wlag)) do (p,w)
 			# Newton steps(s) to find h => g(h)=g₀+im*p
 			ϵ = g(h)-g₀-im*p
@@ -95,9 +89,7 @@ begin
 				h -= ϵ/dϵ # take 2nd step
 				dϵ = dg(h)
 			end
-			s = w*imag(f(h)*exp(im*g₀)*im/dϵ)
-			@show abs2(h-h₀),s
-			s
+			w*abs2(f(h))>f₀ ? 0. : w*imag(f(h)*exp(im*g₀)*im/dϵ)
 		end
 	end
 	function full_path(x,y,z)
@@ -105,33 +97,43 @@ begin
 		# Compute real-line ranges and their contribution
 		rngs = path_points(x,y,R(z))
 		length(rngs)==0 && return 0.
-		I = sum(legendre(t->f(z,t)*sin(g(x,y,t)),rng...) for rng in rngs)
+		Wi(t) = f(z,t)*sin(g(x,y,t))
+		I = if length(rngs)==1
+			a,b = rngs[1]
+			legendre(Wi,a,0.5*(a+b))+legendre(Wi,0.5*(a+b),b)
+		else
+			sum(legendre(Wi,rng...) for rng in rngs)
+		end
 		# Add the end point contributions
 		I+sum(enumerate(tuplejoin(rngs...))) do (i,t₀)
 			(-1)^i*end_point(t₀,t->g(x,y,t),t->dg(x,y,t),t->f(z,t))
 		end
 	end
-	# Plots.surface(x,y,full_path.(x,y,z),label=nothing)
+	Plots.surface(x,y,full_path.(x,y,z),label=nothing)
 end
 
 # ╔═╡ 398e3209-b74f-4179-8aa7-21238fb8aba8
 begin
-	xp,yp = -3.67,0.
+	xp,yp = -6.81,0.396
 	plt=plot()
 	for rng in path_points(xp,yp,R(z))
 		tp = range(rng...,1000)
-		# tp = range(-R(z),R(z),1000)
-		plot!(tp,t->f(z,t)*sin(g(xp,yp,t)),label="Wi")
+		# plot!(tp,t->f(z,t)*sin(g(xp,yp,t)),label="Wi")
+		plot!(tp,t->g(xp,yp,t),label="g")		
 		I = quadgk(t->f(z,t)*sin(g(xp,yp,t)),rng...)[1]
 		Ierr = I-legendre(t->f(z,t)*sin(g(xp,yp,t)),rng...)
 		@show I,Ierr
-		J = quadgk(t->f(z,t)*sin(g(xp,yp,t)),-Inf,Inf)[1]-I
-		Jerr = J-(full_path(xp,yp,z)+Ierr-I)
-		@show J,Jerr
-		
-		# plot!(tp,t->g(xp,yp,t),label="g")
 	end
+	IJ = quadgk(t->f(z,t)*sin(g(xp,yp,t)),-Inf,Inf)[1]
+	IJerr = IJ-full_path(xp,yp,z)
+	@show IJ,IJerr
 	plt
+end
+
+# ╔═╡ a41bc958-a2c8-405c-944e-623a24caa0f9
+begin
+	brute(x,y,z) = x>0 ? 0 : quadgk(t->f(z,t)*sin(g(x,y,t)),-Inf,Inf)[1]
+	# Plots.surface(x,y,brute.(x,y,z),label=nothing)
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -1269,11 +1271,10 @@ version = "1.4.1+1"
 # ╔═╡ Cell order:
 # ╠═4b988a30-dd34-11ee-06e3-0b17d0d97154
 # ╠═da5e7908-00e8-4839-b295-dccd123a1db6
-# ╠═3a252968-b375-4ddb-b619-819259e32805
-# ╟─a41bc958-a2c8-405c-944e-623a24caa0f9
 # ╠═398e3209-b74f-4179-8aa7-21238fb8aba8
+# ╠═3a252968-b375-4ddb-b619-819259e32805
 # ╠═d03c408f-1f13-4d52-a933-e65ec7846136
-# ╠═8ae26864-7ba8-4179-b7b4-101ef43993ea
 # ╠═813de6dd-c19a-43b0-afdd-62098126e298
+# ╟─a41bc958-a2c8-405c-944e-623a24caa0f9
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

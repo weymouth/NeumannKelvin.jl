@@ -12,6 +12,7 @@ begin
 	using PlotlyBase
 	plotly()
 	using ForwardDiff: derivative
+	using StatsBase
 	f(z,t) = exp(z*(1+t^2))
 	g(x,y,t) = (x+y*t)*√(1+t^2)
 	# r = range(3,38,200)
@@ -24,16 +25,10 @@ begin
 	z = -0.1
 end
 
-# ╔═╡ 3a252968-b375-4ddb-b619-819259e32805
-# ╠═╡ disabled = true
-#=╠═╡
-Plots.surface(x,y,full_path.(x,y,z) .- brute.(x,y,z),label=nothing)
-  ╠═╡ =#
-
 # ╔═╡ 813de6dd-c19a-43b0-afdd-62098126e298
 begin
-	R(z) = √(-5log(10)/z)
-	xgl,wgl = gausslegendre(48)
+	R(z) = √max(0,-5log(10)/z-1)
+	xgl,wgl = gausslegendre(32)
 	@fastmath function legendre(f,a,b;xgl=xgl,wgl=wgl)
 	    h,j = (b-a)/2,(a+b)/2
 	    h*(wgl'* @. f(j+h*xgl))
@@ -45,23 +40,24 @@ end
 # ╔═╡ d03c408f-1f13-4d52-a933-e65ec7846136
 begin
 	dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2)
-	function stationary(x,y) 
+	function stationary_points(x,y) 
 		y==0 && return (0.,) 
 		diff = x^2-8y^2
 		diff≤0 && return (-x/4y,)
 		@. (-x+(-1,1)*√diff)/4y
 	end
 	nonzero(t::NTuple{2}) = t[2]>t[1]
-	function path_points(x,y,R,Δg=3π)
+	function stationary_ranges(x,y,R,Δg=3π)
 		# Radius Δg around stationary points 
-		# rngs = map(enumerate(stationary(x,y))) do (i,t₀)
-			# s = (-1)^i
-			# ϵ(ρ) = g(x,y,t₀)-g(x,y,t₀+s*ρ)+s*Δg
-			# ρ = argmin(x->abs(ϵ(x)),filter(isfinite,
-				# (1.,√(-2Δg/x+(Δg/x)^2),Δg/y,√(Δg/y))))
-			# ρ += s*ϵ(ρ)/dg(x,y,t₀+s*ρ)
-		rngs = map(stationary(x,y)) do t₀
+		rngs = map(enumerate(stationary_points(x,y))) do (i,t₀)
+			s,it = (-1)^i,1
 			ρ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
+			ϵ = g(x,y,t₀)-g(x,y,t₀+s*ρ)+s*Δg
+			while abs(ϵ)>Δg/10 # Newton steps
+				ρ += s*ϵ/dg(x,y,t₀+s*ρ)
+				it+=1; it>3 && break
+				ϵ = g(x,y,t₀)-g(x,y,t₀+s*ρ)+s*Δg
+			end; #@show ρ,ϵ
 			@. clamp(t₀-(ρ,-ρ),-R,R)
 		end |> x->filter(nonzero,x)
 		
@@ -74,7 +70,7 @@ begin
 	end
 	function rng_only(x,y,z)
 		x>0 && return 0
-		sum(path_points(x,y,R(z)),init=0.) do rng
+		sum(stationary_ranges(x,y,R(z)),init=0.) do rng
 			legendre(t->f(z,t)*sin(g(x,y,t)),rng...)
 		end
 	end
@@ -85,54 +81,56 @@ end
 begin
 	function full_path(x,y,z)
 		x>0 && return 0.
-		nsd(t->f(z,t),t->g(x,y,t),t->dg(x,y,t),path_points(x,y,R(z)))
+		complex_path(t->g(x,y,t)-im*z*(1+t^2),t->dg(x,y,t)-2im*z*t,
+			stationary_ranges(x,y,R(z)),t->abs(t)≥R(z))
 	end
 	"""
-	    nsd(f,g,dg,rngs)
+	    complex_path(g,dg,rngs,skp)
 
-	Estimate the integral `∫f(t)sin(g(t))dt` from `t=[-∞,∞]` using Numerical
-	Steepest Decent. The ranges of stationary phase `rngs` are integrated 
-	along the real line using Gauss-Legendre, and the endpoints are integrated
-	along the complex plane.
+	Estimate the integral `imag(∫exp(im*g(t))dt)` from `t=[-∞,∞]` using a 
+	complex path. The ranges of stationary phase `rngs` are integrated 
+	along the real line using Gauss-Legendre. The range endpoints where 
+	`skp(t)==false` are integrated in the complex-plane using the phase 
+	derivative `dg(t)=g'` to find the path of stationary phase.
 	"""
-	function nsd(f,g,dg,rngs)
-		# Compute real-line contributions
+	function complex_path(g,dg,rngs,skp;tol=1e-5)
 		length(rngs)==0 && return 0.
-		Wi(t) = f(t)*sin(g(t))
-		I = if length(rngs)==1
-			a,b = rngs[1]
-			legendre(Wi,a,0.5*(a+b))+legendre(Wi,0.5*(a+b),b)
+
+		# Compute real-line contributions
+		W(a,b) = legendre(t->imag(exp(im*g(t))),a,b)
+		I = if length(rngs)==1 # Split the range
+			a,b = rngs[1]; mid = 0.5*(a+b)
+			W(a,0)+W(0,b)
 		else
-			sum(legendre(Wi,rng...) for rng in rngs)
+			sum(W(rng...) for rng in rngs)
 		end
 		
 		# Add the end point contributions
 		I+sum(enumerate(tuplejoin(rngs...))) do (i,t₀)
-			(-1)^i*end_point(t₀,f,g,dg)
+			skp(t₀) ? 0. : (-1)^i*nsp(t₀,g,dg)
 		end
 	end
 	"""
-		end_point(h₀,f,g,dg)
+		nsp(h₀,g,dg)
 
-	Integrate the contributions of `∫f(h)exp(im*g(h))dh` from 
-	`h = [h₀,im*∞]` using numerical stationary phase. The path
-	`h(p)` is found as the roots of `g(h)-g₀-im*p=0` where `p`
+	Integrate the contributions of `imag(∫exp(im*g(h))dh)` from 
+	`h = [h₀,±∞]` using numerical stationary phase. The complex path
+	is found as the roots of `ϵ(h)=g(h)-g₀-im*p=0` where `p`
 	are Gauss-Laguerre integration points.
 	"""
-	function end_point(h₀,f,g,dg;tol=1e-5,xlag=xlag,wlag=wlag)
-		f(h₀)≤tol && return 0.
+	function nsp(h₀,g,dg;xlag=xlag,wlag=wlag)
 		# Sum over complex Gauss-Laguerre points
-		g₀,h,dϵ,f₀ = g(h₀),h₀+0im,dg(h₀),abs2(f(h₀))
+		g₀,h,dϵ = g(h₀),h₀+0im,dg(h₀)
 		sum(zip(xlag,wlag)) do (p,w)
-			# Newton steps(s) to find h => g(h)=g₀+im*p
+			# Newton step(s) to find h
 			ϵ = g(h)-g₀-im*p
 			h -= ϵ/dϵ # 1st step
 			ϵ,dϵ = g(h)-g₀-im*p,dg(h)
-			if abs2(ϵ)>1e-4 # if needed..
+			if abs2(ϵ)>1e-6 # if needed..
 				h -= ϵ/dϵ # take 2nd step
 				dϵ = dg(h)
 			end
-			w*abs2(f(h))>f₀ ? 0. : w*imag(f(h)*exp(im*g₀)*im/dϵ)
+			w*imag(exp(im*g₀)*im/dϵ)
 		end
 	end
 	xlag,wlag = gausslaguerre(5)
@@ -151,13 +149,25 @@ function compare(x,y,z)
 end; compare(x,y,z)
 
 # ╔═╡ a40a5ec2-489b-4e42-aca4-b133a6d502db
-Plots.surface(x,y,ζ.(x,y,z),clims=(-4,4),c=:balance)
+Plots.surface(x,y,min.(10,ζ.(x,y,z)),clims=(-4,4),c=:balance)
+
+# ╔═╡ a41bc958-a2c8-405c-944e-623a24caa0f9
+begin
+	brute(x,y,z) = x>0 ? 0 : quadgk(t->f(z,t)*sin(g(x,y,t)),-Inf,Inf)[1]
+	# Plots.surface(x,y,brute.(x,y,z),label=nothing)
+end
 
 # ╔═╡ 398e3209-b74f-4179-8aa7-21238fb8aba8
 begin
-	xp,yp = -6.81,0.396
+	Imx = argmax(sample(CartesianIndices(x), 2000; replace=false)) do I
+		xi,yi = x[I],y[I]
+		abs(full_path(xi,yi,z)-brute(xi,yi,z))
+	end
+	xp,yp = x[Imx],y[Imx]
+	# (xp, yp) = (-15.477386934673367, 3.4837092731829573)
+	@show xp,yp
 	plt=plot()
-	for rng in path_points(xp,yp,R(z))
+	for rng in stationary_ranges(xp,yp,R(z))
 		tp = range(rng...,1000)
 		plot!(tp,t->f(z,t)*sin(g(xp,yp,t)),label="Wi")
 		# plot!(tp,t->g(xp,yp,t),label="g")		
@@ -171,12 +181,6 @@ begin
 	plt
 end
 
-# ╔═╡ a41bc958-a2c8-405c-944e-623a24caa0f9
-begin
-	brute(x,y,z) = x>0 ? 0 : quadgk(t->f(z,t)*sin(g(x,y,t)),-Inf,Inf)[1]
-	# Plots.surface(x,y,brute.(x,y,z),label=nothing)
-end
-
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -185,6 +189,7 @@ ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 PlotlyBase = "a03496cd-edff-5a9b-9e67-9cda94a718b5"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
 FastGaussQuadrature = "~1.0.2"
@@ -192,6 +197,7 @@ ForwardDiff = "~0.10.36"
 PlotlyBase = "~0.8.19"
 Plots = "~1.40.1"
 QuadGK = "~2.9.4"
+StatsBase = "~0.34.2"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -200,7 +206,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "980a2f2b4d6926f97fbdb91e24ea2d1a5f0270b7"
+project_hash = "20acb105638b1e0fe274ae338656e46f96d960b5"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -1343,9 +1349,8 @@ version = "1.4.1+1"
 # ╠═4b988a30-dd34-11ee-06e3-0b17d0d97154
 # ╠═816dd017-a0f8-41eb-b8cb-22c7b3fbfbe8
 # ╠═a40a5ec2-489b-4e42-aca4-b133a6d502db
-# ╠═da5e7908-00e8-4839-b295-dccd123a1db6
 # ╠═398e3209-b74f-4179-8aa7-21238fb8aba8
-# ╠═3a252968-b375-4ddb-b619-819259e32805
+# ╠═da5e7908-00e8-4839-b295-dccd123a1db6
 # ╠═d03c408f-1f13-4d52-a933-e65ec7846136
 # ╠═813de6dd-c19a-43b0-afdd-62098126e298
 # ╠═a41bc958-a2c8-405c-944e-623a24caa0f9

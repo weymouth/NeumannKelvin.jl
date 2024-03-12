@@ -11,14 +11,16 @@ begin
 	using Plots
 	using PlotlyBase
 	plotly()
+	using ForwardDiff: derivative
 	f(z,t) = exp(z*(1+t^2))
 	g(x,y,t) = (x+y*t)*√(1+t^2)
-		# r = range(3,38,200)
+	# r = range(3,38,200)
 	# a = 1 .- cos.(range(0,0.4π,100))
 	# x = 3 .-r*cos.(atan.(a))'
 	# y = r*sin.(atan.(a))'
-	x = range(-35,0,100)*ones(200)'
-	y = ones(100)*range(0,20,200)'
+	nx,ny = 200,400
+	x = range(-20,0,nx)*ones(ny)'
+	y = ones(nx)*range(0,10,ny)'
 	z = -0.1
 end
 
@@ -43,17 +45,23 @@ end
 # ╔═╡ d03c408f-1f13-4d52-a933-e65ec7846136
 begin
 	dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2)
-	stationary(x,y) = y==0 ? (0.,) : @. (-x+(-1,1)*√max(0,x^2-8y^2))/4y
+	function stationary(x,y) 
+		y==0 && return (0.,) 
+		diff = x^2-8y^2
+		diff≤0 && return (-x/4y,)
+		@. (-x+(-1,1)*√diff)/4y
+	end
 	nonzero(t::NTuple{2}) = t[2]>t[1]
 	function path_points(x,y,R,Δg=3π)
 		# Radius Δg around stationary points 
-		rngs = map(enumerate(stationary(x,y))) do (i,t₀)
-			s = (-1)^i
-			ϵ(ρ) = g(x,y,t₀)-g(x,y,t₀+s*ρ)+s*Δg
-			# ρ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
-			ρ = argmin(x->abs(ϵ(x)),filter(isfinite,
-				(1.,√(-2Δg/x+(Δg/x)^2),Δg/y,√(Δg/y))))
-			ρ += s*ϵ(ρ)/dg(x,y,t₀+s*ρ)
+		# rngs = map(enumerate(stationary(x,y))) do (i,t₀)
+			# s = (-1)^i
+			# ϵ(ρ) = g(x,y,t₀)-g(x,y,t₀+s*ρ)+s*Δg
+			# ρ = argmin(x->abs(ϵ(x)),filter(isfinite,
+				# (1.,√(-2Δg/x+(Δg/x)^2),Δg/y,√(Δg/y))))
+			# ρ += s*ϵ(ρ)/dg(x,y,t₀+s*ρ)
+		rngs = map(stationary(x,y)) do t₀
+			ρ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
 			@. clamp(t₀-(ρ,-ρ),-R,R)
 		end |> x->filter(nonzero,x)
 		
@@ -66,17 +74,52 @@ begin
 	end
 	function rng_only(x,y,z)
 		x>0 && return 0
-		sum(legendre(t->f(z,t)*sin(g(x,y,t)),rng...) for rng in path_points(x,y,R(z)))
+		sum(path_points(x,y,R(z)),init=0.) do rng
+			legendre(t->f(z,t)*sin(g(x,y,t)),rng...)
+		end
 	end
 	# Plots.surface(x,y,rng_only.(x,y,z),label=nothing)
 end
 
 # ╔═╡ da5e7908-00e8-4839-b295-dccd123a1db6
 begin
-	xlag,wlag = gausslaguerre(5)
-	@inline tuplejoin(x, y) = (x...,y...)
-	tuplejoin(t::Tuple) = t
-	function end_point(h₀,g,dg,f;tol=1e-5,xlag=xlag,wlag=wlag)
+	function full_path(x,y,z)
+		x>0 && return 0.
+		nsd(t->f(z,t),t->g(x,y,t),t->dg(x,y,t),path_points(x,y,R(z)))
+	end
+	"""
+	    nsd(f,g,dg,rngs)
+
+	Estimate the integral `∫f(t)sin(g(t))dt` from `t=[-∞,∞]` using Numerical
+	Steepest Decent. The ranges of stationary phase `rngs` are integrated 
+	along the real line using Gauss-Legendre, and the endpoints are integrated
+	along the complex plane.
+	"""
+	function nsd(f,g,dg,rngs)
+		# Compute real-line contributions
+		length(rngs)==0 && return 0.
+		Wi(t) = f(t)*sin(g(t))
+		I = if length(rngs)==1
+			a,b = rngs[1]
+			legendre(Wi,a,0.5*(a+b))+legendre(Wi,0.5*(a+b),b)
+		else
+			sum(legendre(Wi,rng...) for rng in rngs)
+		end
+		
+		# Add the end point contributions
+		I+sum(enumerate(tuplejoin(rngs...))) do (i,t₀)
+			(-1)^i*end_point(t₀,f,g,dg)
+		end
+	end
+	"""
+		end_point(h₀,f,g,dg)
+
+	Integrate the contributions of `∫f(h)exp(im*g(h))dh` from 
+	`h = [h₀,im*∞]` using numerical stationary phase. The path
+	`h(p)` is found as the roots of `g(h)-g₀-im*p=0` where `p`
+	are Gauss-Laguerre integration points.
+	"""
+	function end_point(h₀,f,g,dg;tol=1e-5,xlag=xlag,wlag=wlag)
 		f(h₀)≤tol && return 0.
 		# Sum over complex Gauss-Laguerre points
 		g₀,h,dϵ,f₀ = g(h₀),h₀+0im,dg(h₀),abs2(f(h₀))
@@ -92,25 +135,23 @@ begin
 			w*abs2(f(h))>f₀ ? 0. : w*imag(f(h)*exp(im*g₀)*im/dϵ)
 		end
 	end
-	function full_path(x,y,z)
-		x>0 && return 0.
-		# Compute real-line ranges and their contribution
-		rngs = path_points(x,y,R(z))
-		length(rngs)==0 && return 0.
-		Wi(t) = f(z,t)*sin(g(x,y,t))
-		I = if length(rngs)==1
-			a,b = rngs[1]
-			legendre(Wi,a,0.5*(a+b))+legendre(Wi,0.5*(a+b),b)
-		else
-			sum(legendre(Wi,rng...) for rng in rngs)
-		end
-		# Add the end point contributions
-		I+sum(enumerate(tuplejoin(rngs...))) do (i,t₀)
-			(-1)^i*end_point(t₀,t->g(x,y,t),t->dg(x,y,t),t->f(z,t))
-		end
-	end
-	Plots.surface(x,y,full_path.(x,y,z),label=nothing)
+	xlag,wlag = gausslaguerre(5)
+	@inline tuplejoin(x, y) = (x...,y...)
+	tuplejoin(t::Tuple) = t
+	ζ(x,y,z) = derivative(x->full_path(x,y,z),x)
 end
+
+# ╔═╡ 816dd017-a0f8-41eb-b8cb-22c7b3fbfbe8
+function compare(x,y,z)
+	full,rng = full_path.(x,y,z),rng_only.(x,y,z)
+	plt2 = Plots.heatmap(rng',title="Real-line only")
+	plt1 = Plots.heatmap(full',title="Full path")
+	plt3 = Plots.heatmap((full-rng)',title="Diff")
+	plot(plt2,plt1,plt3,layout=(3,1),size=(600,700))
+end; compare(x,y,z)
+
+# ╔═╡ a40a5ec2-489b-4e42-aca4-b133a6d502db
+Plots.surface(x,y,ζ.(x,y,z),clims=(-4,4),c=:balance)
 
 # ╔═╡ 398e3209-b74f-4179-8aa7-21238fb8aba8
 begin
@@ -118,8 +159,8 @@ begin
 	plt=plot()
 	for rng in path_points(xp,yp,R(z))
 		tp = range(rng...,1000)
-		# plot!(tp,t->f(z,t)*sin(g(xp,yp,t)),label="Wi")
-		plot!(tp,t->g(xp,yp,t),label="g")		
+		plot!(tp,t->f(z,t)*sin(g(xp,yp,t)),label="Wi")
+		# plot!(tp,t->g(xp,yp,t),label="g")		
 		I = quadgk(t->f(z,t)*sin(g(xp,yp,t)),rng...)[1]
 		Ierr = I-legendre(t->f(z,t)*sin(g(xp,yp,t)),rng...)
 		@show I,Ierr
@@ -140,12 +181,14 @@ end
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 PlotlyBase = "a03496cd-edff-5a9b-9e67-9cda94a718b5"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 
 [compat]
 FastGaussQuadrature = "~1.0.2"
+ForwardDiff = "~0.10.36"
 PlotlyBase = "~0.8.19"
 Plots = "~1.40.1"
 QuadGK = "~2.9.4"
@@ -157,7 +200,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "3075ae744ed7d9e5cfe569fc1bbd3f3ebb144800"
+project_hash = "980a2f2b4d6926f97fbdb91e24ea2d1a5f0270b7"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -220,6 +263,12 @@ git-tree-sha1 = "fc08e5930ee9a4e03f84bfb5211cb54e7769758a"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.10"
 
+[[deps.CommonSubexpressions]]
+deps = ["MacroTools", "Test"]
+git-tree-sha1 = "7b8a93dba8af7e3b42fecabf646260105ac373f7"
+uuid = "bbf7d656-a473-5ed7-a52c-81e309532950"
+version = "0.3.0"
+
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]
 git-tree-sha1 = "c955881e3c981181362ae4088b35995446298b80"
@@ -266,6 +315,18 @@ deps = ["Mmap"]
 git-tree-sha1 = "9e2f36d3c96a820c678f2f1f1782582fcf685bae"
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 version = "1.9.1"
+
+[[deps.DiffResults]]
+deps = ["StaticArraysCore"]
+git-tree-sha1 = "782dd5f4561f5d267313f23853baaaa4c52ea621"
+uuid = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
+version = "1.1.0"
+
+[[deps.DiffRules]]
+deps = ["IrrationalConstants", "LogExpFunctions", "NaNMath", "Random", "SpecialFunctions"]
+git-tree-sha1 = "23163d55f885173722d1e4cf0f6110cdbaf7e272"
+uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
+version = "1.15.1"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
@@ -333,6 +394,16 @@ version = "2.13.93+0"
 git-tree-sha1 = "f3cf88025f6d03c194d73f5d13fee9004a108329"
 uuid = "1fa38f19-a742-5d3f-a2b9-30dd87b9d5f8"
 version = "1.3.6"
+
+[[deps.ForwardDiff]]
+deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "LinearAlgebra", "LogExpFunctions", "NaNMath", "Preferences", "Printf", "Random", "SpecialFunctions"]
+git-tree-sha1 = "cf0fe81336da9fb90944683b8c41984b08793dad"
+uuid = "f6369f11-7733-5829-9624-2563aa707210"
+version = "0.10.36"
+weakdeps = ["StaticArrays"]
+
+    [deps.ForwardDiff.extensions]
+    ForwardDiffStaticArraysExt = "StaticArrays"
 
 [[deps.FreeType2_jll]]
 deps = ["Artifacts", "Bzip2_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
@@ -1270,11 +1341,13 @@ version = "1.4.1+1"
 
 # ╔═╡ Cell order:
 # ╠═4b988a30-dd34-11ee-06e3-0b17d0d97154
+# ╠═816dd017-a0f8-41eb-b8cb-22c7b3fbfbe8
+# ╠═a40a5ec2-489b-4e42-aca4-b133a6d502db
 # ╠═da5e7908-00e8-4839-b295-dccd123a1db6
 # ╠═398e3209-b74f-4179-8aa7-21238fb8aba8
 # ╠═3a252968-b375-4ddb-b619-819259e32805
 # ╠═d03c408f-1f13-4d52-a933-e65ec7846136
 # ╠═813de6dd-c19a-43b0-afdd-62098126e298
-# ╟─a41bc958-a2c8-405c-944e-623a24caa0f9
+# ╠═a41bc958-a2c8-405c-944e-623a24caa0f9
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

@@ -118,10 +118,10 @@ begin
 	is found as the roots of `ϵ(h)=g(h)-g₀-im*p=0` where `p`
 	are Gauss-Laguerre integration points.
 	"""
-	function nsp(h₀,g,dg;xlag=xlag,wlag=wlag)
+	@fastmath function nsp(h₀,g,dg;xlag=xlag,wlag=wlag)
 		# Sum over complex Gauss-Laguerre points
-		g₀,h,dϵ = g(h₀),h₀+0im,dg(h₀)
-		sum(zip(xlag,wlag)) do (p,w)
+		s,g₀,h,dϵ = 0.,g(h₀),h₀+0im,dg(h₀)
+		for (p,w) in zip(xlag,wlag)
 			# Newton step(s) to find h
 			ϵ = g(h)-g₀-im*p
 			h -= ϵ/dϵ # 1st step
@@ -130,8 +130,8 @@ begin
 				h -= ϵ/dϵ # take 2nd step
 				dϵ = dg(h)
 			end
-			w*imag(exp(im*g₀)*im/dϵ)
-		end
+			s += w*imag(exp(im*g₀)*im/dϵ)
+		end;s
 	end
 	xlag,wlag = gausslaguerre(5)
 	@inline tuplejoin(x, y) = (x...,y...)
@@ -150,6 +150,9 @@ end; compare(x,y,z)
 
 # ╔═╡ a40a5ec2-489b-4e42-aca4-b133a6d502db
 Plots.surface(x,y,min.(10,ζ.(x,y,z)),clims=(-4,4),c=:balance)
+
+# ╔═╡ fc6c2961-0109-43a4-bc3d-f90c62c1aef2
+full_path.(x,y,z);
 
 # ╔═╡ a41bc958-a2c8-405c-944e-623a24caa0f9
 begin
@@ -1350,6 +1353,7 @@ version = "1.4.1+1"
 # ╠═816dd017-a0f8-41eb-b8cb-22c7b3fbfbe8
 # ╠═a40a5ec2-489b-4e42-aca4-b133a6d502db
 # ╠═398e3209-b74f-4179-8aa7-21238fb8aba8
+# ╠═fc6c2961-0109-43a4-bc3d-f90c62c1aef2
 # ╠═da5e7908-00e8-4839-b295-dccd123a1db6
 # ╠═d03c408f-1f13-4d52-a933-e65ec7846136
 # ╠═813de6dd-c19a-43b0-afdd-62098126e298

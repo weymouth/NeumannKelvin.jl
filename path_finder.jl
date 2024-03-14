@@ -15,10 +15,7 @@ begin
 	using StatsBase
 	f(z,t) = exp(z*(1+t^2))
 	g(x,y,t) = (x+y*t)*√(1+t^2)
-	# r = range(3,38,200)
-	# a = 1 .- cos.(range(0,0.4π,100))
-	# x = 3 .-r*cos.(atan.(a))'
-	# y = r*sin.(atan.(a))'
+
 	nx,ny = 200,400
 	x = range(-20,0,nx)*ones(ny)'
 	y = ones(nx)*range(0,10,ny)'
@@ -43,7 +40,7 @@ begin
 	function stationary_points(x,y) 
 		y==0 && return (0.,) 
 		diff = x^2-8y^2
-		diff≤0 && return (-x/4y,)
+		diff≤√eps() && return (-x/4y,)
 		@. (-x+(-1,1)*√diff)/4y
 	end
 	nonzero(t::NTuple{2}) = t[2]>t[1]
@@ -1353,6 +1350,9 @@ version = "1.4.1+1"
 # ╠═816dd017-a0f8-41eb-b8cb-22c7b3fbfbe8
 # ╠═a40a5ec2-489b-4e42-aca4-b133a6d502db
 # ╠═398e3209-b74f-4179-8aa7-21238fb8aba8
+# ╠═851cc98f-13bf-45bb-b8ed-f0bdb48736a1
+# ╠═1b623770-4c10-4ed2-bdf1-58ec75cccdb1
+# ╠═b580e989-f94e-46e7-99b0-a8e0ef5959ff
 # ╠═fc6c2961-0109-43a4-bc3d-f90c62c1aef2
 # ╠═da5e7908-00e8-4839-b295-dccd123a1db6
 # ╠═d03c408f-1f13-4d52-a933-e65ec7846136

@@ -4,83 +4,9 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 4b988a30-dd34-11ee-06e3-0b17d0d97154
+# ╔═╡ 90cfe9e8-1bc2-4bb3-88c0-b2e3360b672c
 begin
-	using QuadGK
-	using FastGaussQuadrature
-	using Plots
-	using PlotlyBase
-	plotly()
-	using ForwardDiff: derivative
-	using StatsBase
-	f(z,t) = exp(z*(1+t^2))
-	g(x,y,t) = (x+y*t)*√(1+t^2)
-
-	nx,ny = 200,400
-	x = range(-20,0,nx)*ones(ny)'
-	y = ones(nx)*range(0,10,ny)'
-	z = -0.1
-end
-
-# ╔═╡ 813de6dd-c19a-43b0-afdd-62098126e298
-begin
-	R(z) = √max(0,-5log(10)/z-1)
-	xgl,wgl = gausslegendre(32)
-	@fastmath function legendre(f,a,b;xgl=xgl,wgl=wgl)
-	    h,j = (b-a)/2,(a+b)/2
-	    h*(wgl'* @. f(j+h*xgl))
-	end
-	gl(x,y,z) = x>0 ? 0 : legendre(t->f(z,t)*sin(g(x,y,t)),-R(z),R(z))
-	# Plots.surface(x,y,gl.(x,y,z),label=nothing)
-end
-
-# ╔═╡ d03c408f-1f13-4d52-a933-e65ec7846136
-begin
-	dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2)
-	function stationary_points(x,y) 
-		y==0 && return (0.,) 
-		diff = x^2-8y^2
-		diff≤√eps() && return (-x/4y,)
-		@. (-x+(-1,1)*√diff)/4y
-	end
-	nonzero(t::NTuple{2}) = t[2]>t[1]
-	function stationary_ranges(x,y,R,Δg=3π)
-		# Radius Δg around stationary points 
-		rngs = map(enumerate(stationary_points(x,y))) do (i,t₀)
-			s,it = (-1)^i,1
-			ρ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
-			ϵ = g(x,y,t₀)-g(x,y,t₀+s*ρ)+s*Δg
-			while abs(ϵ)>Δg/10 # Newton steps
-				ρ += s*ϵ/dg(x,y,t₀+s*ρ)
-				it+=1; it>3 && break
-				ϵ = g(x,y,t₀)-g(x,y,t₀+s*ρ)+s*Δg
-			end; #@show ρ,ϵ
-			@. clamp(t₀-(ρ,-ρ),-R,R)
-		end |> x->filter(nonzero,x)
-		
-		# Merge close ranges
-		if length(rngs)>1
-			a,b = rngs
-			6(b[1]-a[2])<b[2]-a[1] && (rngs = ((a[1],b[2]),))
-		end
-		return rngs
-	end
-	function rng_only(x,y,z)
-		x>0 && return 0
-		sum(stationary_ranges(x,y,R(z)),init=0.) do rng
-			legendre(t->f(z,t)*sin(g(x,y,t)),rng...)
-		end
-	end
-	# Plots.surface(x,y,rng_only.(x,y,z),label=nothing)
-end
-
-# ╔═╡ da5e7908-00e8-4839-b295-dccd123a1db6
-begin
-	function full_path(x,y,z)
-		x>0 && return 0.
-		complex_path(t->g(x,y,t)-im*z*(1+t^2),t->dg(x,y,t)-2im*z*t,
-			stationary_ranges(x,y,R(z)),t->abs(t)≥R(z))
-	end
+	# General utility/integration functions
 	"""
 	    complex_path(g,dg,rngs,skp)
 
@@ -95,8 +21,8 @@ begin
 
 		# Compute real-line contributions
 		W(a,b) = legendre(t->imag(exp(im*g(t))),a,b)
-		I = if length(rngs)==1 # Split the range
-			a,b = rngs[1]; mid = 0.5*(a+b)
+		I = if length(rngs)==1 # Split the range @ t=0
+			a,b = rngs[1]
 			W(a,0)+W(0,b)
 		else
 			sum(W(rng...) for rng in rngs)
@@ -111,8 +37,8 @@ begin
 		nsp(h₀,g,dg)
 
 	Integrate the contributions of `imag(∫exp(im*g(h))dh)` from 
-	`h = [h₀,±∞]` using numerical stationary phase. The complex path
-	is found as the roots of `ϵ(h)=g(h)-g₀-im*p=0` where `p`
+	`h = [h₀,∞]` using numerical stationary phase. The complex path
+	is found as the roots of `ϵ(h)=g(h)-g(h₀)-im*p=0` where `p`
 	are Gauss-Laguerre integration points.
 	"""
 	@fastmath function nsp(h₀,g,dg;xlag=xlag,wlag=wlag)
@@ -130,56 +56,132 @@ begin
 			s += w*imag(exp(im*g₀)*im/dϵ)
 		end;s
 	end
+	@fastmath function legendre(f,a,b;xgl=xgl,wgl=wgl)
+	    h,j = (b-a)/2,(a+b)/2
+	    h*(wgl'* @. f(j+h*xgl))
+	end
+	
+	using FastGaussQuadrature
 	xlag,wlag = gausslaguerre(5)
+	xgl,wgl = gausslegendre(32)
+
+	"""
+	Refine radius ρ such that `g(t₀±ρ)-g(t₀) ≈ ±Δg`
+	"""
+	@fastmath function refine_ρ(t₀,g,dg,s,ρ,Δg,it=1,itmx=3)
+		ϵ = g(t₀)-g(t₀+s*ρ)+s*Δg
+		while abs(ϵ)>Δg/2 # doesn't need to be perfect
+			ρ += s*ϵ/dg(t₀+s*ρ)
+			it+=1; it>itmx && break
+			ϵ = g(t₀)-g(t₀+s*ρ)+s*Δg
+		end
+		return ρ
+	end
+
+	nonzero(t::NTuple{2}) = t[2]>t[1]
 	@inline tuplejoin(x, y) = (x...,y...)
 	tuplejoin(t::Tuple) = t
-	ζ(x,y,z) = derivative(x->full_path(x,y,z),x)
+end
+
+# ╔═╡ 4b988a30-dd34-11ee-06e3-0b17d0d97154
+begin
+	# Integral-specific functions
+	f(z,t) = exp(z*(1+t^2))      # envelop function
+	R(z) = √max(0,-5log(10)/z-1) # Radius s.t. f(z,R(z))=1E-5
+
+	g(x,y,t) = (x+y*t)*√(1+t^2)           # phase function
+	dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2) # it's derivative
+
+	# Return points where dg=0 as a tuple
+	function stationary_points(x,y) 
+		y==0 && return (0.,) 
+		diff = x^2-8y^2
+		diff≤√eps() && return (-x/4y,)
+		@. (-x+(-1,1)*√diff)/4y
+	end
+
+	#Find ranges around stationary points within which the phase is ±Δg.
+	function stationary_ranges(x,y,R,Δg=3π)
+		# Get stationary point tuple and guess radius ρ₀
+		S = filter(t->abs(t)<1.1R,stationary_points(x,y))
+		ρ₀ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
+
+		# Get ranges within R with refined ρ estimate
+		rngs = map(enumerate(S)) do (i,t₀)
+			ρ = refine_ρ(t₀,t->g(x,y,t),t->dg(x,y,t),(-1)^i,ρ₀,Δg)
+			@. clamp(t₀-(ρ,-ρ),-R,R)
+		end |> x->filter(nonzero,x)
+		
+		# Merge close ranges
+		if length(rngs)>1
+			a,b = rngs
+			6(b[1]-a[2])<b[2]-a[1] && (rngs = ((a[1],b[2]),))
+		end
+		return rngs
+	end
+
+	# Integrate using the phase function modified with the envelop dependancy
+	function full_path(x,y,z)
+		x>0 && return 0.
+		complex_path(t->g(x,y,t)-im*z*(1+t^2),t->dg(x,y,t)-2im*z*t, #modified
+			stationary_ranges(x,y,R(z)),t->abs(t)≥R(z))
+	end
 end
 
 # ╔═╡ 816dd017-a0f8-41eb-b8cb-22c7b3fbfbe8
-function compare(x,y,z)
-	full,rng = full_path.(x,y,z),rng_only.(x,y,z)
-	plt2 = Plots.heatmap(rng',title="Real-line only")
-	plt1 = Plots.heatmap(full',title="Full path")
-	plt3 = Plots.heatmap((full-rng)',title="Diff")
-	plot(plt2,plt1,plt3,layout=(3,1),size=(600,700))
-end; compare(x,y,z)
+begin
+	# Create grid to sample function on
+	nx,ny = 200,400
+	x = range(-20,0,nx)*ones(ny)'
+	y = ones(nx)*range(0,10,ny)'
+	z = -0.1
+
+	# plot it
+	using Plots
+	using PlotlyBase
+	plotly()
+	Plots.heatmap((full_path.(x,y,z))')
+end
 
 # ╔═╡ a40a5ec2-489b-4e42-aca4-b133a6d502db
-Plots.surface(x,y,min.(10,ζ.(x,y,z)),clims=(-4,4),c=:balance)
-
-# ╔═╡ fc6c2961-0109-43a4-bc3d-f90c62c1aef2
-full_path.(x,y,z);
-
-# ╔═╡ a41bc958-a2c8-405c-944e-623a24caa0f9
 begin
-	brute(x,y,z) = x>0 ? 0 : quadgk(t->f(z,t)*sin(g(x,y,t)),-Inf,Inf)[1]
-	# Plots.surface(x,y,brute.(x,y,z),label=nothing)
+	# Plot derivative (which is the water wave generated by a singularity)
+	using ForwardDiff: derivative
+	ζ(x,y,z) = derivative(x->full_path(x,y,z),x)
+	Plots.surface(x,y,min.(10,ζ.(x,y,z)),clims=(-4,4),c=:balance)
 end
 
 # ╔═╡ 398e3209-b74f-4179-8aa7-21238fb8aba8
 begin
+	using QuadGK
+	using StatsBase
+
+	# Find a bad point compared to QuadGK
+	brute(x,y,z) = x>0 ? 0 : quadgk(t->f(z,t)*sin(g(x,y,t)),-Inf,Inf)[1]
 	Imx = argmax(sample(CartesianIndices(x), 2000; replace=false)) do I
 		xi,yi = x[I],y[I]
 		abs(full_path(xi,yi,z)-brute(xi,yi,z))
 	end
 	xp,yp = x[Imx],y[Imx]
 	# (xp, yp) = (-15.477386934673367, 3.4837092731829573)
+
+	# Take a look at the integrand
 	@show xp,yp
 	plt=plot()
 	for rng in stationary_ranges(xp,yp,R(z))
 		tp = range(rng...,1000)
 		plot!(tp,t->f(z,t)*sin(g(xp,yp,t)),label="Wi")
 		# plot!(tp,t->g(xp,yp,t),label="g")		
-		I = quadgk(t->f(z,t)*sin(g(xp,yp,t)),rng...)[1]
-		Ierr = I-legendre(t->f(z,t)*sin(g(xp,yp,t)),rng...)
-		@show I,Ierr
 	end
-	IJ = quadgk(t->f(z,t)*sin(g(xp,yp,t)),-Inf,Inf)[1]
-	IJerr = IJ-full_path(xp,yp,z)
-	@show IJ,IJerr
+	GK = quadgk(t->f(z,t)*sin(g(xp,yp,t)),-Inf,Inf)[1]
+	GKerr = GK-full_path(xp,yp,z)
+	@show GK,GKerr
 	plt
 end
+
+# ╔═╡ fc6c2961-0109-43a4-bc3d-f90c62c1aef2
+# Roughly measure computational time
+full_path.(x,y,z);
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1346,17 +1348,11 @@ version = "1.4.1+1"
 """
 
 # ╔═╡ Cell order:
-# ╠═4b988a30-dd34-11ee-06e3-0b17d0d97154
 # ╠═816dd017-a0f8-41eb-b8cb-22c7b3fbfbe8
 # ╠═a40a5ec2-489b-4e42-aca4-b133a6d502db
 # ╠═398e3209-b74f-4179-8aa7-21238fb8aba8
-# ╠═851cc98f-13bf-45bb-b8ed-f0bdb48736a1
-# ╠═1b623770-4c10-4ed2-bdf1-58ec75cccdb1
-# ╠═b580e989-f94e-46e7-99b0-a8e0ef5959ff
 # ╠═fc6c2961-0109-43a4-bc3d-f90c62c1aef2
-# ╠═da5e7908-00e8-4839-b295-dccd123a1db6
-# ╠═d03c408f-1f13-4d52-a933-e65ec7846136
-# ╠═813de6dd-c19a-43b0-afdd-62098126e298
-# ╠═a41bc958-a2c8-405c-944e-623a24caa0f9
+# ╠═4b988a30-dd34-11ee-06e3-0b17d0d97154
+# ╠═90cfe9e8-1bc2-4bb3-88c0-b2e3360b672c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

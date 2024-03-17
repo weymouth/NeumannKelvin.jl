@@ -18,7 +18,7 @@ function kelvin(ξ,α;Fn=1,kwargs...)
 
     # Check inputs
     α[3] ≥ 0 && throw(DomainError(α[3],"Kelvin source above ζ=0"))
-    z ≥ -0.01 && throw(DomainError(z,"Kelvin scaled vertical distance z>-0.01"))
+    z ≥ 0 && throw(DomainError(z,"Kelvin scaled vertical distance above z=0"))
 
     # Return source, nearfield, and wavelike disturbance
 	return source(ξ,α)+(1/hypot(x,y,z)+nearfield(x,y,z)+wavelike(x,y,z;kwargs...))/Fn^2
@@ -26,24 +26,47 @@ end
 
 using Base.MathConstants: γ
 # Near-field disturbance
-function nearfield(x,y,z;xgl=xgl32,wgl=wgl32)
+function nearfield(x,y,z;xgl=xgl,wgl=wgl)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)
 	Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
 	-2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;xgl,wgl)
 end
 
-using QuadGK
-# Wave-like disturbance
-function wavelike(x,y,z;rtol=1e-4,xgl=xgl128,wgl=wgl128,GK=false)
+# Wave-like disturbance 
+function wavelike(x,y,z)
     x≥0 && return 0.
-    (GK || z > -0.025) && return 4/√-z*quadgk(t->Wi(x,y,z,t/√-z),-Inf,Inf;rtol)[1]
-    abs(y)<-20z ? wavegl(x,y,z,xgl,wgl) : damped(x,y,z,xgl,wgl)
+    R = √max(0,-5log(10)/z-1) # radius s.t. f(z,R)=1E-5
+    4complex_path(t->g(x,y,t)-im*z*(1+t^2), #complex phase
+        t->dg(x,y,t)-2im*z*t,               #it's derivative
+        stationary_ranges(x,y,R),t->abs(t)≥R)
 end
-wavegl(x,y,z,xgl,wgl) = (b=√(-3log(10)/z); 4b*quadgl(t->Wi(x,y,z,b*t);xgl,wgl))
-function damped(x,y,z,xgl,wgl)
-    b = √(10π/abs(y))
-    dg4(x,y,t) = (x*t+abs(y)*(2*t^2+1))^4/(1+t^2)^2
-    scale = dg4(x,y,-b)+dg4(x,y,b)
-    8b*quadgl(t->Wi(x,y,z,2b*t)*exp(-dg4(x,y,t)/scale);xgl,wgl)
+
+g(x,y,t) = (x+y*t)*√(1+t^2)           # phase function
+dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2) # it's derivative
+
+# Return points where dg=0 as a tuple
+function stationary_points(x,y) 
+    y==0 && return (0.,) 
+    diff = x^2-8y^2
+    diff≤√eps() && return (-x/4y,)
+    @. (-x+(-1,1)*√diff)/4y
 end
-Wi(x,y,z,t) = exp(z*(1+t^2))*sin((x+abs(y)*t)*hypot(1,t))
+
+function stationary_ranges(x,y,R,Δg=3π)
+    # Get stationary points and guess radius ρ₀
+    S = filter(t->abs(t)<1.1R,stationary_points(x,y))
+    ρ₀ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
+
+    # Get ranges within R with refined ρ estimate
+    rngs = map(enumerate(S)) do (i,t₀)
+        ρ = refine_ρ(t₀,t->g(x,y,t),t->dg(x,y,t),(-1)^i,ρ₀,Δg)
+        @. clamp(t₀-(ρ,-ρ),-R,R)
+    end |> x->filter(nonzero,x)
+    
+    # Merge close ranges
+    if length(rngs)>1
+        a,b = rngs
+        6(b[1]-a[2])<b[2]-a[1] && (rngs = ((a[1],b[2]),))
+    end
+    return rngs
+end

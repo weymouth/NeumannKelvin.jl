@@ -28,15 +28,17 @@ function bruteW(x,y,z)
 	4quadgk(Wi,-Inf,Inf)[1]
 end
 @testset "green.jl" begin
-    @test NeumannKelvin.wavelike(10,0,0)==NeumannKelvin.wavelike(10,0,0)==0
+    @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
 
-    for R = (0.0,0.1,0.5,2.0,8.0), a = (0.,0.1,0.3,1/sqrt(8),0.5,1.0), z = (-1.,-0.1,-0.02)
+    @test abs(NeumannKelvin.wavelike(10.,0.,-0.))==NeumannKelvin.wavelike(0.,10.,-0.)==0.
+
+    @test abs(4π*bessely1(10)-NeumannKelvin.wavelike(-10.,0.,-0.))<1e-5
+
+    for R = (0.0,0.1,0.5,2.0,8.0), a = (0.,0.1,0.3,1/sqrt(8),0.5,1.0), z = (-1.,-0.1,-0.01)
         x = -R*cos(atan(a))
         y = R*sin(atan(a))
         x==y==0 && continue
-        @test abs(NeumannKelvin.nearfield(x,y,z)/bruteN(x,y,z)-1)<0.01
-        r = abs(NeumannKelvin.wavelike(x,y,z)-bruteW(x,y,z))
-        r>0.01 && @show x,y,z
-        @test r<0.03
+        @test abs(NeumannKelvin.nearfield(x,y,z)/bruteN(x,y,z)-1)<1e-3
+        @test abs(NeumannKelvin.wavelike(x,y,z)-bruteW(x,y,z))<5e-5
     end
 end

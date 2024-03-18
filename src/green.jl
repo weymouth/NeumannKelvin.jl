@@ -29,7 +29,7 @@ using Base.MathConstants: γ
 function nearfield(x,y,z;xgl=xgl,wgl=wgl)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)
     Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
-    -2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;xgl,wgl)
+    -2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;x=xgl,w=wgl)
 end
 
 # Wave-like disturbance 

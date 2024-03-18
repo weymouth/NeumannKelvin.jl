@@ -3,7 +3,7 @@ const xlag,wlag = gausslaguerre(5)
 const xgl,wgl = gausslegendre(32)
 const xgl2,wgl2 = gausslegendre(2)
 """
-    quadgl(f;wgl=[1,1],xgl=[-1/√3,1/√3])
+    quadgl(f;w=[1,1],x=[-1/√3,1/√3])
 
 Approximate ∫f(x)dx from x=[-1,1] using the Gauss-Legendre weights and points `w,x`.
 """
@@ -30,7 +30,7 @@ function complex_path(g,dg,rngs,skp)
     # Compute real-line contributions
     function f(t)
         u,v = reim(g(t))
-        exp(v)*sin(u)
+        exp(-v)*sin(u)
     end
     I = if length(rngs)==1 # Split the range @ t=0
         a,b = rngs[1]

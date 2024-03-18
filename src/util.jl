@@ -1,13 +1,19 @@
 using FastGaussQuadrature
-xlag,wlag = gausslaguerre(5)
-xgl,wgl = gausslegendre(32)
+const xlag,wlag = gausslaguerre(5)
+const xgl,wgl = gausslegendre(32)
+const xgl2,wgl2 = gausslegendre(2)
 """
     quadgl(f;wgl=[1,1],xgl=[-1/√3,1/√3])
 
 Approximate ∫f(x)dx from x=[-1,1] using the Gauss-Legendre weights and points `w,x`.
 """
-@fastmath quadgl(f;wgl=SA[1,1],xgl=SA[-1/√3,1/√3]) = wgl'*f.(xgl)
-quadgl_ab(f,a,b;xgl=xgl,wgl=wgl,h=(b-a)/2,j=(a+b)/2) = h*quadgl(t->f(j+h*t);xgl,wgl)
+function quadgl(f;x=xgl2,w=wgl2) 
+    I = 0.
+    @simd for i in eachindex(x,w)
+        I += w[i]*f(x[i])
+    end; I
+end
+quadgl_ab(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
     complex_path(g,dg,rngs,skp)
@@ -22,18 +28,21 @@ function complex_path(g,dg,rngs,skp)
     length(rngs)==0 && return 0.
 
     # Compute real-line contributions
-    W(a,b) = quadgl_ab(t->imag(exp(im*g(t))),a,b)
+    function f(t)
+        u,v = reim(g(t))
+        exp(v)*sin(u)
+    end
     I = if length(rngs)==1 # Split the range @ t=0
         a,b = rngs[1]
-        W(a,0)+W(0,b)
+        quadgl_ab(f,a,0.)+quadgl_ab(f,0.,b)
     else
-        sum(W(rng...) for rng in rngs)
+        sum(quadgl_ab(f,rng...) for rng in rngs)
     end
 
     # Add the end point contributions
-    I+sum(enumerate(tuplejoin(rngs...))) do (i,t₀)
-        skp(t₀) ? 0. : (-1)^i*nsp(t₀,g,dg)
-    end
+    for rng in rngs, (i,t₀) in enumerate(rng)
+        !skp(t₀) && (I+= (-1)^i*nsp(t₀,g,dg))
+    end; I
 end
 """
     nsp(h₀,g,dg)

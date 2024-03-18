@@ -21,7 +21,7 @@ function kelvin(ξ,α;Fn=1,kwargs...)
     z ≥ 0 && throw(DomainError(z,"Kelvin scaled vertical distance above z=0"))
 
     # Return source, nearfield, and wavelike disturbance
-    return source(ξ,α)+(1/hypot(x,y,z)+nearfield(x,y,z)+wavelike(x,y,z;kwargs...))/Fn^2
+    return source(ξ,α)+(1/hypot(x,y,z)+nearfield(x,y,z)+wavelike(x,abs(y),z;kwargs...))/Fn^2
 end
 
 using Base.MathConstants: γ
@@ -46,10 +46,10 @@ dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2) # it's derivative
 
 # Return points where dg=0 as a tuple
 function stationary_points(x,y) 
-    y==0 && return (0.,) 
+    y==0 && return [0.] 
     diff = x^2-8y^2
-    diff≤√eps() && return (-x/4y,)
-    @. (-x+(-1,1)*√diff)/4y
+    diff≤√eps() && return [-x/4y]
+    @. (-x+[-1.,1.]*√diff)/4y
 end
 
 function stationary_ranges(x,y,R,Δg=3π)
@@ -66,7 +66,7 @@ function stationary_ranges(x,y,R,Δg=3π)
     # Merge close ranges
     if length(rngs)>1
         a,b = rngs
-        6(b[1]-a[2])<b[2]-a[1] && (rngs = ((a[1],b[2]),))
+        6(b[1]-a[2])<b[2]-a[1] && (rngs = [(a[1],b[2])])
     end
     return rngs
 end

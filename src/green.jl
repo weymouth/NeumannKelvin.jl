@@ -21,15 +21,15 @@ function kelvin(ξ,α;Fn=1,kwargs...)
     z ≥ 0 && throw(DomainError(z,"Kelvin scaled vertical distance above z=0"))
 
     # Return source, nearfield, and wavelike disturbance
-	return source(ξ,α)+(1/hypot(x,y,z)+nearfield(x,y,z)+wavelike(x,y,z;kwargs...))/Fn^2
+    return source(ξ,α)+(1/hypot(x,y,z)+nearfield(x,y,z)+wavelike(x,y,z;kwargs...))/Fn^2
 end
 
 using Base.MathConstants: γ
 # Near-field disturbance
 function nearfield(x,y,z;xgl=xgl,wgl=wgl)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)
-	Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
-	-2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;xgl,wgl)
+    Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
+    -2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;xgl,wgl)
 end
 
 # Wave-like disturbance 

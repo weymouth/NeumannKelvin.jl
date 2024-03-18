@@ -18,7 +18,7 @@ along the real line using Gauss-Legendre. The range endpoints where
 `skp(t)==false` are integrated in the complex-plane using the phase 
 derivative `dg(t)=g'` to find the path of stationary phase.
 """
-function complex_path(g,dg,rngs,skp;tol=1e-5)
+function complex_path(g,dg,rngs,skp)
     length(rngs)==0 && return 0.
 
     # Compute real-line contributions

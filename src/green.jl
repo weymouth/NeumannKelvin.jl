@@ -26,7 +26,7 @@ end
 
 using Base.MathConstants: γ
 # Near-field disturbance
-function nearfield(x,y,z;xgl=xgl,wgl=wgl)
+function nearfield(x,y,z;xgl=xgl32,wgl=wgl32)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)
     Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
     -2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;x=xgl,w=wgl)
@@ -44,7 +44,7 @@ end
 g(x,y,t) = (x+y*t)*√(1+t^2)           # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2) # it's derivative
 
-# Return points where dg=0 as a tuple
+# Return points where dg=0
 function stationary_points(x,y) 
     y==0 && return [0.] 
     diff = x^2-8y^2

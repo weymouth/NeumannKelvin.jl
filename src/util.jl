@@ -1,6 +1,6 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(5)
-const xgl,wgl = gausslegendre(32)
+const xgl32,wgl32 = gausslegendre(32)
 const xgl2,wgl2 = gausslegendre(2)
 """
     quadgl(f;w=[1,1],x=[-1/√3,1/√3])
@@ -13,7 +13,7 @@ function quadgl(f;x=xgl2,w=wgl2)
         I += w[i]*f(x[i])
     end; I
 end
-quadgl_ab(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
+quadgl_ab(f,a,b;x=xgl32,w=wgl32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
     complex_path(g,dg,rngs,skp)
@@ -24,7 +24,7 @@ along the real line using Gauss-Legendre. The range endpoints where
 `skp(t)==false` are integrated in the complex-plane using the phase 
 derivative `dg(t)=g'` to find the path of stationary phase.
 """
-function complex_path(g,dg,rngs,skp)
+function complex_path(g,dg,rngs,skp=t->false)
     length(rngs)==0 && return 0.
 
     # Compute real-line contributions
@@ -82,8 +82,6 @@ Refine radius ρ such that `g(t₀±ρ)-g(t₀) ≈ ±Δg`
 end
 
 nonzero(t::NTuple{2}) = t[2]>t[1]
-@inline tuplejoin(x, y) = (x...,y...)
-tuplejoin(t::Tuple) = t
 
 using SpecialFunctions
 using ForwardDiff: derivative, gradient, value, partials, Dual

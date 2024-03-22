@@ -71,9 +71,9 @@ end
 """
 Refine radius ρ such that `g(t₀±ρ)-g(t₀) ≈ ±Δg`
 """
-@fastmath function refine_ρ(t₀,g,dg,s,ρ,Δg;itmx=3,it=1)
+@fastmath function refine_ρ(t₀,g,dg,ρ;s=1,Δg=3π,itmx=3,it=1,rtol=0.3)
     ϵ = g(t₀)-g(t₀+s*ρ)+s*Δg
-    while abs(ϵ)>Δg/2 # doesn't need to be perfect
+    while abs(ϵ)>rtol*Δg
         ρ += s*ϵ/dg(t₀+s*ρ)
         it+=1; it>itmx && break
         ϵ = g(t₀)-g(t₀+s*ρ)+s*Δg

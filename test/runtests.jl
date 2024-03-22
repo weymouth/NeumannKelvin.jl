@@ -5,17 +5,25 @@ using QuadGK
 @testset "util.jl" begin
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4)≈6
     @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2)≈4
-    @test NeumannKelvin.quadgl_ab(x->sin(x^2/pi),0,2π)≈0.86185 atol=1e-5
 
+    # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
     dg(x) = 2x+im*x/50
-    I,e,c=quadgk_count(x->imag(exp(im*g(x))),2.,Inf)
-    # @show I,e,c # (-0.17247612166701298, 2.5164550897175237e-9, 8355)
-    @test NeumannKelvin.nsp(2.,g,dg) ≈ I atol=1e-5
+    f(x) = imag(exp(im*g(x)))
+    ρ = √(3π); rng = (-ρ,ρ)
+    @test NeumannKelvin.refine_ρ(0,x->x^2,x->2x,1;itmx=10,rtol=1e-6)≈ρ
 
-    I,e,c=quadgk_count(x->imag(exp(im*g(x))),-Inf,Inf)
+    I,e,c=quadgk_count(f,rng...)
+    # @show I,e,c # (1.5408137136825548, 1.0477053419277738e-8, 165) # easy
+    @test NeumannKelvin.quadgl_ab(f,rng...) ≈ I atol=1e-5
+
+    I,e,c=quadgk_count(f,ρ,Inf)
+    # @show I,e,c # (-0.14690637593307346, 2.133881538591021e-9, 8265) # hard
+    @test NeumannKelvin.nsp(ρ,g,dg) ≈ I atol=1e-5
+
+    I,e,c=quadgk_count(f,-Inf,Inf)
     # @show I,e,c # (1.247000964522693, 1.824659458372201e-8, 15195)
-    @test NeumannKelvin.complex_path(g,dg,[(-2.,2.)]) ≈ I atol=1e-5
+    @test NeumannKelvin.complex_path(g,dg,[rng]) ≈ I atol=1e-5
 end
 
 @testset "panel_method.jl" begin

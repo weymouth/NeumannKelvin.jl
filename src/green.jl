@@ -59,7 +59,7 @@ function stationary_ranges(x,y,R,Δg=3π)
 
     # Get ranges within R with refined ρ estimate
     rngs = map(enumerate(S)) do (i,t₀)
-        ρ = refine_ρ(t₀,t->g(x,y,t),t->dg(x,y,t),(-1)^i,ρ₀,Δg)
+        ρ = refine_ρ(t₀,t->g(x,y,t),t->dg(x,y,t),ρ₀;s=(-1)^i,Δg)
         @. clamp(t₀-(ρ,-ρ),-R,R)
     end |> x->filter(nonzero,x)
     

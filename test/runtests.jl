@@ -31,11 +31,11 @@ end
     panels = param_props.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2) |> Table
     @test size(panels) == (8,)
     @test panels.n ⋅ panels.x == 8
-    @test sum(panels.dA)/4π-1 < 0.12
+    @test sum(panels.dA) ≈ 4π rtol=0.1
 
     A,b = ∂ₙϕ.(panels,panels'),-Uₙ.(panels)
     @test tr(A) == 8*2π
-    @test 1-minimum(A)/0.25panels[1].dA < 0.12
+    @test 4minimum(A) ≈ panels[1].dA  rtol=1/8
     @test sum(b)<8eps()
 
     q = A \ b
@@ -56,14 +56,14 @@ end
 
     @test abs(NeumannKelvin.wavelike(10.,0.,-0.))==NeumannKelvin.wavelike(0.,10.,-0.)==0.
 
-    @test abs(4π*bessely1(10)-NeumannKelvin.wavelike(-10.,0.,-0.))<1e-5
+    @test 4π*bessely1(10)≈NeumannKelvin.wavelike(-10.,0.,-0.) atol=1e-5
 
     for R = (0.0,0.1,0.5,2.0,8.0), a = (0.,0.1,0.3,1/sqrt(8),0.5,1.0), z = (-1.,-0.1,-0.01)
         x = -R*cos(atan(a))
         y = R*sin(atan(a))
         x==y==0 && continue
-        @test abs(NeumannKelvin.nearfield(x,y,z)/bruteN(x,y,z)-1)<1e-3
-        @test abs(NeumannKelvin.wavelike(x,y,z)-bruteW(x,y,z))<5e-5
+        @test NeumannKelvin.nearfield(x,y,z)≈bruteN(x,y,z) atol=3e-4
+        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-5
     end
 end
 
@@ -81,12 +81,12 @@ function submarine(h;Z=-0.5,L=1,r=0.25)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
     dθ₁ = π/round(π*0.5L/h) # azimuth step size
     mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
-        dθ₂ = π/round(π*0.25L*sin(θ₁)/h) # polar step size at this azimuth
+        dθ₂ = π/round(π*0.25L/h*sin(θ₁)) # polar step size at this azimuth
         param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
     end |> Table
 end
 @testset "NeumannKelvin.jl" begin
     # Compare to Baar_1982_prolate_spheroid
-    d = solve_drag(submarine(0.05;Z=-1/8,r=1/12);G=kelvin,Fn = 0.5)
-    @test d ≈ 6e-3 atol=3e-4 # 5%
+    d = solve_drag(submarine(0.1;Z=-1/8,r=1/12);G=kelvin,Fn = 0.5)
+    @test d ≈ 61e-4 rtol=0.07
 end

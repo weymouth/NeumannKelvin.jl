@@ -3,8 +3,8 @@ using Test
 
 using QuadGK
 @testset "util.jl" begin
-    @test NeumannKelvin.quadgl(x->x^3-3x^2+4)≈6
-    @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2)≈4
+    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=NeumannKelvin.xgl2,w=NeumannKelvin.wgl2)≈6
+    @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2,x=NeumannKelvin.xgl2,w=NeumannKelvin.wgl2)≈4
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100

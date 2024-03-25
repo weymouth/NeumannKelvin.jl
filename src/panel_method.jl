@@ -17,19 +17,25 @@ Approximate potential influence `ϕ(x) ≈ ∫ₚ G(x,x')ds'` of panel `p`.
 The quadrature is improved when `x∼p.x`. The gradient is overloaded with 
 the exact value `∇ϕ=2πn̂` when `x=p.x`.
 """
-ϕ(x,p;kwargs...) = _ϕ(x,p;kwargs...) # wrapper
-@fastmath function _ϕ(x,p;G=source,kwargs...)
-    sum(abs2,x-p.x)>9p.dA && return p.dA*G(x,p.x;kwargs...) # single-point quadrature
-    x≠p.x && return p.dA*quad2(ξ₁->quad2(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # 2²-point
-    p.dA*quad8(ξ₁->quad8(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # 8²-point
+function ϕ(x,p;G,kwargs...)
+    G==source && return ϕ(x,p)
+    return ϕ(x,p)-ϕ(x,reflect(p))+p.dA*ifelse(x==p.x,0,G(x,p.x;kwargs...))
+end
+reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,T₁=reflect(p.T₁),T₂=reflect(p.T₂))
+
+ϕ(x,p) = _ϕ(x,p)  # wrapper
+@fastmath function _ϕ(x,p) # multi-level source integration 
+    sum(abs2,x-p.x)>9p.dA && return p.dA*source(x,p.x) # single-point quadrature
+    x≠p.x && return p.dA*quad2(ξ₁->quad2(ξ₂->source(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂))) # 2²-point
+    p.dA*quad8(ξ₁->quad8(ξ₂->source(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂))) # 8²-point
 end
 quad2(f) = 0.5quadgl(x->f(0.5x),x=xgl2,w=wgl2) # integrate over ξ=[-0.5,0.5] with 2 points
 quad8(f) = 0.5quadgl(x->f(0.5x),x=xgl8,w=wgl8) # use 8 points instead
 
-function ϕ(d::AbstractVector{<:Dual{Tag}},p;kwargs...) where Tag
-    value(d) ≠ p.x && return _ϕ(d,p;kwargs...) # use ∇ϕ=∇(_ϕ)
+function ϕ(d::AbstractVector{<:Dual{Tag}},p) where Tag
+    value(d) ≠ p.x && return _ϕ(d,p) # use ∇ϕ=∇(_ϕ)
     x,Δx = value.(d),stack(partials.(d))
-    Dual{Tag}(ϕ(x,p;kwargs...),2π*Δx*p.n...)   # enforce ∇ϕ(x,x)=2πn̂
+    Dual{Tag}(ϕ(x,p),2π*Δx*p.n...)   # enforce ∇ϕ(x,x)=2πn̂
 end
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = A

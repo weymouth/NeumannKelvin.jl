@@ -13,16 +13,16 @@ the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981 for details.
 """
 function kelvin(ξ,α;Fn=1,kwargs...)
     # Froude number scaled distances from the source's image
-    image = SA[α[1],α[2],-α[3]]
-    x,y,z = (ξ-image)/Fn^2
+    x,y,z = (ξ-reflect(α))/Fn^2
 
     # Check inputs
     α[3] ≥ 0 && throw(DomainError(α[3],"Kelvin source above ζ=0"))
     z ≥ 0 && throw(DomainError(z,"Kelvin scaled vertical distance above z=0"))
 
     # Return source, nearfield, and wavelike disturbance
-    return source(ξ,α)+(1/hypot(x,y,z)+nearfield(x,y,z)+wavelike(x,abs(y),z;kwargs...))/Fn^2
+    return (nearfield(x,y,z)+wavelike(x,abs(y),z;kwargs...))/Fn^2
 end
+reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
 using Base.MathConstants: γ
 # Near-field disturbance

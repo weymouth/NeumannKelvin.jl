@@ -20,9 +20,11 @@ the exact value `∇ϕ=2πn̂` when `x=p.x`.
 ϕ(x,p;kwargs...) = _ϕ(x,p;kwargs...) # wrapper
 @fastmath function _ϕ(x,p;G=source,kwargs...)
     sum(abs2,x-p.x)>9p.dA && return p.dA*G(x,p.x;kwargs...) # single-point quadrature
-    p.dA*quadξ(ξ₁->quadξ(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # multipoint
+    x≠p.x && return p.dA*quad2(ξ₁->quad2(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # 2²-point
+    p.dA*quad8(ξ₁->quad8(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # 8²-point
 end
-quadξ(f) = 0.5quadgl(x->f(0.5x)) # integrate over ξ=[-0.5,0.5]
+quad2(f) = 0.5quadgl(x->f(0.5x),x=xgl2,w=wgl2) # integrate over ξ=[-0.5,0.5] with 2 points
+quad8(f) = 0.5quadgl(x->f(0.5x),x=xgl8,w=wgl8) # use 8 points instead
 
 function ϕ(d::AbstractVector{<:Dual{Tag}},p;kwargs...) where Tag
     value(d) ≠ p.x && return _ϕ(d,p;kwargs...) # use ∇ϕ=∇(_ϕ)

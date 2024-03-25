@@ -40,6 +40,8 @@ end
 
     q = A \ b
     @test A*q≈b
+    @test allequal(map(x->abs(round(x,digits=5)),q))
+    @test NeumannKelvin.added_mass(q,panels)≈[2π/3,0,0] rtol=0.052 # ϵ=5% with 8 panels
 end
 
 using SpecialFunctions

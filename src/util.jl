@@ -1,13 +1,14 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(5)
 const xgl32,wgl32 = gausslegendre(32)
+const xgl8,wgl8 = gausslegendre(8)
 const xgl2,wgl2 = gausslegendre(2)
 """
-    quadgl(f;w=[1,1],x=[-1/√3,1/√3])
+    quadgl(f;x,w)
 
 Approximate ∫f(x)dx from x=[-1,1] using the Gauss-Legendre weights and points `w,x`.
 """
-function quadgl(f;x=xgl2,w=wgl2) 
+function quadgl(f;x,w) 
     I = 0.
     @simd for i in eachindex(x,w)
         I += w[i]*f(x[i])

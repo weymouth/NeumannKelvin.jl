@@ -29,7 +29,7 @@ quad8(f) = 0.5quadgl(x->f(0.5x),x=xgl8,w=wgl8) # use 8 points instead
 function ϕ(d::AbstractVector{<:Dual{Tag}},p;kwargs...) where Tag
     value(d) ≠ p.x && return _ϕ(d,p;kwargs...) # use ∇ϕ=∇(_ϕ)
     x,Δx = value.(d),stack(partials.(d))
-    Dual{Tag}(ϕ(x,p;kwargs...),2π*Δx*p.n...)   # enforce ∇ϕ(x,x)=2πn̂
+    Dual{Tag}(p.dA*source(x,p.x),2π*Δx*p.n...)   # enforce ∇ϕ(x,x)=2πn̂
 end
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = A

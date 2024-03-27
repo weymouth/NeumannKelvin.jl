@@ -3,8 +3,9 @@ using Test
 
 using QuadGK
 @testset "util.jl" begin
-    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=NeumannKelvin.xgl2,w=NeumannKelvin.wgl2)≈6
-    @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2,x=NeumannKelvin.xgl2,w=NeumannKelvin.wgl2)≈4
+    using NeumannKelvin: xgl2,wgl2
+    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
+    @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
@@ -56,7 +57,7 @@ end
 @testset "green.jl" begin
     @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
 
-    @test abs(NeumannKelvin.wavelike(10.,0.,-0.))==NeumannKelvin.wavelike(0.,10.,-0.)==0.
+    @test NeumannKelvin.wavelike(10.,0.,-0.)==NeumannKelvin.wavelike(0.,10.,-0.)==0.
 
     @test 4π*bessely1(10)≈NeumannKelvin.wavelike(-10.,0.,-0.) atol=1e-5
 
@@ -79,16 +80,21 @@ function solve_drag(panels;kwargs...)
 	q = A\b; @assert A*q ≈ b
 	drag(q,panels;kwargs...)
 end
-function submarine(h;Z=-0.5,L=1,r=0.25)
+function spheroid(h;Z=-0.5,L=1,r=0.25,AR=2)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-    dθ₁ = π/round(π*0.5L/h) # azimuth step size
+    dθ₁ = π/round(π*0.5L/√AR/h) # cosine sampling increases density at ends 
     mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
-        dθ₂ = π/round(π*0.25L/h*sin(θ₁)) # polar step size at this azimuth
+        dx = dθ₁*hypot(r*cos(θ₁),0.5L*sin(θ₁))
+        dθ₂ = π/round(π*r*sin(θ₁)*AR/dx) # polar step size at this azimuth
         param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
     end |> Table
 end
 @testset "NeumannKelvin.jl" begin
-    # Compare to Baar_1982_prolate_spheroid
-    d = solve_drag(submarine(0.1;Z=-1/8,r=1/12);G=kelvin,Fn = 0.5)
+    h = 0.06
+    # Compare submerged spheroid drag to Farell/Baar
+    d = solve_drag(spheroid(h;Z=-1/8,r=1/12);G=kelvin,Fn=0.5,d²=0)
     @test d ≈ 61e-4 rtol=0.07
+    # Check surface piercing spheroid drag>0 at low Fn 
+    d = solve_drag(filter(p->p.x[3]<0,spheroid(h;Z=0,r=1/12));G=kelvin,Fn=0.15,d²=0)
+    @test d>0
 end

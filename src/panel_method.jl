@@ -13,30 +13,38 @@ end
 """
     ϕ(x,p;G=source,kwargs...)
 
-Approximate potential influence `ϕ(x) ≈ ∫ₚ G(x,x')ds'` of panel `p`. 
-The quadrature is improved when `x∼p.x`. The gradient is overloaded with 
-the exact value `∇ϕ=2πn̂` when `x=p.x`.
+Disturbance potential of panel `p` on point `x`. 
+
+If the greens function `G≠source` this routine combines the contributions 
+of a source at `p` and `G(x,reflect(p))`.
 """
 function ϕ(x,p;G=source,kwargs...)
-    G==source && return ϕS(x,p)
-    return ϕS(x,p)-ϕS(x,reflect(p))+p.dA*ifelse(x==p.x,0,G(x,p.x;kwargs...))
+    G==source && return ∫G(x,p)
+    return ∫G(x,p)+∫G(x,reflect(p);G,kwargs...)
 end
 reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,T₁=reflect(p.T₁),T₂=reflect(p.T₂))
+reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
-ϕS(x,p) = _ϕS(x,p)  # wrapper
-@fastmath function _ϕS(x,p) # multi-level source integration 
-    sum(abs2,x-p.x)>9p.dA && return p.dA*source(x,p.x) # single-point quadrature
-    x≠p.x && return p.dA*quad2(ξ₁->quad2(ξ₂->source(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂))) # 2²-point
-    p.dA*quad8(ξ₁->quad8(ξ₂->source(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂))) # 8²-point
+"""
+    ∫G(x,p;d²=9,G=source,kwargs...)
+
+Approximate integral `∫ₚ G(x,x')ds'` over panel `p`. 
+
+A midpoint quadrature is used when `|x-p.x|² > d²*dA`.
+"""
+∫G(x,p;kwargs...) = _∫G(x,p;kwargs...)  # wrapper
+@fastmath function _∫G(x,p;d²=9,G=source,kwargs...)
+    sum(abs2,x-p.x)>d²*p.dA && return p.dA*G(x,p.x;kwargs...) # midpoint quadrature
+    x≠p.x && return p.dA*quad2(ξ₁->quad2(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # 2²-point
+    p.dA*quad8(ξ₁->quad8(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # 8²-point
+end
+function ∫G(d::AbstractVector{<:Dual{Tag}},p) where Tag
+    value(d) ≠ p.x && return _∫G(d,p)             # use ∇∫G=∇(_∫G)
+    Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)   # enforce ∇∫G(x,x)=2πn̂
 end
 quad2(f) = 0.5quadgl(x->f(0.5x),x=xgl2,w=wgl2) # integrate over ξ=[-0.5,0.5] with 2 points
 quad8(f) = 0.5quadgl(x->f(0.5x),x=xgl8,w=wgl8) # use 8 points instead
 
-function ϕS(d::AbstractVector{<:Dual{Tag}},p) where Tag
-    value(d) ≠ p.x && return _ϕS(d,p) # use ∇ϕ=∇(_ϕ)
-    x,Δx = value.(d),stack(partials.(d))
-    Dual{Tag}(ϕ(x,p),2π*Δx*p.n...)   # enforce ∇ϕ(x,x)=2πn̂
-end
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = A
 

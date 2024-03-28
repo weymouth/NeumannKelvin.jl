@@ -80,7 +80,7 @@ function solve_drag(panels;kwargs...)
 	q = A\b; @assert A*q ≈ b
 	drag(q,panels;kwargs...)
 end
-function spheroid(h;Z=-0.5,L=1,r=0.25,AR=2)
+function spheroid(h;L=1,Z=-1/8,r=1/12,AR=2)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
     dθ₁ = π/round(π*0.5L/√AR/h) # cosine sampling increases density at ends 
     mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
@@ -89,12 +89,24 @@ function spheroid(h;Z=-0.5,L=1,r=0.25,AR=2)
         param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
     end |> Table
 end
+function prism(h;q=0.2,Z=1,r=1.2)
+    S(θ,z) = 0.5SA[cos(θ),q*sin(θ),z]
+    dθ = π/round(π*0.5/h) # cosine sampling
+    mapreduce(vcat,0.5dθ:dθ:2π) do θ
+        dx = dθ*hypot(q*cos(θ),sin(θ))
+        i = round(log(1+2Z/dx*(r-1))/log(r)) # geometric growth
+        mapreduce(vcat,1:i) do j
+            z,dz = -dx*(1-r^j)/(1-r),dx*r^j
+            param_props.(S,θ,z+0.5dz,dθ,dz)
+        end
+    end |> Table
+end
 @testset "NeumannKelvin.jl" begin
     h = 0.06
     # Compare submerged spheroid drag to Farell/Baar
-    d = solve_drag(spheroid(h;Z=-1/8,r=1/12);G=kelvin,Fn=0.5,d²=0)
+    d = solve_drag(spheroid(h);G=kelvin,Fn=0.5,d²=0)
     @test d ≈ 61e-4 rtol=0.07
-    # Check surface piercing spheroid drag>0 at low Fn 
-    d = solve_drag(filter(p->p.x[3]<0,spheroid(h;Z=0,r=1/12));G=kelvin,Fn=0.15,d²=0)
-    @test d>0
+    # Compared elliptical prism drag to Guevel/Baar
+    d = solve_drag(prism(h);G=kelvin,Fn=0.55,d²=0)
+    @test d ≈ 0.1 rtol=0.07
 end

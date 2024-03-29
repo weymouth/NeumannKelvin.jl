@@ -42,7 +42,7 @@ end
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=5)),q))
-    @test NeumannKelvin.added_mass(q,panels)≈[2π/3,0,0] rtol=0.052 # ϵ=5% with 8 panels
+    @test NeumannKelvin.added_mass(q,panels)≈[2π/3,0,0] rtol=0.055 # ϵ=5.5% with 8 panels
 end
 
 using SpecialFunctions
@@ -104,9 +104,9 @@ end
 @testset "NeumannKelvin.jl" begin
     h = 0.06
     # Compare submerged spheroid drag to Farell/Baar
-    d = solve_drag(spheroid(h);G=kelvin,Fn=0.5,d²=0)
-    @test d ≈ 61e-4 rtol=0.07
+    d = solve_drag(spheroid(h);G=kelvin,Fn=0.5)
+    @test d ≈ 6e-3 rtol=0.02
     # Compared elliptical prism drag to Guevel/Baar
-    d = solve_drag(prism(h);G=kelvin,Fn=0.55,d²=0)
-    @test d ≈ 0.1 rtol=0.07
+    d = solve_drag(prism(h);G=kelvin,Fn=0.55)
+    @test d ≈ 0.1 rtol=0.01
 end

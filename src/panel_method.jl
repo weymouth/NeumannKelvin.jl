@@ -26,20 +26,20 @@ reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,T₁=reflect(p.T
 reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
 """
-    ∫G(x,p;d²=9,G=source,kwargs...)
+    ∫G(x,p;d²=0,G=source,kwargs...)
 
 Approximate integral `∫ₚ G(x,x')ds'` over panel `p`. 
 
 A midpoint quadrature is used when `|x-p.x|² > d²*dA`.
 """
 ∫G(x,p;kwargs...) = _∫G(x,p;kwargs...)  # wrapper
-@fastmath function _∫G(x,p;d²=9,G=source,kwargs...)
+@fastmath function _∫G(x,p;d²=0,G=source,kwargs...)
     sum(abs2,x-p.x)>d²*p.dA && return p.dA*G(x,p.x;kwargs...) # midpoint quadrature
     x≠p.x && return p.dA*quad2(ξ₁->quad2(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # 2²-point
     p.dA*quad8(ξ₁->quad8(ξ₂->G(x,p.x+ξ₁*p.T₁+ξ₂*p.T₂;kwargs...))) # 8²-point
 end
-function ∫G(d::AbstractVector{<:Dual{Tag}},p) where Tag
-    value(d) ≠ p.x && return _∫G(d,p)             # use ∇∫G=∇(_∫G)
+function ∫G(d::AbstractVector{<:Dual{Tag}},p;kwargs...) where Tag
+    value(d) ≠ p.x && return _∫G(d,p;kwargs...)   # use ∇∫G=∇(_∫G)
     Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)   # enforce ∇∫G(x,x)=2πn̂
 end
 quad2(f) = 0.5quadgl(x->f(0.5x),x=xgl2,w=wgl2) # integrate over ξ=[-0.5,0.5] with 2 points

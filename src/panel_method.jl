@@ -18,10 +18,7 @@ Disturbance potential of panel `p` on point `x`.
 If the greens function `G≠source` this routine combines the contributions 
 of a source at `p` and `G(x,reflect(p))`.
 """
-function ϕ(x,p;G=source,kwargs...)
-    G==source && return ∫G(x,p)
-    return ∫G(x,p)+∫G(x,reflect(p);G,kwargs...)
-end
+ϕ(x,p;G=source,kwargs...) = G==source ? ∫G(x,p) : ∫G(x,p)+∫G(x,reflect(p);G,kwargs...)
 reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,T₁=reflect(p.T₁),T₂=reflect(p.T₂))
 reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 

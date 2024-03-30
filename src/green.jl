@@ -5,23 +5,20 @@ Green function `G(x)` for a source at position `a`.
 source(x,a) = -1/hypot(x-a...)
 
 """
-    kelvin(ξ,a;Fn=1)
+    kelvin(ξ,α;Fn=1)
 
-Green Function `G(ξ)` for a source at position `α` moving with `Fn≡U/√gL` below 
-the free-surface. The free surface is ζ=0, the coordinates are scaled by L and
-the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981 for details.
+Green Function `G(ξ)` for a reflected source at position `α` moving with 
+`Fn≡U/√gL`. The free surface is at z=0, the coordinates are scaled by L, 
+and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;Fn=1,kwargs...)
-    # Froude number scaled distances from the source's image
-    image = SA[α[1],α[2],-α[3]]
-    x,y,z = (ξ-image)/Fn^2
-
+function kelvin(ξ,α;Fn=1)
     # Check inputs
-    α[3] ≥ 0 && throw(DomainError(α[3],"Kelvin source above ζ=0"))
-    z ≥ 0 && throw(DomainError(z,"Kelvin scaled vertical distance above z=0"))
+    α[3] < 0 && throw(DomainError(-α[3],"kelvin: source above z=0"))
+    ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
-    # Return source, nearfield, and wavelike disturbance
-    return source(ξ,α)+(1/hypot(x,y,z)+nearfield(x,y,z)+wavelike(x,abs(y),z;kwargs...))/Fn^2
+    # reflected source, nearfield, and wavelike disturbance
+    x,y,z = (ξ-α)/Fn^2
+    return -source(ξ,α)+(nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
 end
 
 using Base.MathConstants: γ

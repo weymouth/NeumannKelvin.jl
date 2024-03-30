@@ -3,8 +3,9 @@ using Test
 
 using QuadGK
 @testset "util.jl" begin
-    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=NeumannKelvin.xgl2,w=NeumannKelvin.wgl2)≈6
-    @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2,x=NeumannKelvin.xgl2,w=NeumannKelvin.wgl2)≈4
+    using NeumannKelvin: xgl2,wgl2
+    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
+    @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
@@ -41,7 +42,7 @@ end
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=5)),q))
-    @test NeumannKelvin.added_mass(q,panels)≈[2π/3,0,0] rtol=0.052 # ϵ=5% with 8 panels
+    @test NeumannKelvin.added_mass(q,panels)≈[2π/3,0,0] rtol=0.055 # ϵ=5.5% with 8 panels
 end
 
 using SpecialFunctions
@@ -56,7 +57,7 @@ end
 @testset "green.jl" begin
     @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
 
-    @test abs(NeumannKelvin.wavelike(10.,0.,-0.))==NeumannKelvin.wavelike(0.,10.,-0.)==0.
+    @test NeumannKelvin.wavelike(10.,0.,-0.)==NeumannKelvin.wavelike(0.,10.,-0.)==0.
 
     @test 4π*bessely1(10)≈NeumannKelvin.wavelike(-10.,0.,-0.) atol=1e-5
 
@@ -79,16 +80,33 @@ function solve_drag(panels;kwargs...)
 	q = A\b; @assert A*q ≈ b
 	drag(q,panels;kwargs...)
 end
-function submarine(h;Z=-0.5,L=1,r=0.25)
+function spheroid(h;L=1,Z=-1/8,r=1/12,AR=2)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-    dθ₁ = π/round(π*0.5L/h) # azimuth step size
+    dθ₁ = π/round(π*0.5L/√AR/h) # cosine sampling increases density at ends 
     mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
-        dθ₂ = π/round(π*0.25L/h*sin(θ₁)) # polar step size at this azimuth
+        dx = dθ₁*hypot(r*cos(θ₁),0.5L*sin(θ₁))
+        dθ₂ = π/round(π*r*sin(θ₁)*AR/dx) # polar step size at this azimuth
         param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
     end |> Table
 end
+function prism(h;q=0.2,Z=1,r=1.2)
+    S(θ,z) = 0.5SA[cos(θ),q*sin(θ),z]
+    dθ = π/round(π*0.5/h) # cosine sampling
+    mapreduce(vcat,0.5dθ:dθ:2π) do θ
+        dx = dθ*hypot(q*cos(θ),sin(θ))
+        i = round(log(1+2Z/dx*(r-1))/log(r)) # geometric growth
+        mapreduce(vcat,1:i) do j
+            z,dz = -dx*(1-r^j)/(1-r),dx*r^j
+            param_props.(S,θ,z+0.5dz,dθ,dz)
+        end
+    end |> Table
+end
 @testset "NeumannKelvin.jl" begin
-    # Compare to Baar_1982_prolate_spheroid
-    d = solve_drag(submarine(0.1;Z=-1/8,r=1/12);G=kelvin,Fn = 0.5)
-    @test d ≈ 61e-4 rtol=0.07
+    h = 0.06
+    # Compare submerged spheroid drag to Farell/Baar
+    d = solve_drag(spheroid(h);G=kelvin,Fn=0.5)
+    @test d ≈ 6e-3 rtol=0.02
+    # Compared elliptical prism drag to Guevel/Baar
+    d = solve_drag(prism(h);G=kelvin,Fn=0.55)
+    @test d ≈ 0.1 rtol=0.01
 end

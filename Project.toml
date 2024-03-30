@@ -1,7 +1,7 @@
 name = "NeumannKelvin"
 uuid = "7f078b06-e5c4-4cf8-bb56-b92882a0ad03"
 authors = ["Gabriel Weymouth"]
-version = "0.1.4"
+version = "0.1.5"
 
 [deps]
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"

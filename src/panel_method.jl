@@ -22,6 +22,7 @@ of a source at `p` and `G(x,reflect(p))`.
 reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,T₁=reflect(p.T₁),T₂=reflect(p.T₂))
 reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
+using ForwardDiff: derivative, gradient, value, partials, Dual
 """
     ∫G(x,p;G=source,kwargs...)
 

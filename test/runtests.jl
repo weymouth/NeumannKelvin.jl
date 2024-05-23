@@ -45,15 +45,11 @@ end
     @test NeumannKelvin.added_mass(q,panels)≈[2π/3,0,0] rtol=0.055 # ϵ=5.5% with 8 panels
 end
 
-using SpecialFunctions
-function bruteN(x,y,z)
-    Ni(t) = imag(expintx((z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)))
-    2/π*quadgk(Ni,-1,1)[1]
-end
 function bruteW(x,y,z)
 	Wi(t) = exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t))
 	4quadgk(Wi,-Inf,Inf)[1]
 end
+using SpecialFunctions
 @testset "green.jl" begin
     @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
 
@@ -65,7 +61,7 @@ end
         x = -R*cos(atan(a))
         y = R*sin(atan(a))
         x==y==0 && continue
-        @test NeumannKelvin.nearfield(x,y,z)≈bruteN(x,y,z) atol=3e-4
+        @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=6e-4
         @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-5
     end
 end

@@ -21,13 +21,37 @@ function kelvin(ξ,α;Fn=1)
     return -source(ξ,α)+(nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
 end
 
-using Base.MathConstants: γ
-# Near-field disturbance
-function nearfield(x,y,z;xgl=xgl32,wgl=wgl32)
-    ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)
-    Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
-    -2*(1-z/(hypot(x,y,z)+abs(x)))+2/π*quadgl(Ni;x=xgl,w=wgl)
+# Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1967 
+function nearfield(x,y,z)
+	S = X2S(SA[x,y,z]); R = S[1]
+	l0 = -2*(1-z/(R+abs(x)))
+	R ≥ 10 ? l0+c4(r2R(S)) :
+	R ≥ 4  ? l0+c3(S) :
+	R ≥ 1  ? l0+c2(S) :
+	R > 0  ? l0+c1(S) : -4.0
 end
+
+# Brute-force quadrature to create data
+using FastChebInterp,QuadGK,SpecialFunctions
+using Base.MathConstants: γ
+function bruteN(x,y,z;l0=-2*(1-z/(hypot(x,y,z)+abs(x))))
+    ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)+im*eps()
+    Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ)
+    l0+2/π*quadgk(Ni,-1,0,1)[1]
+end
+bruteN(X::SVector{3}) = bruteN(X...;l0=0)
+
+# Coordinate transformations
+S2X(S) = ((R,θ,α)=S; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
+X2S(X) = ((x,y,z)=X; R = √(X'*X); SA[R,asin(abs(x)/R),atan(abs(y/z))])
+r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1967
+
+# Create fast Chebychev polynomials
+function makecheb(l,u;map=identity,tol=1e-4)
+	lb,ub = SA[l,0,0],SA[u,π/2-eps(),π/2];
+	chebinterp(bruteN.(S2X.(map.(chebpoints((16,16,8),lb,ub)))),lb,ub;tol)
+end
+c1,c2,c3,c4 = makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;map=r2R)
 
 # Wave-like disturbance 
 function wavelike(x,y,z)

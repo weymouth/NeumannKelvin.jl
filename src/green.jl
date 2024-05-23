@@ -45,8 +45,7 @@ dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2) # it's derivative
 function stationary_points(x,y) 
     y==0 && return [0.] 
     diff = x^2-8y^2
-    diff≤√eps() && return [-x/4y]
-    @. (-x+[-1.,1.]*√diff)/4y
+    diff≤√eps() ? [-x/4y] : @. (-x+[-1.,1.]*√diff)/4y
 end
 
 function stationary_ranges(x,y,R,Δg=3π)

@@ -1,6 +1,6 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(5)
-const xgl32,wgl32 = gausslegendre(32)
+const xgl20,wgl20 = gausslegendre(20)
 const xgl8,wgl8 = gausslegendre(8)
 const xgl2,wgl2 = gausslegendre(2)
 """
@@ -14,7 +14,7 @@ function quadgl(f;x,w)
         I += w[i]*f(x[i])
     end; I
 end
-quadgl_ab(f,a,b;x=xgl32,w=wgl32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
+quadgl_ab(f,a,b;x=xgl20,w=wgl20) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
     complex_path(g,dg,rngs,skp)

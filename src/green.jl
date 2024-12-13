@@ -23,6 +23,10 @@ end
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1967 
 function nearfield(x::T,y::T,z::T)::T where T
+    if Threads.atomic_xchg!(isfirstcall, false)
+        @warn "Creating Chebychev polynomials takes a moment"
+        global c1,c2,c3,c4 = makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;map=r2R)
+    end
 	S = X2S(x,y,z); R = S[1]
 	l0 = -2*(1-z/(R+abs(x)))
 	R ≥ 10 ? l0+c4(r2R(S)) :
@@ -30,6 +34,7 @@ function nearfield(x::T,y::T,z::T)::T where T
 	R ≥ 1  ? l0+c2(S) :
 	R > 0  ? l0+c1(S) : -4.0
 end
+isfirstcall = Threads.Atomic{Bool}(true)
 
 # Brute-force quadrature to create data
 using FastChebInterp,QuadGK,SpecialFunctions
@@ -53,7 +58,6 @@ function makecheb(l,u;map=identity,tol=1e-4)
     D = ThreadsX.map(bruteN,S) # generate data (with multi-threading)
 	chebinterp(D,lb,ub;tol)    # create interpolation function
 end
-c1,c2,c3,c4 = makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;map=r2R)
 
 # Wave-like disturbance 
 function wavelike(x,y,z)

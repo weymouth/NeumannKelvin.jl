@@ -49,7 +49,9 @@ r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1967
 # Create fast Chebychev polynomials
 function makecheb(l,u;map=identity,tol=1e-4)
 	lb,ub = SA[l,0,0],SA[u,π/2-eps(),π/2];
-	chebinterp(bruteN.(S2X.(map.(chebpoints((16,16,8),lb,ub)))),lb,ub;tol)
+    S = S2X.(map.(chebpoints((16,16,8),lb,ub)))
+    D = ThreadsX.map(bruteN,S) # generate data (with multi-threading)
+	chebinterp(D,lb,ub;tol)    # create interpolation function
 end
 c1,c2,c3,c4 = makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;map=r2R)
 

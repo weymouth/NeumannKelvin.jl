@@ -87,7 +87,7 @@ function stationary_ranges(x,y,R,Δg=3π)
     rngs = map(enumerate(S)) do (i,t₀)
         ρ = refine_ρ(t₀,t->g(x,y,t),t->dg(x,y,t),ρ₀;s=(-1)^i,Δg)
         @. clamp(t₀-(ρ,-ρ),-R,R)
-    end |> x->filter(nonzero,x)
+    end
     
     # Merge close ranges
     if length(rngs)>1

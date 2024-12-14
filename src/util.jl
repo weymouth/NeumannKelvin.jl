@@ -29,7 +29,7 @@ function complex_path(g,dg,rngs,skp=t->false)
     length(rngs)==0 && return 0.
 
     # Compute real-line contributions
-    function f(t)
+    @fastmath @inline function f(t)
         u,v = reim(g(t))
         exp(-v)*sin(u)
     end
@@ -53,9 +53,9 @@ Integrate the contributions of `imag(∫exp(im*g(h))dh)` from
 is found as the roots of `ϵ(h)=g(h)-g(h₀)-im*p=0` where `p`
 are Gauss-Laguerre integration points.
 """
-@fastmath function nsp(h₀,g,dg;xlag=xlag,wlag=wlag)
+@fastmath function nsp(h₀::T,g,dg;xlag=xlag,wlag=wlag)::T where T
     # Sum over complex Gauss-Laguerre points
-    s,g₀,h,dϵ = 0.,g(h₀),h₀+0im,dg(h₀)
+    s,g₀,h,dϵ = zero(T),g(h₀),h₀+0im,dg(h₀)
     for (p,w) in zip(xlag,wlag)
         # Newton step(s) to find h
         ϵ = g(h)-g₀-im*p
@@ -79,7 +79,6 @@ Refine radius ρ such that `g(t₀±ρ)-g(t₀) ≈ ±Δg`
         it+=1; it>itmx && break
         ϵ = g(t₀)-g(t₀+s*ρ)+s*Δg
     end
+    ρ<0 && throw(DomainError(ρ))
     return ρ
 end
-
-nonzero(t::NTuple{2}) = t[2]>t[1]

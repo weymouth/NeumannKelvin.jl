@@ -16,6 +16,7 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [compat]
+ThreadsX = "0.1.12"
 FastChebInterp = "1"
 FastGaussQuadrature = "1"
 ForwardDiff = "0.10"

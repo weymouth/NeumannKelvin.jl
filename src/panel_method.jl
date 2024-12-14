@@ -51,11 +51,13 @@ Uₙ(pᵢ;U=[1,0,0]) = U ⋅ pᵢ.n
 Normal velocity influence matrix. Computation is accelerated with 
 multi-threading when `Threads.nthreads()>1`.
 """
-influence(panels;kwargs...) = (A=Array{Float64}(undef,length(panels),length(panels)); influence!(A,panels;kwargs...); A)
-influence!(A,panels;kwargs...) = ThreadsX.foreach(CartesianIndices(A)) do I
-    A[I] = ∂ₙϕ(panels[I[1]],panels[I[2]];kwargs...)
+influence(panels;kwargs...) = influence!(Array{Float64}(undef,length(panels),length(panels)),panels;kwargs...)
+function influence!(A,panels;kwargs...)
+    isfirstcall[] && ∂ₙϕ(panels[1],panels[end];kwargs...) # initialize once
+    ThreadsX.foreach(CartesianIndices(A)) do I
+        A[I] = ∂ₙϕ(panels[I[1]],panels[I[2]];kwargs...)   # multi-thread fill
+    end; A
 end
-
 """
     φ(x,q,panels;kwargs...)
 

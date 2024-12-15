@@ -30,11 +30,12 @@ Approximate integral `∫ₚ G(x,x')ds'` over panel `p`.
 
 An 8x8 quadrature is used when inside the panel, otherwise it uses the midpoint.
 """
-∫G(x,p,G=source;kwargs...) = sum(abs2,x-p.x)>p.dA ? outside(x,p,G;kwargs...) : inside(x,p)
-outside(ξ,p,G;x=xgl2,w=wgl2,kwargs...) = p.dA*G(ξ,p.x;kwargs...) #quad²(ξ,p,x,w,G;kwargs...)
-inside(ξ::SVector,p;x=xgl8,w=wgl8) = quad²(ξ,p,x,w)
-inside(d::AbstractVector{<:Dual{Tag}},p) where Tag = Dual{Tag}(0.,2π*stack(partials.(d))*p.n...) # enforce ∇∫G(x,x)=2πn̂
-quad²(ξ,p,x,w,G=source;kwargs...) = 0.25p.dA*quadgl(x₁->quadgl(x₂->G(ξ,p.x+0.5x₁*p.T₁+0.5x₂*p.T₂;kwargs...);x,w);x,w)
+∫G(x,p,G=source;kwargs...) = sum(abs2,x-p.x)>p.dA ? p.dA*G(x,p.x;kwargs...) : quad8²(x,p,G;kwargs...)
+function ∫G(d::AbstractVector{<:Dual{Tag}},p,G=source;kwargs...) where Tag
+    value(d) ≠ p.x && return p.dA*G(d,p.x;kwargs...) # use ∇∫G=∇(_∫G)
+    Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)      # enforce ∇∫G(x,x)=2πn̂
+end
+quad8²(ξ,p,G;x=xgl8,w=wgl8,kwargs...) = 0.25p.dA*quadgl(x₁->quadgl(x₂->G(ξ,p.x+0.5x₁*p.T₁+0.5x₂*p.T₂;kwargs...);x,w);x,w)
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = Aᵢⱼ
 

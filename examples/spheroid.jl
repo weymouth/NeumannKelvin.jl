@@ -39,6 +39,10 @@ plot!(xlabel="log₂ h",ylabel="log₂ ||M error||",title="Spheroid M convergenc
 savefig("spheroid_ma_convergence.png")
 
 # Spheroid added_mass sweep
+r = 0.5;V = 4π/3*0.5*r^2
+panels = spheroid(0.5r;Z=0,r)
+M = added_mass(panels)./V
+
 dat = map(0.01:0.01:0.75) do r
 	panels = spheroid(1/8;Z=0,r)
 	V = 4π/3*0.5*r^2

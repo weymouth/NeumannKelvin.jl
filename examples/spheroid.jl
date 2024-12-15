@@ -8,7 +8,6 @@ function spheroid(h;Z=-0.5,L=1,r=0.25)
 		param_props.(S,θ₁,0:dθ₂:2π-0.5dθ₂,dθ₁,dθ₂)
 	end |> Table
 end
-centers(panels) = panels.x |> stack |> eachrow
 
 # Sphere area and added mass convergence
 using LinearAlgebra,Plots,CSV
@@ -51,19 +50,18 @@ plot(2dat.r,dat.M₁₁,label="M₁₁/V")
 plot!(2dat.r,dat.M₂₂,label="M₂₂/V",ylims=(0,1))
 plot!(2dat.r,dat.M₃₃,label="M₃₃/V")
 plot!(xlabel="b/a",title="Spheroid M components")
-savefig("spheroid_ma_convergence.png")
+savefig("spheroid_ma_sweep.png")
 
-# # Submerged spheroid convergence
 # waterline(p) = abs(p.T₁[3]+p.T₂[3]) ≥ -2p.x[3]
-# function WL_q(panels;Fn=0.3989)
+# function WL_q(panels;U=SA[1,0,0],kwargs...)
 #     x = panels.x |> stack
 #     WL = findall(waterline,panels)
-#     q = influence(panels;G=kelvin)\(-Uₙ.(panels;U=SA[-1,0,0]))
+#     q = influence(panels;kwargs...)\(-Uₙ.(panels;U))
 #     (x[1,WL],q[WL])
 # end
-# using Plots
+
 # plot()
-# for h in (0.0125,0.025,0.05,0.1,0.2,0.4)
-#     plot!(WL_q(prism(h))...,label=h)
+# for h in 0.5 .^(6:-1:1)
+# 	scatter!(WL_q(spheroid(h;Z=0,r=0.05),U=SA[0,1,0])...,label=log2(h),alpha=0.5)
 # end
-# plot!(ylabel="x")
+# plot!(xlabel="x",ylabel="q")

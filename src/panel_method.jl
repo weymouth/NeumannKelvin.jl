@@ -28,14 +28,14 @@ using ForwardDiff: derivative, gradient, value, partials, Dual
 
 Approximate integral `∫ₚ G(x,x')ds'` over panel `p`. 
 
-An 8x8 quadrature is used when inside the panel, otherwise it uses the midpoint.
+An 8x8 quadrature is used when `x==p.x`, otherwise it uses the midpoint.
 """
-∫G(x,p,G=source;kwargs...) = sum(abs2,x-p.x)>p.dA ? p.dA*G(x,p.x;kwargs...) : quad8²(x,p,G;kwargs...)
+∫G(x,p,G=source;kwargs...) = x≠p.x ? p.dA*G(x,p.x;kwargs...) : quad8²(x,p)
 function ∫G(d::AbstractVector{<:Dual{Tag}},p,G=source;kwargs...) where Tag
-    value(d) ≠ p.x && return p.dA*G(d,p.x;kwargs...) # use ∇∫G=∇(_∫G)
+    value(d) ≠ p.x && return p.dA*G(d,p.x;kwargs...) # use ∇∫G=∫∇G
     Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)      # enforce ∇∫G(x,x)=2πn̂
 end
-quad8²(ξ,p,G;x=xgl8,w=wgl8,kwargs...) = 0.25p.dA*quadgl(x₁->quadgl(x₂->G(ξ,p.x+0.5x₁*p.T₁+0.5x₂*p.T₂;kwargs...);x,w);x,w)
+quad8²(ξ,p;x=xgl8,w=wgl8) = 0.25p.dA*quadgl(x₁->quadgl(x₂->source(ξ,p.x+0.5x₁*p.T₁+0.5x₂*p.T₂);x,w);x,w)
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = Aᵢⱼ
 

@@ -22,20 +22,20 @@ end |> Table
 CSV.write("sphere_convergence.csv",dat)
 plot(dat.log2h,log2.(dat.normAerror),label="||A error||")
 plot!(dat.log2h,log2.(dat.normMerror),label="||M error||")
-plot!(xlabel="log₂ h",ylabel="log₂ error",title="Sphere convergence")
+plot!(xlabel="log₂ h/D",ylabel="log₂ error",title="Sphere convergence")
 savefig("sphere_convergence.png")
 
-# Spheroid added_mass convergence
-r = 0.25
-V = 4π/3*0.5*r^2; sol = [0.211115 0 0; 0 0.706404 0; 0 0 0.706404]
-dat = map(0.5 .^(1:5)) do h
-	panels = spheroid(h;Z=0,r)
+# 6:1 Spheroid added_mass convergence
+r = 0.5/6.01
+V = 4π/3*0.5*r^2; sol = [0.045 0 0; 0 0.918 0; 0 0 0.918]
+dat = map(0.5 .^(0:4)) do h
+	panels = spheroid(h*2r;Z=0,r)
 	Merror = added_mass(panels)./V-sol
 	(log2h=log2(h),normMerror=norm(Merror))
 end |> Table
 CSV.write("spheroid_ma_convergence.csv",dat)
 plot(dat.log2h,log2.(dat.normMerror),label="")
-plot!(xlabel="log₂ h",ylabel="log₂ ||M error||",title="Spheroid M convergence")
+plot!(xlabel="log₂ h/2b",ylabel="log₂ ||M error||",title="6:1 spheroid M convergence")
 savefig("spheroid_ma_convergence.png")
 
 # Spheroid added_mass sweep

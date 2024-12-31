@@ -10,7 +10,7 @@ function spheroid(h;Z=-0.5,L=1,r=0.25)
 end
 
 # Sphere area and added mass convergence
-using LinearAlgebra,Plots,CSV
+using LinearAlgebra,Plots
 r = 0.5
 A,V = 4π*r^2,4π/3*r^3
 dat = map(0.5 .^(1:6)) do h
@@ -19,6 +19,7 @@ dat = map(0.5 .^(1:6)) do h
 	Merror = added_mass(panels)./0.5V-I
 	(log2h=log2(h),normAerror=norm(Aerror),normMerror=norm(Merror))
 end |> Table
+using CSV
 CSV.write("sphere_convergence.csv",dat)
 plot(dat.log2h,log2.(dat.normAerror),label="||A error||")
 plot!(dat.log2h,log2.(dat.normMerror),label="||M error||")
@@ -52,16 +53,20 @@ plot!(2dat.r,dat.M₃₃,label="M₃₃/V")
 plot!(xlabel="b/a",title="Spheroid M components")
 savefig("spheroid_ma_sweep.png")
 
-# waterline(p) = abs(p.T₁[3]+p.T₂[3]) ≥ -2p.x[3]
-# function WL_q(panels;U=SA[1,0,0],kwargs...)
-#     x = panels.x |> stack
-#     WL = findall(waterline,panels)
-#     q = influence(panels;kwargs...)\(-Uₙ.(panels;U))
-#     (x[1,WL],q[WL])
-# end
+function surface_spheroid(h,r)
+	S(θ₁,θ₂) = SA[0.5cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)]
+	dθ₁ = π/round(π*0.5/h) # azimuth step size
+	dθ₂ = π/round(π*r/h) # polar step size
+	θ₁ = 0.5dθ₁:dθ₁:π
+    x,y,z = eachrow(S.(θ₁,0)|>stack) # WL
+	x,y,param_props.(S,θ₁',π+0.5dθ₂:dθ₂:2π,dθ₁,dθ₂) |> Table
+end
 
-# plot()
-# for h in 0.5 .^(6:-1:1)
-# 	scatter!(WL_q(spheroid(h;Z=0,r=0.05),U=SA[0,1,0])...,label=log2(h),alpha=0.5)
-# end
-# plot!(xlabel="x",ylabel="q")
+plot(); r = 0.5/6.01;
+for h in 2r .* (0.5 .^ (2:0.25:3))
+	x,y,panels = surface_spheroid(h,r)
+    q = influence(panels;G=kelvin,Fn=0.4)\(-Uₙ.(panels;U=SA[-1,0,0]))
+	plot!(x,ζ.(x,y,Ref(q),Ref(panels);G=kelvin,Fn=0.4),label="$(length(panels)) panels")
+end
+plot!(xlabel="x/L",ylabel="ζ/L")
+savefig("waterline.png")

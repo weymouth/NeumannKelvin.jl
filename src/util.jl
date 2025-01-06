@@ -61,7 +61,7 @@ are Gauss-Laguerre integration points.
         ϵ = g(h)-g₀-im*p
         h -= ϵ/dϵ # 1st step
         ϵ,dϵ = g(h)-g₀-im*p,dg(h)
-        if abs2(ϵ)>1e-6 # if needed..
+        if abs2(ϵ)>1e-8 # if needed..
             h -= ϵ/dϵ # take 2nd step
             dϵ = dg(h)
         end

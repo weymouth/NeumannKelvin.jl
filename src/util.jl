@@ -1,6 +1,6 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(5)
-const xgl20,wgl20 = gausslegendre(20)
+const xgl,wgl = gausslegendre(15)
 const xgl8,wgl8 = gausslegendre(8)
 const xgl2,wgl2 = gausslegendre(2)
 """
@@ -14,7 +14,7 @@ function quadgl(f;x,w)
         I += w[i]*f(x[i])
     end; I
 end
-quadgl_ab(f,a,b;x=xgl20,w=wgl20) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
+quadgl_ab(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
     complex_path(g,dg,rngs,skp)
@@ -26,25 +26,20 @@ along the real line using Gauss-Legendre. The range endpoints where
 derivative `dg(t)=g'` to find the path of stationary phase.
 """
 function complex_path(g,dg,rngs,skp=t->false)
-    length(rngs)==0 && return 0.
-
     # Compute real-line contributions
     @fastmath @inline function f(t)
         u,v = reim(g(t))
         exp(-v)*sin(u)
     end
-    I = if length(rngs)==1 # Split the range @ t=0
-        a,b = rngs[1]
-        quadgl_ab(f,a,0.)+quadgl_ab(f,0.,b)
-    else
-        sum(quadgl_ab(f,rng...) for rng in rngs)
-    end
+    I = sum(quadgl_ab(f,rng...) for rng in rngs)
 
     # Add the end point contributions
-    for rng in rngs, (i,t₀) in enumerate(rng)
+    for rng in combine(rngs...), (i,t₀) in enumerate(rng)
         !skp(t₀) && (I+= (-1)^i*nsp(t₀,g,dg))
     end; I
 end
+combine(a,b,c...) = a[2]≥b[1] ? combine((a[1],b[2]),c...) : (a,combine(b,c...)...)
+combine(a) = (a,)
 """
     nsp(h₀,g,dg)
 

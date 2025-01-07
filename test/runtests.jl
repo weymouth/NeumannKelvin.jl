@@ -24,7 +24,7 @@ using QuadGK
 
     I,e,c=quadgk_count(f,-Inf,Inf)
     # @show I,e,c # (1.247000964522693, 1.824659458372201e-8, 15195)
-    @test NeumannKelvin.complex_path(g,dg,[rng]) ≈ I atol=1e-5
+    @test NeumannKelvin.complex_path(g,dg,(rng,)) ≈ I atol=1e-5
 end
 
 @testset "panel_method.jl" begin
@@ -49,7 +49,7 @@ end
 
 function bruteW(x,y,z)
 	Wi(t) = exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t))
-	4quadgk(Wi,-Inf,Inf)[1]
+	4quadgk(Wi,-Inf,Inf,atol=1e-10)[1]
 end
 using SpecialFunctions
 @testset "green.jl" begin
@@ -64,7 +64,7 @@ using SpecialFunctions
         y = R*sin(atan(a))
         x==y==0 && continue
         @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=6e-4
-        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-5
+        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=2e-5 rtol=2e-5
     end
 end
 

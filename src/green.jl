@@ -73,26 +73,25 @@ dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2) # it's derivative
 
 # Return points where dg=0
 function stationary_points(x,y) 
-    y==0 && return [0.] 
+    y==0 && return (0.,) 
     diff = x^2-8y^2
-    diff≤√eps() ? [-x/4y] : @. (-x+[-1.,1.]*√diff)/4y
+    diff≤√eps() ? (-x/4y,) : @. (-x+(-1,1)*√diff)/4y
 end
 
-function stationary_ranges(x,y,R,Δg=3π)
+function stationary_ranges(x,y,R,Δg=2π)
     # Get stationary points and guess radius ρ₀
-    S = filter(t->abs(t)<1.1R,stationary_points(x,y))
+    S = stationary_points(x,y)
     ρ₀ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
 
-    # Get ranges within R with refined ρ estimate
-    rngs = map(enumerate(S)) do (i,t₀)
-        ρ = refine_ρ(t₀,t->g(x,y,t),t->dg(x,y,t),ρ₀;s=(-1)^i,Δg)
-        @. clamp(t₀-(ρ,-ρ),-R,R)
+    # Get refined radius and ranges
+    a = S[1]
+    ρₐ = refine_ρ(a,t->g(x,y,t),t->dg(x,y,t),ρ₀;s=-1,Δg)
+    if length(S) == 1 || S[2]>R # one point
+        (max(-R,a-ρₐ),a),(a,min(a+ρₐ,R))
+    else                        # two points
+        b = S[2]
+        ρᵦ = refine_ρ(b,t->g(x,y,t),t->dg(x,y,t),ρ₀;s= 1,Δg)
+        a+ρₐ ≥ b-ρᵦ && return (max(-R,a-ρₐ),a),(a,min(b+ρᵦ,R)) 
+        (max(-R,a-ρₐ),a+ρₐ),(b-ρᵦ,min(b+ρᵦ,R))
     end
-    
-    # Merge close ranges
-    if length(rngs)>1
-        a,b = rngs
-        6(b[1]-a[2])<b[2]-a[1] && (rngs = [(a[1],b[2])])
-    end
-    return rngs
 end

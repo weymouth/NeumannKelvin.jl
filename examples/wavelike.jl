@@ -19,34 +19,29 @@ plot!(z,z .*NeumannKelvin.wavelike.(-1,0.,z),lc=:green,label="x=-1")
 plot!(z,z .*NeumannKelvin.wavelike.(-0.8,0.,z),lc=:seagreen,label="x=-0.8")
 savefig("wavelike_vertical.png")
 
-using NeumannKelvin: g,dg,nsp,refine_ρ,quadgl,stationary_points
-using FastGaussQuadrature, QuadGK, Plots
+using NeumannKelvin: g,dg,nsp,refine_ρ,quadgl,stationary_points,combine
+using FastGaussQuadrature, QuadGK, Plots, Roots
 
 function bruteW(x,y)
 	Wi(t) = exp(-(1+t^2))*sin(g(x,y,t))
 	4quadgk(Wi,-Inf,Inf,rtol=1e-10,atol=1e-10)[1]
 end
 
-function precise_rng(x,y,Δg=4π;nleg=0,nkon=Inf,nlag=5,R=8log(10)-1)
-    S = stationary_points(x,y)
-    a = S[1]
-    ρ₀ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
-    ρₐ = refine_ρ(a,t->g(x,y,t),t->dg(x,y,t),ρ₀;s=-1,Δg,itmx=30,rtol=1e-4)
-    rngs = ((a-ρₐ,a),(a,a+ρₐ))
- 
-    if length(S)==2 && S[2]<R
+function precise_rng(x,y,Δg=4π;nleg=0,nkon=Inf,nlag=4,R=8log(10)-1)
+    S = stationary_points(x,y); a = S[1]
+    ga2b(a,b) = abs(g(x,y,a)-g(x,y,b))
+    fz(a,b,f=1) = find_zero(t->ga2b(a,t)-min(Δg,ga2b(a,b)/f),(a,b))
+    rngs = if length(S)==1 || S[2]>R
+        (fz(a,-R),a),(a,fz(a,R))
+    else
         b = S[2]
-        ρᵦ = refine_ρ(b,t->g(x,y,t),t->dg(x,y,t),ρ₀;s= 1,Δg,itmx=30,rtol=1e-4)
-        # r = (b-a)/(ρₐ+ρᵦ)*min(1,2Δg/abs(g(x,y,a)-g(x,y,b)))
-        # rngs = ((a-ρₐ,a+ρₐ*r),(b-ρᵦ*r,b+ρᵦ))
-        mid = (a-ρₐ+b+ρᵦ)/2 # gives cleaner results for Δg≈0
-        rngs = (a+ρₐ ≥ b-ρᵦ || abs(g(x,y,a)-g(x,y,b))≥Δg) ? ((a-ρₐ,mid),(mid,b+ρᵦ)) : ((a-ρₐ,a+ρₐ),(b-ρᵦ,b+ρᵦ))
-    end
+        (fz(a,-R),fz(a,b,2)),(fz(b,a,2),fz(b,R))
+    end 
 
     # Compute real-line contributions
     ĝ(t)=g(x,y,t)+im*(1+t^2)
     dĝ(t)=dg(x,y,t)+2im*t
-    @fastmath @inline function f(t)
+    function f(t)
         u,v = reim(ĝ(t))
         exp(-v)*sin(u)
     end
@@ -58,22 +53,25 @@ function precise_rng(x,y,Δg=4π;nleg=0,nkon=Inf,nlag=5,R=8log(10)-1)
     end
 
     # Add the end point contributions
-    xlag,wlag = gausslaguerre(nlag)
-    for rng in merge(rngs...), (i,t₀) in enumerate(rng)
-        I += (-1)^i*nsp(t₀,ĝ,dĝ;xlag,wlag)
+    function nsp(h₀)
+        s,g₀,h = 0.,ĝ(h₀),h₀+0im
+        for (p,w) in zip(gausslaguerre(nlag)...)
+            h = find_zero((h->ĝ(h)-g₀-im*p,h->dĝ(h)),h,Roots.Newton())
+            s += w*imag(exp(im*g₀)*im/dĝ(h))
+        end;s
+    end
+    for rng in combine(rngs...), (i,t₀) in enumerate(rng)
+        I += (-1)^i*nsp(t₀)
     end
     4I
 end
-using Base: merge
-Base.merge(a::NTuple{2},b::NTuple{2}) = a[2]+sqrt(eps())≥b[1] ? ((a[1],b[2]),) : (a,b)
-Base.merge(a::NTuple{2}) = (a,)
 
 Δg = 0.3:0.05:6pi
 cmap = cgrad(:matter, 5, categorical = true);
-x,y = -110,30
+x,y = -110.,30.
 plot(xlabel="Δg",ylabel="|error|",yscale=:log10,ylim=(1e-10,1));
 for (i,np) in enumerate((1,3,7))
-    plot!(Δg,g->abs(precise_rng(x,y,g;nkon=np)-bruteW(x,y)),label=30np,c=cmap[i]);
+    plot!(Δg,g->abs(precise_rng(x,y,g;nkon=np)-bruteW(x,y)),label="2*15*$np",c=cmap[i]);
 end;plot!(legendtitle="Gauss-Konrad points",legendtitlefontsize=9)
 savefig("Gauss-Konrad points.png")
 
@@ -92,7 +90,7 @@ savefig("Gauss-Laguerre points.png")
 plot(xlabel="Δg",ylabel="|error|",yscale=:log10,ylim=(1e-10,1));
 for i = 1:5
     R = 2^(2i-2)
-    x,y = -11R/11.4,3R/11.4
+    x,y = -11R/hypot(11,3),3R/hypot(11,3)
     plot!(Δg,g->abs(precise_rng(x,y,g)-bruteW(x,y)),label=R,c=cmap[i])
 end;plot!(legendtitle="scaled distance",legendtitlefontsize=9)
 savefig("wave mid.png")

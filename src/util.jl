@@ -1,5 +1,5 @@
 using FastGaussQuadrature
-const xlag,wlag = gausslaguerre(5)
+const xlag,wlag = gausslaguerre(4)
 const xgl,wgl = gausslegendre(16)
 const xgl8,wgl8 = gausslegendre(8)
 const xgl2,wgl2 = gausslegendre(2)

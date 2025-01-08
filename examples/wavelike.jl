@@ -19,7 +19,7 @@ plot!(z,z .*NeumannKelvin.wavelike.(-1,0.,z),lc=:green,label="x=-1")
 plot!(z,z .*NeumannKelvin.wavelike.(-0.8,0.,z),lc=:seagreen,label="x=-0.8")
 savefig("wavelike_vertical.png")
 
-using NeumannKelvin: g,dg,nsp,refine_ρ,quadgl_ab,stationary_points
+using NeumannKelvin: g,dg,nsp,refine_ρ,quadgl,stationary_points
 using FastGaussQuadrature, QuadGK, Plots
 
 function bruteW(x,y)
@@ -39,7 +39,7 @@ function precise_rng(x,y,Δg=4π;nleg=0,nkon=Inf,nlag=5,R=8log(10)-1)
         ρᵦ = refine_ρ(b,t->g(x,y,t),t->dg(x,y,t),ρ₀;s= 1,Δg,itmx=30,rtol=1e-4)
         # r = (b-a)/(ρₐ+ρᵦ)*min(1,2Δg/abs(g(x,y,a)-g(x,y,b)))
         # rngs = ((a-ρₐ,a+ρₐ*r),(b-ρᵦ*r,b+ρᵦ))
-        mid = (a-ρₐ+b+ρᵦ)/2
+        mid = (a-ρₐ+b+ρᵦ)/2 # gives cleaner results for Δg≈0
         rngs = (a+ρₐ ≥ b-ρᵦ || abs(g(x,y,a)-g(x,y,b))≥Δg) ? ((a-ρₐ,mid),(mid,b+ρᵦ)) : ((a-ρₐ,a+ρₐ),(b-ρᵦ,b+ρᵦ))
     end
 
@@ -52,7 +52,7 @@ function precise_rng(x,y,Δg=4π;nleg=0,nkon=Inf,nlag=5,R=8log(10)-1)
     end
     I = if nleg>0 # use fixed-size Gauss-Legendre
         xleg,wleg = gausslegendre(nleg)
-        sum(quadgl_ab(f,rng...;x=xleg,w=wleg) for rng in rngs)
+        sum(quadgl(f,rng...;x=xleg,w=wleg) for rng in rngs)
     else          # use adaptive Gauss-Konrad
         sum(quadgk(f,rng...;atol=1e-10,maxevals=15*nkon)[1] for rng in rngs)
     end

@@ -1,6 +1,6 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(5)
-const xgl,wgl = gausslegendre(15)
+const xgl,wgl = gausslegendre(16)
 const xgl8,wgl8 = gausslegendre(8)
 const xgl2,wgl2 = gausslegendre(2)
 """
@@ -14,7 +14,7 @@ function quadgl(f;x,w)
         I += w[i]*f(x[i])
     end; I
 end
-quadgl_ab(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
+quadgl(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
     complex_path(g,dg,rngs,skp)
@@ -31,7 +31,7 @@ function complex_path(g,dg,rngs,skp=t->false)
         u,v = reim(g(t))
         exp(-v)*sin(u)
     end
-    I = sum(quadgl_ab(f,rng...) for rng in rngs)
+    I = sum(quadgl(f,rng...) for rng in rngs)
 
     # Add the end point contributions
     for rng in combine(rngs...), (i,t₀) in enumerate(rng)

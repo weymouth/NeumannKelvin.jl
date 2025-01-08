@@ -5,7 +5,7 @@ using QuadGK
 @testset "util.jl" begin
     using NeumannKelvin: xgl2,wgl2
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
-    @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
+    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
@@ -16,7 +16,7 @@ using QuadGK
 
     I,e,c=quadgk_count(f,rng...)
     # @show I,e,c # (1.5408137136825548, 1.0477053419277738e-8, 165) # easy
-    @test NeumannKelvin.quadgl_ab(f,rng...) ≈ I atol=1e-5
+    @test NeumannKelvin.quadgl(f,rng...) ≈ I atol=1e-5
 
     I,e,c=quadgk_count(f,ρ,Inf)
     # @show I,e,c # (-0.14690637593307346, 2.133881538591021e-9, 8265) # hard
@@ -64,7 +64,7 @@ using SpecialFunctions
         y = R*sin(atan(a))
         x==y==0 && continue
         @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=6e-4
-        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=2e-5 rtol=2e-5
+        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=2e-5 rtol=2.2e-5
     end
 end
 

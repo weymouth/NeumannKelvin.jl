@@ -82,6 +82,7 @@ function stationary_ranges(x,y,R,Δg=2π)
     # Get stationary points and guess radius ρ₀
     S = stationary_points(x,y)
     ρ₀ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
+    ρ₀ ≥ R && return (-R,0.),(0.,R) # integrate over real line
 
     # Get refined radius and ranges
     a = S[1]
@@ -90,8 +91,8 @@ function stationary_ranges(x,y,R,Δg=2π)
         (max(-R,a-ρₐ),a),(a,min(a+ρₐ,R))
     else                        # two points
         b = S[2]
-        ρᵦ = refine_ρ(b,t->g(x,y,t),t->dg(x,y,t),ρ₀;s= 1,Δg)
-        a+ρₐ ≥ b-ρᵦ && return (max(-R,a-ρₐ),a),(a,min(b+ρᵦ,R)) 
-        (max(-R,a-ρₐ),a+ρₐ),(b-ρᵦ,min(b+ρᵦ,R))
+        ρᵦ = refine_ρ(b,t->g(x,y,t),t->dg(x,y,t),ρ₀;s=1,Δg)
+        r = (b-a)/(ρₐ+ρᵦ)*min(1,2Δg/abs(g(x,y,a)-g(x,y,b)))
+        (max(-R,a-ρₐ),a+ρₐ*r),(b-ρᵦ*r,min(b+ρᵦ,R))
     end
 end

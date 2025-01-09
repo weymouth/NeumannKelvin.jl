@@ -40,6 +40,8 @@ function complex_path(g,dg,rngs,skp=t->false)
 end
 combine(a,b,c...) = a[2]≥b[1] ? combine((a[1],b[2]),c...) : (a,combine(b,c...)...)
 combine(a) = (a,)
+
+using Roots
 """
     nsp(h₀,g,dg)
 
@@ -50,30 +52,23 @@ are Gauss-Laguerre integration points.
 """
 @fastmath function nsp(h₀::T,g,dg;xlag=xlag,wlag=wlag)::T where T
     # Sum over complex Gauss-Laguerre points
-    s,g₀,h,dϵ = zero(T),g(h₀),h₀+0im,dg(h₀)
+    s,g₀,h = zero(T),g(h₀),h₀+0im
     for (p,w) in zip(xlag,wlag)
-        # Newton step(s) to find h
-        ϵ = g(h)-g₀-im*p
-        h -= ϵ/dϵ # 1st step
-        ϵ,dϵ = g(h)-g₀-im*p,dg(h)
-        if abs2(ϵ)>1e-8 # if needed..
-            h -= ϵ/dϵ # take 2nd step
-            dϵ = dg(h)
-        end
-        s += w*imag(exp(im*g₀)*im/dϵ)
+        h = find_zero((h->g(h)-g₀-im*p,dg),h,Roots.Newton(),atol=1e-3)
+        s += w*imag(exp(im*g₀)*im/dg(h))
     end;s
 end
 
-"""
-Refine radius ρ such that `g(t₀±ρ)-g(t₀) ≈ ±Δg`
-"""
-@fastmath function refine_ρ(t₀,g,dg,ρ;s=1,Δg=3π,itmx=3,it=1,rtol=0.3)
-    ϵ = g(t₀)-g(t₀+s*ρ)+s*Δg
-    while abs(ϵ)>rtol*Δg
-        ρ += s*ϵ/dg(t₀+s*ρ)
-        it+=1; it>itmx && break
-        ϵ = g(t₀)-g(t₀+s*ρ)+s*Δg
+@fastmath function finite_ranges(S,g,Δg,R;atol=0.3Δg)
+    ga2b(a,b) = abs(g(a)-g(b))
+    fz(a,b,scale=1) = find_zero(t->ga2b(a,t)-min(Δg,ga2b(a,b)/scale),(a,b);atol)
+    if length(S)==1 || S[2]>R
+        a = first(S)
+        (fz(a,-R),a),(a,fz(a,R))
+    else
+        a,b = S[1:2]
+        a₂ = fz(a,b,2)
+        b₁ = ga2b(a,b)/2-ga2b(a,a₂) ≤ atol ? a₂ : fz(b,a,2)
+        (fz(a,-R),a₂),(b₁,fz(b,R))
     end
-    ρ<0 && throw(DomainError(ρ))
-    return ρ
 end

@@ -63,36 +63,21 @@ end
 function wavelike(x,y,z)
     x≥0 && return 0.
     R = √max(0,-5log(10)/z-1) # radius s.t. f(z,R)=1E-5
+    rngs = finite_ranges(     # stationary point ranges
+        stationary_points(x,y),t->g(x,y,clamp64(t)),2π,R)
     4complex_path(t->g(x,y,t)-im*z*(1+t^2), #complex phase
-        t->dg(x,y,t)-2im*z*t,               #it's derivative
-        stationary_ranges(x,y,R),t->abs(t)≥R)
+                  t->dg(x,y,t)-2im*z*t,     #it's derivative
+                  rngs,t->abs(t)≥R)
 end
-
-g(x,y,t) = (x+y*t)*√(1+t^2)           # phase function
-dg(x,y,t) = (x*t+y*(2t^2+1))/√(1+t^2) # it's derivative
+g(x,y,t) = (x+y*t)*S(1+t^2)           # phase function
+dg(x,y,t) = (x*t+y*(2t^2+1))/S(1+t^2) # it's derivative
+clamp64(t) = clamp(t,-floatmax(),floatmax())
+S(z::Complex) = π/2≤angle(z)≤π ? -√z : √z
+S(x) = √x
 
 # Return points where dg=0
 function stationary_points(x,y) 
     y==0 && return (0.,) 
     diff = x^2-8y^2
     diff≤√eps() ? (-x/4y,) : @. (-x+(-1,1)*√diff)/4y
-end
-
-function stationary_ranges(x,y,R,Δg=2π)
-    # Get stationary points and guess radius ρ₀
-    S = stationary_points(x,y)
-    ρ₀ = Δg*√(inv(0.5Δg*abs(x)+y^2)+inv(x^2+Δg*abs(y)))
-    ρ₀ ≥ R && return (-R,0.),(0.,R) # integrate over real line
-
-    # Get refined radius and ranges
-    a = S[1]
-    ρₐ = refine_ρ(a,t->g(x,y,t),t->dg(x,y,t),ρ₀;s=-1,Δg)
-    if length(S) == 1 || S[2]>R # one point
-        (max(-R,a-ρₐ),a),(a,min(a+ρₐ,R))
-    else                        # two points
-        b = S[2]
-        ρᵦ = refine_ρ(b,t->g(x,y,t),t->dg(x,y,t),ρ₀;s=1,Δg)
-        r = (b-a)/(ρₐ+ρᵦ)*min(1,2Δg/abs(g(x,y,a)-g(x,y,b)))
-        (max(-R,a-ρₐ),a+ρₐ*r),(b-ρᵦ*r,min(b+ρᵦ,R))
-    end
 end

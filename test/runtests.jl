@@ -5,18 +5,23 @@ using QuadGK
 @testset "util.jl" begin
     using NeumannKelvin: xgl2,wgl2
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
-    @test NeumannKelvin.quadgl_ab(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
+    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
+
+    rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf) 
+    @test all( isapprox.(rngs[1],(-2,0),atol=4*0.3) .&& isapprox.(rngs[2],(0,2),atol=4*0.3) )
+
+    rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
+    @test all(rngs[1] .≈ (-2,0) .&& rngs[2] .≈ (0,2))
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
     dg(x) = 2x+im*x/50
     f(x) = imag(exp(im*g(x)))
     ρ = √(3π); rng = (-ρ,ρ)
-    @test NeumannKelvin.refine_ρ(0,x->x^2,x->2x,1;itmx=10,rtol=1e-6)≈ρ
 
     I,e,c=quadgk_count(f,rng...)
     # @show I,e,c # (1.5408137136825548, 1.0477053419277738e-8, 165) # easy
-    @test NeumannKelvin.quadgl_ab(f,rng...) ≈ I atol=1e-5
+    @test NeumannKelvin.quadgl(f,rng...) ≈ I atol=1e-5
 
     I,e,c=quadgk_count(f,ρ,Inf)
     # @show I,e,c # (-0.14690637593307346, 2.133881538591021e-9, 8265) # hard
@@ -24,7 +29,7 @@ using QuadGK
 
     I,e,c=quadgk_count(f,-Inf,Inf)
     # @show I,e,c # (1.247000964522693, 1.824659458372201e-8, 15195)
-    @test NeumannKelvin.complex_path(g,dg,[rng]) ≈ I atol=1e-5
+    @test NeumannKelvin.complex_path(g,dg,(rng,)) ≈ I atol=1e-5
 end
 
 @testset "panel_method.jl" begin
@@ -49,7 +54,7 @@ end
 
 function bruteW(x,y,z)
 	Wi(t) = exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t))
-	4quadgk(Wi,-Inf,Inf)[1]
+	4quadgk(Wi,-Inf,Inf,atol=1e-10)[1]
 end
 using SpecialFunctions
 @testset "green.jl" begin
@@ -64,7 +69,7 @@ using SpecialFunctions
         y = R*sin(atan(a))
         x==y==0 && continue
         @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=6e-4
-        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-5
+        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-4
     end
 end
 

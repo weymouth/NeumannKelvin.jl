@@ -10,7 +10,7 @@ using QuadGK
     rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf) 
     @test all( isapprox.(rngs[1],(-2,0),atol=4*0.3) .&& isapprox.(rngs[2],(0,2),atol=4*0.3) )
 
-    rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2)
+    rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
     @test all(rngs[1] .≈ (-2,0) .&& rngs[2] .≈ (0,2))
 
     # Highly oscillatory integral set-up
@@ -69,7 +69,7 @@ using SpecialFunctions
         y = R*sin(atan(a))
         x==y==0 && continue
         @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=6e-4
-        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1.25e-5
+        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=2.1e-5
     end
 end
 

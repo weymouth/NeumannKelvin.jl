@@ -1,6 +1,6 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(4)
-const xgl,wgl = gausslegendre(16)
+const xgl,wgl = gausslegendre(20)
 const xgl8,wgl8 = gausslegendre(8)
 const xgl2,wgl2 = gausslegendre(2)
 """
@@ -50,25 +50,32 @@ Integrate the contributions of `imag(∫exp(im*g(h))dh)` from
 is found as the roots of `ϵ(h)=g(h)-g(h₀)-im*p=0` where `p`
 are Gauss-Laguerre integration points.
 """
-@fastmath function nsp(h₀::T,g,dg;xlag=xlag,wlag=wlag)::T where T
+@fastmath function nsp(h₀::T,g,dg;xlag=xlag,wlag=wlag,atol=1e-3)::T where T
     # Sum over complex Gauss-Laguerre points
     s,g₀,h = zero(T),g(h₀),h₀+0im
     for (p,w) in zip(xlag,wlag)
-        h = find_zero((h->g(h)-g₀-im*p,dg),h,Roots.Newton(),atol=1e-3)
+        h = find_zero((h->g(h)-g₀-im*p,dg),h,Roots.Newton();atol)
         s += w*imag(exp(im*g₀)*im/dg(h))
     end;s
 end
 
+"""
+    finite_ranges(S,g,Δg,R;atol=0.3Δg)
+
+Return a set of ranges `(a₁,a₂)` around each point `a∈S` such that
+`|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap.
+"""
 @fastmath function finite_ranges(S,g,Δg,R;atol=0.3Δg)
     ga2b(a,b) = abs(g(a)-g(b))
-    fz(a,b,scale=1) = find_zero(t->ga2b(a,t)-min(Δg,ga2b(a,b)/scale),(a,b);atol)
+    function fz(a,b)
+        isfinite(b) && ga2b(a,b)≤Δg+atol && return b
+        find_zero(t->ga2b(a,t)-Δg,(a,a+clamp(b-a,-1,1)),Order1();atol)       
+    end
     if length(S)==1 || S[2]>R
         a = first(S)
         (fz(a,-R),a),(a,fz(a,R))
     else
-        a,b = S[1:2]
-        a₂ = fz(a,b,2)
-        b₁ = ga2b(a,b)/2-ga2b(a,a₂) ≤ atol ? a₂ : fz(b,a,2)
-        (fz(a,-R),a₂),(b₁,fz(b,R))
+        a,b = S
+        (fz(a,-R),fz(a,a/2+b/2)),(fz(b,a/2+b/2),fz(b,R))
     end
 end

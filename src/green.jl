@@ -60,18 +60,18 @@ function makecheb(l,u;map=identity,tol=1e-4)
 end
 
 # Wave-like disturbance 
-function wavelike(x,y,z)
-    x≥0 && return 0.
-    R = √max(0,-5log(10)/z-1) # radius s.t. f(z,R)=1E-5
-    rngs = finite_ranges(     # stationary point ranges
-        stationary_points(x,y),t->g(x,y,t),2π,R)
-    4complex_path(t->g(x,y,t)-im*z*(1+t^2), #complex phase
-                  t->dg(x,y,t)-2im*z*t,     #it's derivative
-                  rngs,t->abs(t)≥R)
+function wavelike(x,y,z,ltol=-5log(10))
+    (x≥0 || z≤ltol) && return 0.
+    R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
+    S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
+    rngs = finite_ranges(S,t->g(x,y,t),2π,R) # finite phase ranges
+    4complex_path(t->g(x,y,t)-im*z*(1+t^2),  # complex phase
+                  t->dg(x,y,t)-2im*z*t,      # it's derivative
+                  rngs,t->abs(t)≥R)          # integration ranges
 end
-g(x,y,t) = (x+y*t)*S(1+t^2)           # phase function
-dg(x,y,t) = (x*t+y*(2t^2+1))/S(1+t^2) # it's derivative
-S(z::Complex) = π/2≤angle(z)≤π ? -√z : √z
+g(x,y,t) = (x+y*t)*S(1+t^2)               # phase function
+dg(x,y,t) = (x*t+y*(2t^2+1))/S(1+t^2)     # it's derivative
+S(z::Complex) = π/2≤angle(z)≤π ? -√z : √z # move √ branch-cut
 S(x) = √x
 
 # Return points where dg=0

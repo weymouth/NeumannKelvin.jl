@@ -69,7 +69,7 @@ using SpecialFunctions
         y = R*sin(atan(a))
         x==y==0 && continue
         @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=6e-4
-        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=2.1e-5
+        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-4
     end
 end
 

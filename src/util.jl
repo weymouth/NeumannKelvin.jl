@@ -1,6 +1,6 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(4)
-const xgl,wgl = gausslegendre(20)
+const xgl,wgl = gausslegendre(16)
 const xgl8,wgl8 = gausslegendre(8)
 const xgl2,wgl2 = gausslegendre(2)
 """
@@ -62,7 +62,7 @@ end
 """
     finite_ranges(S,g,Δg,R;atol=0.3Δg)
 
-Return a set of ranges `(a₁,a₂)` around each point `a∈S` such that
+Return a set of ranges `(a₁,a₂)` around each point `a∈S∈[-R,R]` such that
 `|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap.
 """
 @fastmath function finite_ranges(S,g,Δg,R;atol=0.3Δg)
@@ -71,7 +71,9 @@ Return a set of ranges `(a₁,a₂)` around each point `a∈S` such that
         isfinite(b) && ga2b(a,b)≤Δg+atol && return b
         find_zero(t->ga2b(a,t)-Δg,(a,a+clamp(b-a,-1,1)),Order1();atol)       
     end
-    if length(S)==1 || S[2]>R
+    if length(S) == 0
+        ((-R,R),)
+    elseif length(S) == 1
         a = first(S)
         (fz(a,-R),a),(a,fz(a,R))
     else

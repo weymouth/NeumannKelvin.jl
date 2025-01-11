@@ -7,8 +7,8 @@ Base.adjoint(t::Table) = permutedims(t)
 @reexport using ForwardDiff: derivative,gradient
 @reexport using LinearAlgebra: ×,⋅,tr
 
-# Basic integration/derivative utilities
-include("util.jl")
+# Quadrature functions & utilities
+include("quad.jl")
 
 # Green function definitions
 using ThreadsX # multi-threaded map,sum, & foreach

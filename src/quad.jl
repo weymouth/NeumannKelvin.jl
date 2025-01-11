@@ -66,10 +66,9 @@ Return a set of ranges `(a₁,a₂)` around each point `a∈S∈[-R,R]` such tha
 `|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap.
 """
 @fastmath function finite_ranges(S,g,Δg,R;atol=0.3Δg)
-    ga2b(a,b) = abs(g(a)-g(b))
     function fz(a,b)
-        isfinite(b) && ga2b(a,b)≤Δg+atol && return b
-        find_zero(t->ga2b(a,t)-Δg,(a,a+clamp(b-a,-1,1)),Order1();atol)       
+        isfinite(b) && abs(g(a)-g(b))≤Δg+atol && return b
+        find_zero(t->abs(g(a)-g(t))-Δg,(a,a+clamp(b-a,-1,1)),Order1();atol)       
     end
     if length(S) == 0
         ((-R,R),)

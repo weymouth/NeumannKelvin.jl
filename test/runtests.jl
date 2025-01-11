@@ -2,7 +2,7 @@ using NeumannKelvin
 using Test
 
 using QuadGK
-@testset "util.jl" begin
+@testset "quad.jl" begin
     using NeumannKelvin: xgl2,wgl2
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
@@ -32,24 +32,25 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,(rng,)) ≈ I atol=1e-5
 end
 
+using LinearAlgebra
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-    panels = param_props.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2) |> Table
+    dθ₁ = π-2acos(1/√3) # places x in octant centers
+    panels = param_props.(S,[π-dθ₁,π+dθ₁]'/2,π/4:π/2:2π,dθ₁,π/2) |> Table
     @test size(panels) == (8,)
     @test panels.n ⋅ panels.x == 8
-    @test sum(panels.dA) ≈ 4π rtol=0.1
+    @test sum(panels.dA) ≈ 4π rtol=0.006
 
     A,b = ∂ₙϕ.(panels,panels'),-Uₙ.(panels)
     @test A≈influence(panels)
     @test tr(A) == 8*2π
-    @test 4minimum(A) ≈ panels[1].dA  rtol=1/8
+    @test 4minimum(A) ≈ panels[1].dA
     @test sum(b)<8eps()
 
     q = A \ b
     @test A*q≈b
-    @test allequal(map(x->abs(round(x,digits=5)),q))
-    # m_zz is wrong! Must have to do with the choice of parameterization
-    @test added_mass(panels)≈[2π/3 0 0;0 2π/3 0; 0 0 5] rtol=0.055 # ϵ=5.5% with 8 panels
+    @test allequal(map(x->abs(round(x,digits=14)),q))
+    @test added_mass(panels)≈2π/3*I rtol=0.18 # ϵ=18% with 8 panels
 end
 
 function bruteW(x,y,z)

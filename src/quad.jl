@@ -4,9 +4,9 @@ const xgl,wgl = gausslegendre(16)
 const xgl8,wgl8 = gausslegendre(8)
 const xgl2,wgl2 = gausslegendre(2)
 """
-    quadgl(f;x,w)
+    quadgl(f,a-1,b=1;x,w)
 
-Approximate ∫f(x)dx from x=[-1,1] using the Gauss-Legendre weights and points `w,x`.
+Approximate ∫f(x)dx from x=[a,b] using the Gauss-Legendre weights and points `w,x`.
 """
 function quadgl(f;x,w) 
     I = 0.
@@ -19,9 +19,9 @@ quadgl(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 """
     complex_path(g,dg,rngs,skp)
 
-Estimate the integral `imag(∫exp(im*g(t))dt)` from `t=[-∞,∞]` using a 
-complex path. The ranges of stationary phase `rngs` are integrated 
-along the real line using Gauss-Legendre. The range endpoints where 
+Estimate the integral `imag(∫exp(im*g(t))dt)` from `t=[-∞,∞]` using
+a complex path. The finite phase ranges `rngs` are integrated along 
+the real line using Gauss-Legendre. The range endpoints where 
 `skp(t)==false` are integrated in the complex-plane using the phase 
 derivative `dg(t)=g'` to find the path of stationary phase.
 """

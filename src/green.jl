@@ -27,12 +27,12 @@ function nearfield(x::T,y::T,z::T)::T where T
         @warn "Creating Chebychev polynomials takes a moment"
         global c1,c2,c3,c4 = makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;map=r2R)
     end
-	S = X2S(x,y,z); R = S[1]
-	l0 = -2*(1-z/(R+abs(x)))
-	R ≥ 10 ? l0+c4(r2R(S)) :
-	R ≥ 4  ? l0+c3(S) :
-	R ≥ 1  ? l0+c2(S) :
-	R > 0  ? l0+c1(S) : -4.0
+    S = X2S(x,y,z); R = S[1]
+    l0 = -2*(1-z/(R+abs(x)))
+    R ≥ 10 ? l0+c4(r2R(S)) :
+    R ≥ 4  ? l0+c3(S) :
+    R ≥ 1  ? l0+c2(S) :
+    R > 0  ? l0+c1(S) : -4.0
 end
 isfirstcall = Threads.Atomic{Bool}(true)
 
@@ -53,10 +53,10 @@ r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1967
 
 # Create fast Chebychev polynomials
 function makecheb(l,u;map=identity,tol=1e-4)
-	lb,ub = SA[l,0,0],SA[u,π/2-eps(),π/2];
+    lb,ub = SA[l,0,0],SA[u,π/2-eps(),π/2];
     S = S2X.(map.(chebpoints((16,16,8),lb,ub)))
     D = ThreadsX.map(bruteN,S) # generate data (with multi-threading)
-	chebinterp(D,lb,ub;tol)    # create interpolation function
+    chebinterp(D,lb,ub;tol)    # create interpolation function
 end
 
 # Wave-like disturbance 

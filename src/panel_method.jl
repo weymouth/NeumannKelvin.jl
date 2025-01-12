@@ -74,8 +74,8 @@ where cₚ = 1-u²/U², `U` is the freestreeam velocity and u=U+∇φ is the flo
 """
 steady_force(q,panels;U=SVector(1,0,0),kwargs...) = ThreadsX.sum(panels) do pᵢ
     u² = sum(abs2,U+∇φ(pᵢ.x,q,panels;kwargs...))
-	cₚ = 1-u²/sum(abs2,U)
-	cₚ*pᵢ.n*pᵢ.dA
+    cₚ = 1-u²/sum(abs2,U)
+    cₚ*pᵢ.n*pᵢ.dA
 end
 """
     added_mass(panels;kwargs...)

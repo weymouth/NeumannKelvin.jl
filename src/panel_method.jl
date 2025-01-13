@@ -7,8 +7,10 @@ vectors `T₁=dξ₁*∂x/∂ξ₁` and `T₂=dξ₂*∂x/∂ξ₂`, where `n≡
 """
 function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂)
     T₁,T₂ = dξ₁*derivative(ξ₁->S(ξ₁,ξ₂),ξ₁),dξ₂*derivative(ξ₂->S(ξ₁,ξ₂),ξ₂) 
-    n = T₁×T₂; mag = hypot(n...)
-    (x=S(ξ₁,ξ₂), n=n/mag, dA=mag, T₁=T₁, T₂=T₂)
+    n = T₁×T₂; mag = hypot(n...); x = S(ξ₁,ξ₂)
+    # x₄ = S.(ξ₁ .+ 0.5dξ₁*xgl2',ξ₂ .+ 0.5dξ₂*xgl2) # sample tangent plane instead
+    x₄ = @SMatrix [x+0.5T₁*x₁+0.5T₂*x₂ for x₁ in xgl2, x₂ in xgl2]
+    (x=x, n=n/mag, dA=mag, T₁=T₁, T₂=T₂, x₄=x₄)
 end
 """
     ϕ(x,p;G=source,kwargs...)
@@ -19,7 +21,7 @@ If the greens function `G≠source` this routine combines the contributions
 of a source at `p` and `G(x,reflect(p))`.
 """
 ϕ(x,p;G=source,kwargs...) = G==source ? ∫G(x,p) : ∫G(x,p)+∫G(x,reflect(p),G;kwargs...)
-reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,T₁=reflect(p.T₂),T₂=reflect(p.T₁))
+reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,x₄=reflect.(p.x₄))
 reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
 using ForwardDiff: derivative, gradient, value, partials, Dual
@@ -27,15 +29,21 @@ using ForwardDiff: derivative, gradient, value, partials, Dual
     ∫G(x,p;G=source,kwargs...)
 
 Approximate integral `∫ₚ G(x,x')ds'` over panel `p`. 
-
-An 8x8 quadrature is used when `x==p.x`, otherwise it uses the midpoint.
 """
-∫G(x,p,G=source;kwargs...) = x≠p.x ? p.dA*G(x,p.x;kwargs...) : quad8²(x,p)
+∫G(x,p,G=source;kwargs...) = quad²(x,p,G;kwargs...)
 function ∫G(d::AbstractVector{<:Dual{Tag}},p,G=source;kwargs...) where Tag
-    value(d) ≠ p.x && return p.dA*G(d,p.x;kwargs...) # use ∇∫G=∫∇G
-    Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)      # enforce ∇∫G(x,x)=2πn̂
+    value(d) == p.x && return Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)
+    quad²(d,p,G;kwargs...)
 end
-quad8²(ξ,p;x=xgl8,w=wgl8) = 0.25p.dA*quadgl(x₁->quadgl(x₂->source(ξ,p.x+0.5x₁*p.T₁+0.5x₂*p.T₂);x,w);x,w)
+"""
+    quad²(ξ,p,G)
+
+A 2x2 quadrature is used when `x≈p.x`, otherwise the midpoint.
+"""
+function quad²(ξ,p,G;kwargs...)
+    (sum(abs2,ξ-p.x)>5p.dA || G≠source) && return p.dA*G(ξ,p.x;kwargs...)
+    0.25p.dA*sum(G(ξ,x;kwargs...) for x in p.x₄)
+end
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = Aᵢⱼ
 

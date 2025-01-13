@@ -1,14 +1,24 @@
 using NeumannKelvin
 function spheroid(h;Z=-0.5,L=1,r=0.25)
 	S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-	dθ₁ = π/round(π*0.5L/h) # cosine sampling increases density at ends
+	dθ₁ = π/round(π*0.5L/h)
+	odd = true
 	mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
-		dθ₂ = π/round(π*0.25L*sin(θ₁)/h) # polar step size at this azimuth
-		# param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
-		param_props.(S,θ₁,0:dθ₂:2π-0.5dθ₂,dθ₁,dθ₂)
+		dθ₂ = 2π/max(3,round(2π*r*sin(θ₁)/h))
+		odd ? (θ₂₁=0.5dθ₂;odd=false) : (θ₂₁=0;odd=true)
+		param_props.(S,θ₁,θ₂₁:dθ₂:2π-0.1dθ₂,dθ₁,dθ₂)
 	end |> Table
 end
 
+# using Plots
+# AR(p) = hypot(p.T₁...)/hypot(p.T₂...)
+# dₘ(panels) = minimum(d².(panels',panels),dims=1)
+# d²(pi,pj) = pi.x==pj.x ? floatmax() : sum(abs2,pi.x-pj.x)
+# x(p) = p.x[1]
+h = 0.25; panels = spheroid(h,Z=0,L=1,r=0.5)
+# scatter(x.(panels),AR.(panels),label="AR");scatter!(x.(panels),panels.dA/h^2,label="dA");
+# scatter!(x.(panels),dₘ(panels)'/h^2,label="min d²",xlabel="x",ylim=(0,1.5))
+first(panels).x₄
 # Sphere area and added mass convergence
 using LinearAlgebra,Plots
 r = 0.5
@@ -56,17 +66,21 @@ savefig("spheroid_ma_sweep.png")
 function surface_spheroid(h,r)
 	S(θ₁,θ₂) = SA[0.5cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)]
 	dθ₁ = π/round(π*0.5/h) # azimuth step size
-	dθ₂ = π/round(π*r/h) # polar step size
-	θ₁ = 0.5dθ₁:dθ₁:π
-    x,y,z = eachrow(S.(θ₁,0)|>stack) # WL
-	x,y,param_props.(S,θ₁',π+0.5dθ₂:dθ₂:2π,dθ₁,dθ₂) |> Table
+	dθ₂ = π/round(π*r/h)   # constant polar step size (classic)
+    x,y,z = eachrow(S.(0.5dθ₁:dθ₁:π,0)|>stack) # WL
+	x,y,mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
+		dθ₂ = π/max(2,round(2π*r*sin(θ₁)/h)) # adaptive polar step
+		param_props.(S,θ₁,π+0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
+	end |> Table
 end
 
 plot(); r = 0.5/6.01;
-for h in 2r .* (0.5 .^ (2:0.25:3))
-	x,y,panels = surface_spheroid(h,r)
+for h in 2r .* (0.5 .^ (1.75:0.25:2.75))
+# for h in 2r .* (0.5 .^ (2:0.25:3))
+	xp,yp,panels = surface_spheroid(h,r)
     q = influence(panels;G=kelvin,Fn=0.4)\(-Uₙ.(panels;U=SA[-1,0,0]))
-	plot!(x,ζ.(x,y,Ref(q),Ref(panels);G=kelvin,Fn=0.4),label="$(length(panels)) panels")
+	d = round(1000steady_force(q,panels;G=kelvin,Fn=0.4)[1],digits=4)
+	plot!(xp,ζ.(xp,yp,Ref(q),Ref(panels);G=kelvin,Fn=0.4),label="$(length(panels)) panels, 10³Cw=$d")
 end
 plot!(xlabel="x/L",ylabel="ζ/L")
 savefig("waterline.png")

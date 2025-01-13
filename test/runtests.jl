@@ -44,13 +44,13 @@ using LinearAlgebra
     A,b = ∂ₙϕ.(panels,panels'),-Uₙ.(panels)
     @test A≈influence(panels)
     @test tr(A) == 8*2π
-    @test 4minimum(A) ≈ panels[1].dA
+    @test 4minimum(A) ≈ panels[1].dA rtol=0.1
     @test sum(b)<8eps()
 
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    @test added_mass(panels)≈2π/3*I rtol=0.18 # ϵ=18% with 8 panels
+    @test added_mass(panels)≈2π/3*I rtol=0.09 # ϵ=9% with 8 panels
 end
 
 function bruteW(x,y,z)

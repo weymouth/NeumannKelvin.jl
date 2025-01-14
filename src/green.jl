@@ -2,7 +2,7 @@
 
 Green function `G(x)` for a source at position `a`.
 """
-source(x,a) = -1/hypot(x-a...)
+source(x,a;kwargs...) = -1/hypot(x-a...)
 
 """
     kelvin(ξ,α;Fn=1)
@@ -11,9 +11,9 @@ Green Function `G(ξ)` for a reflected source at position `α` moving with
 `Fn≡U/√gL`. The free surface is at z=0, the coordinates are scaled by L, 
 and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;Fn=1)
+function kelvin(ξ,α;Fn=1,kwargs...)
     # Check inputs
-    α[3] < 0 && @warn "Source point placed above zero" maxlog=2
+    α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
     # reflected source, nearfield, and wavelike disturbance

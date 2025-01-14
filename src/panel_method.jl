@@ -20,7 +20,7 @@ Disturbance potential of panel `p` on point `x`.
 If the greens function `G≠source` this routine combines the contributions 
 of a source at `p` and `G(x,reflect(p))`.
 """
-ϕ(x,p;G=source,kwargs...) = G==source ? ∫G(x,p) : ∫G(x,p)+∫G(x,reflect(p),G;kwargs...)
+ϕ(x,p;G=source,kwargs...) = G==source ? ∫G(x,p;kwargs...) : ∫G(x,p;kwargs...)+∫G(x,reflect(p),G;kwargs...)
 reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,x₄=reflect.(p.x₄))
 reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
@@ -40,8 +40,8 @@ end
 
 A 2x2 quadrature is used when `x≈p.x`, otherwise the midpoint.
 """
-function quad²(ξ,p,G;kwargs...)
-    (sum(abs2,ξ-p.x)>5p.dA || G≠source) && return p.dA*G(ξ,p.x;kwargs...)
+function quad²(ξ,p,G;d²=4,kwargs...)
+    (sum(abs2,ξ-p.x)>d²*p.dA || G≠source) && return p.dA*G(ξ,p.x;kwargs...)
     0.25p.dA*sum(G(ξ,x;kwargs...) for x in p.x₄)
 end
 """ 
@@ -92,7 +92,7 @@ Added mass matrix mᵢⱼ = -∫ₛ φᵢ(x) nⱼda for a set of `panels`,
 where φᵢ is the potential due to unit motion in direction i.
 """
 function added_mass(panels;kwargs...)
-    A = influence(panels;kwargs)
+    A = influence(panels;kwargs...)
     B = panels.n |> stack # source _matrix_ over i=1,2,3
     Q = A\B' # solution _matrix_ over i=1,2,3
     [-ThreadsX.sum(p->φ(p.x,view(Q,:,i),panels;kwargs...)*p.n[j]*p.dA,panels) for i in 1:3, j in 1:3]

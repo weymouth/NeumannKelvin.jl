@@ -15,10 +15,11 @@ end
 # dₘ(panels) = minimum(d².(panels',panels),dims=1)
 # d²(pi,pj) = pi.x==pj.x ? floatmax() : sum(abs2,pi.x-pj.x)
 # x(p) = p.x[1]
-h = 0.25; panels = spheroid(h,Z=0,L=1,r=0.5)
+# h = 0.25; panels = spheroid(h,Z=0,L=1,r=0.5)
 # scatter(x.(panels),AR.(panels),label="AR");scatter!(x.(panels),panels.dA/h^2,label="dA");
 # scatter!(x.(panels),dₘ(panels)'/h^2,label="min d²",xlabel="x",ylim=(0,1.5))
-first(panels).x₄
+# first(panels).x₄
+
 # Sphere area and added mass convergence
 using LinearAlgebra,Plots
 r = 0.5
@@ -39,7 +40,7 @@ savefig("sphere_convergence.png")
 # 6:1 Spheroid added_mass convergence
 r = 0.5/6.01
 V = 4π/3*0.5*r^2; sol = [0.045 0 0; 0 0.918 0; 0 0 0.918]
-dat = map(0.5 .^(0:4)) do h
+dat = map(0.5 .^(0:0.5:3)) do h
 	panels = spheroid(h*2r;Z=0,r)
 	Merror = added_mass(panels)./V-sol
 	(log2h=log2(h),normMerror=norm(Merror))

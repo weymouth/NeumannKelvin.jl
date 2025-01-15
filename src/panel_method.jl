@@ -8,34 +8,32 @@ vectors `T₁=dξ₁*∂x/∂ξ₁` and `T₂=dξ₂*∂x/∂ξ₂`, where `n≡
 function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂)
     T₁,T₂ = dξ₁*derivative(ξ₁->S(ξ₁,ξ₂),ξ₁),dξ₂*derivative(ξ₂->S(ξ₁,ξ₂),ξ₂) 
     n = T₁×T₂; mag = hypot(n...); x = S(ξ₁,ξ₂)
-    # x₄ = S.(ξ₁ .+ 0.5dξ₁*xgl2',ξ₂ .+ 0.5dξ₂*xgl2) # sample tangent plane instead
     x₄ = @SMatrix [x+0.5T₁*x₁+0.5T₂*x₂ for x₁ in xgl2, x₂ in xgl2]
-    (x=x, n=n/mag, dA=mag, T₁=T₁, T₂=T₂, x₄=x₄)
+    (x=x, n=n/mag, dA=mag, x₄=x₄)
 end
 """
     ϕ(x,p;G=source,kwargs...)
 
 Disturbance potential of panel `p` on point `x`. 
 
-If the greens function `G≠source` this routine combines the contributions 
+If the greens function `G==kelvin` this routine combines the contributions 
 of a source at `p` and `G(x,reflect(p))`.
 """
-ϕ(x,p;G=source,kwargs...) = G==source ? ∫G(x,p;kwargs...) : ∫G(x,p;kwargs...)+∫G(x,reflect(p),G;kwargs...)
-reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,x₄=reflect.(p.x₄))
+ϕ(x,p;G=source,kwargs...) = G==kelvin ? ∫G(x,p;kwargs...)+p.dA*kelvin(x,reflect(p.x);kwargs...) : ∫G(x,p;kwargs...)
 reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
 using ForwardDiff: derivative, gradient, value, partials, Dual
 """
-    ∫G(x,p;G=source,kwargs...)
+    ∫G(x,p;kwargs...)
 
 Approximate integral `∫ₚ G(x,x')ds'` over panel `p`. 
 """
-∫G(x,p,G=source;kwargs...) = G==source ? quad²(x,p;kwargs...) : p.dA*G(x,p.x;kwargs...)
-function ∫G(d::AbstractVector{<:Dual{Tag}},p,G=source;kwargs...) where Tag
-    value(d) == p.x && return Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)
-    G==source ? quad²(d,p;kwargs...) : p.dA*G(d,p.x;kwargs...)
+∫G(x,p;kwargs...) = _∫G(x,p;kwargs...)
+function ∫G(d::AbstractVector{<:Dual{Tag}},p;kwargs...) where Tag
+    value(d) ≠ p.x && return _∫G(d,p;kwargs...)
+    Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)
 end
-quad²(ξ,p;d²=4,kwargs...) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum(source(ξ,x) for x in p.x₄)
+_∫G(ξ,p;d²=4,kwargs...) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum(source(ξ,x) for x in p.x₄)
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = Aᵢⱼ
 

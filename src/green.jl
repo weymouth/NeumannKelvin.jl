@@ -2,7 +2,7 @@
 
 Green function `G(x)` for a source at position `a`.
 """
-source(x,a;kwargs...) = -1/hypot(x-a...)
+source(x,a) = -1/hypot(x-a...)
 
 """
     kelvin(ξ,α;Fn=1)

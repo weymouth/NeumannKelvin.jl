@@ -30,20 +30,12 @@ using ForwardDiff: derivative, gradient, value, partials, Dual
 
 Approximate integral `∫ₚ G(x,x')ds'` over panel `p`. 
 """
-∫G(x,p,G=source;kwargs...) = quad²(x,p,G;kwargs...)
+∫G(x,p,G=source;kwargs...) = G==source ? quad²(x,p;kwargs...) : p.dA*G(x,p.x;kwargs...)
 function ∫G(d::AbstractVector{<:Dual{Tag}},p,G=source;kwargs...) where Tag
     value(d) == p.x && return Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)
-    quad²(d,p,G;kwargs...)
+    G==source ? quad²(d,p;kwargs...) : p.dA*G(d,p.x;kwargs...)
 end
-"""
-    quad²(ξ,p,G)
-
-A 2x2 quadrature is used when `x≈p.x`, otherwise the midpoint.
-"""
-function quad²(ξ,p,G;d²=4,kwargs...)
-    (sum(abs2,ξ-p.x)>d²*p.dA || G≠source) && return p.dA*G(ξ,p.x;kwargs...)
-    0.25p.dA*sum(G(ξ,x;kwargs...) for x in p.x₄)
-end
+quad²(ξ,p;d²=4,kwargs...) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum(source(ξ,x) for x in p.x₄)
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = Aᵢⱼ
 

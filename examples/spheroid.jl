@@ -10,16 +10,6 @@ function spheroid(h;Z=-0.5,L=1,r=0.25)
 	end |> Table
 end
 
-# using Plots
-# AR(p) = hypot(p.T₁...)/hypot(p.T₂...)
-# dₘ(panels) = minimum(d².(panels',panels),dims=1)
-# d²(pi,pj) = pi.x==pj.x ? floatmax() : sum(abs2,pi.x-pj.x)
-# x(p) = p.x[1]
-# h = 0.25; panels = spheroid(h,Z=0,L=1,r=0.5)
-# scatter(x.(panels),AR.(panels),label="AR");scatter!(x.(panels),panels.dA/h^2,label="dA");
-# scatter!(x.(panels),dₘ(panels)'/h^2,label="min d²",xlabel="x",ylim=(0,1.5))
-# first(panels).x₄
-
 # Sphere area and added mass convergence
 using LinearAlgebra,Plots
 r = 0.5

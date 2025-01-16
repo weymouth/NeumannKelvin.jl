@@ -16,24 +16,29 @@ end
 
 Disturbance potential of panel `p` on point `x`. 
 
-If the greens function `G==kelvin` this routine combines the contributions 
-of a source at `p` and `G(x,reflect(p))`.
+If `G≠source` this routine includes the `reflect(p)` contributions.
 """
-ϕ(x,p;G=source,kwargs...) = G==kelvin ? ∫G(x,p;kwargs...)+p.dA*kelvin(x,reflect(p.x);kwargs...) : ∫G(x,p;kwargs...)
+function ϕ(x,p;G=source,kwargs...) 
+    G==source && return ∫G(x,p;kwargs...)
+    ∫G(x,p;kwargs...)-∫G(x,reflect(p);kwargs...)+p.dA*G(x,reflect(p.x);kwargs...)
+end
+reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,x₄=reflect.(p.x₄))
 reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
 using ForwardDiff: derivative, gradient, value, partials, Dual
 """
-    ∫G(x,p;kwargs...)
+    ∫G(x,p;d²=4)
 
-Approximate integral `∫ₚ G(x,x')ds'` over panel `p`. 
+Approximate integral `∫ₚ G(x,x')ds'` over source panel `p`. 
+
+A 2x2 quadrature is used when `|x-p.x|²≤d²p.dA`, otherwise it uses the midpoint.
 """
-∫G(x,p;kwargs...) = _∫G(x,p;kwargs...)
-function ∫G(d::AbstractVector{<:Dual{Tag}},p;kwargs...) where Tag
-    value(d) ≠ p.x && return _∫G(d,p;kwargs...)
-    Dual{Tag}(0.,2π*stack(partials.(d))*p.n...)
+∫G(x,p;d²=4,kwargs...) = _∫G(x,p;d²)
+function ∫G(d::AbstractVector{<:Dual{Tag}},p;d²=4,kwargs...) where Tag
+    value(d) ≠ p.x && return _∫G(d,p;d²) # use auto-diff
+    Dual{Tag}(0.,2π*stack(partials.(d))*p.n...) # enforce ∇∫G(x,x)=2πn̂
 end
-_∫G(ξ,p;d²=4,kwargs...) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum(source(ξ,x) for x in p.x₄)
+_∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum(source(ξ,x) for x in p.x₄)
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = Aᵢⱼ
 

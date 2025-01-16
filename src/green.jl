@@ -18,7 +18,7 @@ function kelvin(ξ,α;Fn=1,kwargs...)
 
     # reflected source, nearfield, and wavelike disturbance
     x,y,z = (ξ-α)/Fn^2; z = min(z,-0.)
-    return -source(ξ,α)+(nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
+    return (nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
 end
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1967 

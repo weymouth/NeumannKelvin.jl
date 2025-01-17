@@ -65,12 +65,12 @@ function surface_spheroid(h,r)
 	end |> Table
 end
 
-plot(); r = 0.5/6.01;
+plot(); r = 0.5/hypot(6,1); U=SA[-1,0,0]
 for h in 2r .* (0.5 .^ (1.75:0.25:2.75))
 # for h in 2r .* (0.5 .^ (2:0.25:3))
 	xp,yp,panels = surface_spheroid(h,r)
-    q = influence(panels;G=kelvin,Fn=0.4)\(-Uₙ.(panels;U=SA[-1,0,0]))
-	d = round(1000steady_force(q,panels;G=kelvin,Fn=0.4)[1],digits=4)
+    q = influence(panels;G=kelvin,Fn=0.4)\(-Uₙ.(panels;U))
+	d = round(1000steady_force(q,panels;U,G=kelvin,Fn=0.4)[1],digits=4)
 	plot!(xp,ζ.(xp,yp,Ref(q),Ref(panels);G=kelvin,Fn=0.4),label="$(length(panels)) panels, 10³Cw=$d")
 end
 plot!(xlabel="x/L",ylabel="ζ/L")

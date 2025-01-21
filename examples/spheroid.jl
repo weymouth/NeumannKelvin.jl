@@ -1,11 +1,12 @@
 using NeumannKelvin
 function spheroid(h;Z=-0.5,L=1,r=0.25)
 	S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-	dθ₁ = π/round(π*0.5L/h) # cosine sampling increases density at ends
+	dθ₁ = π/round(π*0.5L/h)
+	odd = true
 	mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
-		dθ₂ = π/round(π*0.25L*sin(θ₁)/h) # polar step size at this azimuth
-		# param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
-		param_props.(S,θ₁,0:dθ₂:2π-0.5dθ₂,dθ₁,dθ₂)
+		dθ₂ = 2π/max(3,round(2π*r*sin(θ₁)/h))
+		odd ? (θ₂₁=0.5dθ₂;odd=false) : (θ₂₁=0;odd=true)
+		param_props.(S,θ₁,θ₂₁:dθ₂:2π-0.1dθ₂,dθ₁,dθ₂)
 	end |> Table
 end
 
@@ -29,7 +30,7 @@ savefig("sphere_convergence.png")
 # 6:1 Spheroid added_mass convergence
 r = 0.5/6.01
 V = 4π/3*0.5*r^2; sol = [0.045 0 0; 0 0.918 0; 0 0 0.918]
-dat = map(0.5 .^(0:4)) do h
+dat = map(0.5 .^(0:0.5:3)) do h
 	panels = spheroid(h*2r;Z=0,r)
 	Merror = added_mass(panels)./V-sol
 	(log2h=log2(h),normMerror=norm(Merror))
@@ -53,20 +54,41 @@ plot!(2dat.r,dat.M₃₃,label="M₃₃/V")
 plot!(xlabel="b/a",title="Spheroid M components")
 savefig("spheroid_ma_sweep.png")
 
+# Submerged spheroid wavemaking drag convergence
+function spheroid(h;L=1,Z=-1/8,r=1/12)
+    S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
+    dθ₁ = π/round(π*0.5/h)
+    mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
+        dx = dθ₁*hypot(r*cos(θ₁),0.5L*sin(θ₁)) # use |T₁| instead of h
+        dθ₂ = 2π/max(3,round(2π*r*sin(θ₁)/dx)) # ...to set T₂ spacing
+        param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
+    end |> Table
+end
+Cw(panels,d²,G=kelvin,Fn=0.5) = steady_force(influence(panels;G,Fn,d²)\first.(panels.n),panels;G,Fn,d²)[1]
+dat = map(0.5 .^ (3:0.5:5.5)) do h
+	panels = spheroid(h)
+	@show h,length(panels)
+	(h=h,N=length(panels),d²0=Cw(panels,0),d²4=Cw(panels,4))
+end |> Table
+CSV.write("submerged_spheroid_Cw_convergence.csv",dat)
+
 function surface_spheroid(h,r)
 	S(θ₁,θ₂) = SA[0.5cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)]
 	dθ₁ = π/round(π*0.5/h) # azimuth step size
-	dθ₂ = π/round(π*r/h) # polar step size
-	θ₁ = 0.5dθ₁:dθ₁:π
-    x,y,z = eachrow(S.(θ₁,0)|>stack) # WL
-	x,y,param_props.(S,θ₁',π+0.5dθ₂:dθ₂:2π,dθ₁,dθ₂) |> Table
+	dθ₂ = π/round(π*r/h)   # constant polar step size (classic)
+    x,y,z = eachrow(S.(0.5dθ₁:dθ₁:π,0)|>stack) # WL
+	x,y,mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
+		dθ₂ = π/max(2,round(2π*r*sin(θ₁)/h)) # adaptive polar step
+		param_props.(S,θ₁,π+0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
+	end |> Table
 end
 
-plot(); r = 0.5/6.01;
-for h in 2r .* (0.5 .^ (2:0.25:3))
-	x,y,panels = surface_spheroid(h,r)
-    q = influence(panels;G=kelvin,Fn=0.4)\(-Uₙ.(panels;U=SA[-1,0,0]))
-	plot!(x,ζ.(x,y,Ref(q),Ref(panels);G=kelvin,Fn=0.4),label="$(length(panels)) panels")
+plot(); G,Fn,d² = kelvin,0.4,0
+for h in 2r .* (0.5 .^ (1.75:0.25:2.75))
+	xp,yp,panels = surface_spheroid(h,r)
+    q = influence(panels;G,Fn,d²)\first.(panels.n)
+	d = round(1000steady_force(q,panels;G,Fn,d²)[1],digits=4)
+	plot!(xp,ζ.(xp,yp,Ref(q),Ref(panels);G,Fn,d²),label="$(length(panels)) panels, 10³Cw=$d")
 end
 plot!(xlabel="x/L",ylabel="ζ/L")
 savefig("waterline.png")

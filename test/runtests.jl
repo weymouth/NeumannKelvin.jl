@@ -41,16 +41,16 @@ using LinearAlgebra
     @test panels.n ⋅ panels.x == 8
     @test sum(panels.dA) ≈ 4π rtol=0.006
 
-    A,b = ∂ₙϕ.(panels,panels'),-Uₙ.(panels)
+    A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
     @test A≈influence(panels)
     @test tr(A) == 8*2π
-    @test 4minimum(A) ≈ panels[1].dA
+    @test 4minimum(A) ≈ panels[1].dA rtol=0.1
     @test sum(b)<8eps()
 
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    @test added_mass(panels)≈2π/3*I rtol=0.18 # ϵ=18% with 8 panels
+    @test added_mass(panels)≈2π/3*I rtol=0.09 # ϵ=9% with 8 panels
 end
 
 function bruteW(x,y,z)
@@ -74,10 +74,7 @@ using SpecialFunctions
     end
 end
 
-function solve_drag(panels,U=SVector(-1,0,0);kwargs...)
-	q = influence(panels;kwargs...)\(-Uₙ.(panels;U))
-	steady_force(q,panels;U,kwargs...)[1]
-end
+Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
 function spheroid(h;L=1,Z=-1/8,r=1/12,AR=2)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
     dθ₁ = π/round(π*0.5L/√AR/h) # cosine sampling increases density at ends 
@@ -102,9 +99,9 @@ end
 @testset "NeumannKelvin.jl" begin
     h = 0.06
     # Compare submerged spheroid drag to Farell/Baar
-    d = solve_drag(spheroid(h);G=kelvin,Fn=0.5)
+    d = Cw(spheroid(h);G=kelvin,Fn=0.5,d²=0)
     @test d ≈ 6e-3 rtol=0.02
     # Compared elliptical prism drag to Guevel/Baar
-    d = solve_drag(prism(h);G=kelvin,Fn=0.55)
+    d = Cw(prism(h);G=kelvin,Fn=0.55,d²=0)
     @test d ≈ 0.1 rtol=0.01
 end

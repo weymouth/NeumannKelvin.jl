@@ -11,14 +11,14 @@ Green Function `G(ξ)` for a reflected source at position `α` moving with
 `Fn≡U/√gL`. The free surface is at z=0, the coordinates are scaled by L, 
 and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;Fn=1)
+function kelvin(ξ,α;Fn=1,kwargs...)
     # Check inputs
-    α[3] < 0 && throw(DomainError(-α[3],"kelvin: source above z=0"))
+    α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
     # reflected source, nearfield, and wavelike disturbance
-    x,y,z = (ξ-α)/Fn^2
-    return -source(ξ,α)+(nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
+    x,y,z = (ξ-α)/Fn^2; z = min(z,-0.)
+    return (nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
 end
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1967 

@@ -17,6 +17,6 @@ export source,kelvin
 
 # Panel method
 include("panel_method.jl")
-export param_props,ϕ,∂ₙϕ,Uₙ,influence,influence!,φ,∇φ,ζ,steady_force,added_mass
+export param_props,ϕ,∂ₙϕ,influence,influence!,φ,∇φ,ζ,steady_force,added_mass
 
 end

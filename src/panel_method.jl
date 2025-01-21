@@ -45,7 +45,6 @@ _∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum
 Normal velocity influence of panel `pⱼ` on `pᵢ`.
 """
 ∂ₙϕ(pᵢ,pⱼ;kwargs...) = derivative(t->ϕ(pᵢ.x+t*pᵢ.n,pⱼ;kwargs...),0.)::Float64
-Uₙ(pᵢ;U=[1,0,0]) = U ⋅ pᵢ.n
 
 """ 
    influence(panels;kwargs...) = ∂ₙϕ.(panels,panels';kwargs...) = A
@@ -70,12 +69,12 @@ Potential `φ(x) = ∫ₛ q(x')G(x-x')ds' = ∑ᵢqᵢϕ(x,pᵢ)` of `panels` wi
 ζ(x,y,q,panels;kwargs...) = derivative(x->φ(SVector(x,y,0),q,panels;kwargs...),x)
 
 """
-    steady_force(q,panels,U=SVector(1,0,0);kwargs...)
+    steady_force(q,panels,U=SVector(-1,0,0);kwargs...)
 
 Integrated pressure force coefficient Cₚ =∫ₛ cₚ n da of `panels` with strengths `q`.
 where cₚ = 1-u²/U², `U` is the freestreeam velocity and u=U+∇φ is the flow velocity.
 """
-steady_force(q,panels;U=SVector(1,0,0),kwargs...) = ThreadsX.sum(panels) do pᵢ
+steady_force(q,panels;U=SVector(-1,0,0),kwargs...) = ThreadsX.sum(panels) do pᵢ
     u² = sum(abs2,U+∇φ(pᵢ.x,q,panels;kwargs...))
     cₚ = 1-u²/sum(abs2,U)
     cₚ*pᵢ.n*pᵢ.dA

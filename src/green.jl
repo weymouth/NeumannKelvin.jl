@@ -21,7 +21,7 @@ function kelvin(ξ,α;Fn=1,kwargs...)
     return (nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
 end
 
-# Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1967 
+# Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987 
 function nearfield(x::T,y::T,z::T)::T where T
     if Threads.atomic_xchg!(isfirstcall, false)
         @warn "Creating Chebychev polynomials takes a moment"

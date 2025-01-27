@@ -49,7 +49,7 @@ bruteN(X::SVector{3}) = bruteN(X...;l0=0)
 # Coordinate transformations
 S2X(S) = ((R,θ,α)=S; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
 X2S(x,y,z) = (R = hypot(x,y,z); SA[R,min(asin(abs(x)/R),π/2-eps()),z==0 ? π/2 : atan(abs(y/z))])
-r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1967
+r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1987
 
 # Create fast Chebychev polynomials
 function makecheb(l,u;map=identity,tol=1e-4)

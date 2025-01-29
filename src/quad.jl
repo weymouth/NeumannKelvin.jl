@@ -33,10 +33,11 @@ function complex_path(g,dg,rngs,skp=t->false)
     I = sum(quadgl(f,rng...) for rng in rngs)
 
     # Add the end point contributions
-    for rng in combine(rngs...), (i,t₀) in enumerate(rng)
-        !skp(t₀) && (I+= (-1)^i*nsp(t₀,g,dg))
+    for rng in combine(rngs...)
+        I += diff(t-> skp(t) ? 0 : nsp(t,g,dg), rng...)
     end; I
 end
+diff(f,a,b) = f(b)-f(a)
 combine(a,b,c...) = a[2]≥b[1] ? combine((a[1],b[2]),c...) : (a,combine(b,c...)...)
 combine(a) = (a,)
 

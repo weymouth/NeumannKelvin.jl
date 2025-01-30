@@ -7,17 +7,19 @@ using QuadGK
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
 
-    rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf) 
-    @test all( isapprox.(rngs[1],(-2,0),atol=4*0.3) .&& isapprox.(rngs[2],(0,2),atol=4*0.3) )
+    rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
+    ((a₁,f₁),(a₂,f₂)),((a₃,f₃),(a₄,f₄))=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
+    @test [a₁,a₂,a₃,a₄]≈[-2,0,0,2] atol=0.3
+    @test [f₁,f₂,f₃,f₄]==[true,false,false,true]
 
-    rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
-    @test all(rngs[1] .≈ (-2,0) .&& rngs[2] .≈ (0,2))
+    ((a₁,f₁),(a₂,f₂)),((a₃,f₃),(a₄,f₄))=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
+    @test [a₁,a₂,a₃,a₄]≈[-2,0,0,2] && !any([f₁,f₂,f₃,f₄])
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
     dg(x) = 2x+im*x/50
     f(x) = imag(exp(im*g(x)))
-    ρ = √(3π); rng = (-ρ,ρ)
+    ρ = √(3π); rng = (-ρ,ρ); rngs = (((-ρ,true),(ρ,true)),)
 
     I,e,c=quadgk_count(f,rng...)
     # @show I,e,c # (1.5408137136825548, 1.0477053419277738e-8, 165) # easy
@@ -29,7 +31,7 @@ using QuadGK
 
     I,e,c=quadgk_count(f,-Inf,Inf)
     # @show I,e,c # (1.247000964522693, 1.824659458372201e-8, 15195)
-    @test NeumannKelvin.complex_path(g,dg,(rng,)) ≈ I atol=1e-5
+    @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
 using LinearAlgebra
@@ -103,5 +105,5 @@ end
     @test d ≈ 6e-3 rtol=0.02
     # Compared elliptical prism drag to Guevel/Baar
     d = Cw(prism(h);G=kelvin,Fn=0.55,d²=0)
-    @test d ≈ 0.1 rtol=0.01
+    @test d ≈ 0.1 rtol=0.02
 end

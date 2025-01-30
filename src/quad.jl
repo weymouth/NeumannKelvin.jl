@@ -21,25 +21,21 @@ quadgl(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 Estimate the integral `imag(∫exp(im*g(t))dt)` from `t=[-∞,∞]` using
 a complex path. The finite phase ranges `rngs` are integrated along 
 the real line using Gauss-Legendre. The range endpoints where 
-`skp(t)==false` are integrated in the complex-plane using the phase 
-derivative `dg(t)=g'` to find the path of stationary phase.
+`flag=true` are integrated in the complex-plane using the phase 
+derivative `dg(t)=g'` and numerical stationary phase.
 """
-function complex_path(g,dg,rngs,skp=t->false)
-    # Compute real-line contributions
+function complex_path(g,dg,rngs)
+    # Make an efficient integrand function for real t
     @fastmath @inline function f(t)
         u,v = reim(g(t))
         exp(-v)*sin(u)
     end
-    I = sum(quadgl(f,rng...) for rng in rngs)
 
-    # Add the end point contributions
-    for rng in combine(rngs...)
-        I += diff(t-> skp(t) ? 0 : nsp(t,g,dg), rng...)
-    end; I
+    # Sum the flagged endpoints and interval contributions
+    sum(rngs) do ((t₁,f₁),(t₂,f₂))
+        -(f₁ ? nsp(t₁,g,dg) : 0)+quadgl(f,t₁,t₂)+(f₂ ? nsp(t₂,g,dg) : 0)
+    end
 end
-diff(f,a,b) = f(b)-f(a)
-combine(a,b,c...) = a[2]≥b[1] ? combine((a[1],b[2]),c...) : (a,combine(b,c...)...)
-combine(a) = (a,)
 
 using Roots
 """
@@ -62,19 +58,20 @@ end
 """
     finite_ranges(S,g,Δg,R;atol=0.3Δg)
 
-Return a set of ranges `(a₁,a₂)` around each point `a∈S∈[-R,R]` such that
-`|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap.
+Return a set of flagged ranges `(a₁,f₁),(a₂,f₂)` around each point `a∈S∈[-R,R]` 
+such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap and 
+the flag `fᵢ=true` if `aᵢ` is off those limits.
 """
 @fastmath function finite_ranges(S,g,Δg,R;atol=0.3Δg)
     function fz(a,b)
-        isfinite(b) && abs(g(a)-g(b))≤Δg+atol && return b
-        find_zero(t->abs(g(a)-g(t))-Δg,(a,a+clamp(b-a,-1,1)),Order1();atol)       
+        isfinite(b) && abs(g(a)-g(b))≤Δg+atol && return b,false
+        find_zero(t->abs(g(a)-g(t))-Δg,(a,a+clamp(b-a,-1,1)),Order1();atol),true
     end
     if length(S) == 0
-        ((-R,R),)
+        (((-R,false),(R,false)),)
     elseif length(S) == 1
         a = first(S)
-        (fz(a,-R),a),(a,fz(a,R))
+        (fz(a,-R),(a,false)),((a,false),fz(a,R))
     else
         a,b = S
         (fz(a,-R),fz(a,a/2+b/2)),(fz(b,a/2+b/2),fz(b,R))

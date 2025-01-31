@@ -33,7 +33,7 @@ function complex_path(g,dg,rngs)
 
     # Sum the flagged endpoints and interval contributions
     sum(rngs) do ((t₁,f₁),(t₂,f₂))
-        -(f₁ ? nsp(t₁,g,dg) : 0)+quadgl(f,t₁,t₂)+(f₂ ? nsp(t₂,g,dg) : 0)
+        -(f₁ ? nsp(t₁,g,dg) : zero(t₁))+quadgl(f,t₁,t₂)+(f₂ ? nsp(t₂,g,dg) : zero(t₂))
     end
 end
 

@@ -62,10 +62,11 @@ Return a set of flagged ranges `(a₁,f₁),(a₂,f₂)` around each point `a∈
 such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap and 
 the flag `fᵢ=true` if `aᵢ` is off those limits.
 """
-@fastmath function finite_ranges(S,g,Δg,R;atol=0.3Δg)
+function finite_ranges(S,g,Δg,R;atol=0.3Δg)
     function fz(a,b)
-        isfinite(b) && abs(g(a)-g(b))≤Δg+atol && return b,false
-        find_zero(t->abs(g(a)-g(t))-Δg,(a,a+clamp(b-a,-1,1)),Order1();atol),true
+        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,a),true
+        abs(g(a)-g(b))≤Δg+atol && return b,false
+        @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol),true
     end
     if length(S) == 0
         (((-R,false),(R,false)),)

@@ -64,7 +64,7 @@ the flag `fᵢ=true` if `aᵢ` is off those limits.
 """
 function finite_ranges(S,g,Δg,R;atol=0.3Δg)
     function fz(a,b)
-        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,a),true
+        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(1,b)),Order1();atol),true
         abs(g(a)-g(b))≤Δg+atol && return b,false
         @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol),true
     end

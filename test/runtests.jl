@@ -73,7 +73,7 @@ using SpecialFunctions
         x = -R*cos(atan(a))
         y = R*sin(atan(a))
         x==y==0 && continue
-        @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=6e-4
+        @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=3e-4 rtol=31e-5
         @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-4
     end
 end
@@ -88,20 +88,13 @@ function spheroid(h;L=1,Z=-1/8,r=1/12,AR=2)
         param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
     end |> Table
 end
-function prism(h;q=0.2,Z=1,r=1.2)
+function prism(h;q=0.2,Z=1)
     S(θ,z) = 0.5SA[cos(θ),q*sin(θ),z]
     dθ = π/round(π*0.5/h) # cosine sampling
-    mapreduce(vcat,0.5dθ:dθ:2π) do θ
-        dx = dθ*hypot(q*cos(θ),sin(θ))
-        i = round(log(1+2Z/dx*(r-1))/log(r)) # geometric growth
-        mapreduce(vcat,1:i) do j
-            z,dz = -dx*(1-r^j)/(1-r),dx*r^j
-            param_props.(S,θ,z+0.5dz,dθ,dz)
-        end
-    end |> Table
+    dz = Z/round(Z/h)
+    param_props.(S,dθ:dθ:2π,-(0.5dz:dz:Z)',dθ,dz) |> Table
 end
 @testset "NeumannKelvin.jl" begin
-    h = 0.06
     # Compare submerged spheroid drag to Farell/Baar
     d = Cw(spheroid(0.06);∫G=∫kelvin,Fn=0.5,d²=0)
     @test d ≈ 6e-3 rtol=0.02

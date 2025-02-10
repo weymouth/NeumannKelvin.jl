@@ -4,7 +4,8 @@
 Integrated NeumanKelvin disturbance of panel `p` on point `x`. 
 Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
-∫kelvin(x,p;d²=4,Fn=1) = ∫G(x,p;d²)-∫G(x,reflect(p);d²)+p.dA*kelvin(ξ,p.x;Fn)
+∫kelvin(x,p;d²=4,dz=10,Fn=1) = ∫G(x,p;d²)-∫G(x,reflect(p);d²)+_∫kelvin(x,reflect(p);dz,Fn)
+_∫kelvin(ξ,p;dz,Fn) = p.x[3]-ξ[3]<dz*Fn^2 ? 0.25*p.dA*sum(kelvin(ξ,x;Fn) for x in p.x₄) : p.dA*kelvin(ξ,p.x;Fn)
 reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,x₄=reflect.(p.x₄))
 reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 
@@ -51,13 +52,13 @@ end
 bruteN(X::SVector{3}) = bruteN(X...;l0=0)
 
 # Coordinate transformations
-S2X(S) = ((R,θ,α)=S; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
-X2S(x,y,z) = (R = hypot(x,y,z); SA[R,min(asin(abs(x)/R),π/2-eps()),z==0 ? π/2 : atan(abs(y/z))])
+S2X(S) = ((R,θ,α²)=S; α=√α²; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
+X2S(x,y,z) = (R = hypot(x,y,z); SA[R,min(asin(abs(x)/R),π/2-eps()),z==0 ? (π/2)^2 : atan(abs(y/z))^2])
 r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1987
 
 # Create fast Chebychev polynomials
 function makecheb(l,u;map=identity,tol=1e-4)
-    lb,ub = SA[l,0,0],SA[u,π/2-eps(),π/2];
+    lb,ub = SA[l,0,0],SA[u,π/2-eps(),(π/2)^2];
     S = S2X.(map.(chebpoints((16,16,8),lb,ub)))
     D = ThreadsX.map(bruteN,S) # generate data (with multi-threading)
     chebinterp(D,lb,ub;tol)    # create interpolation function

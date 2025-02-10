@@ -12,8 +12,8 @@ include("quad.jl")
 
 # Green function definitions
 using ThreadsX # multi-threaded map,sum, & foreach
-include("green.jl")
-export source,kelvin
+include("kelvin.jl")
+export ∫kelvin
 
 # Panel method
 include("panel_method.jl")

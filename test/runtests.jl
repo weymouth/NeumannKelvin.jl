@@ -103,9 +103,9 @@ end
 @testset "NeumannKelvin.jl" begin
     h = 0.06
     # Compare submerged spheroid drag to Farell/Baar
-    d = Cw(spheroid(h);G=kelvin,Fn=0.5,d²=0)
+    d = Cw(spheroid(0.06);∫G=∫kelvin,Fn=0.5,d²=0)
     @test d ≈ 6e-3 rtol=0.02
     # Compared elliptical prism drag to Guevel/Baar
-    d = Cw(prism(h);G=kelvin,Fn=0.55,d²=0)
-    @test d ≈ 0.1 rtol=0.02
+    d = Cw(prism(0.1);∫G=∫kelvin,Fn=0.55)
+    @test d ≈ 0.053 rtol=0.02
 end

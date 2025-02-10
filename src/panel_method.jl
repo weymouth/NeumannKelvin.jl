@@ -11,19 +11,12 @@ function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂)
     x₄ = @SMatrix [x+0.5T₁*x₁+0.5T₂*x₂ for x₁ in xgl2, x₂ in xgl2]
     (x=x, n=n/mag, dA=mag, x₄=x₄)
 end
-"""
-    ϕ(x,p;G=source,kwargs...)
 
-Disturbance potential of panel `p` on point `x`. 
+""" source(x,a) 
 
-If `G≠source` this routine includes the `reflect(p)` contributions.
+Green function `G(x)` for a source at position `a`.
 """
-function ϕ(x,p;G=source,kwargs...) 
-    G==source && return ∫G(x,p;kwargs...)
-    ∫G(x,p;kwargs...)-∫G(x,reflect(p);kwargs...)+p.dA*G(x,reflect(p.x);kwargs...)
-end
-reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,x₄=reflect.(p.x₄))
-reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
+source(x,a) = -1/hypot(x-a...)
 
 using ForwardDiff: derivative, gradient, value, partials, Dual
 """
@@ -39,6 +32,14 @@ function ∫G(d::AbstractVector{<:Dual{Tag}},p;d²=4,kwargs...) where Tag
     Dual{Tag}(0.,2π*stack(partials.(d))*p.n...) # enforce ∇∫G(x,x)=2πn̂
 end
 _∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum(source(ξ,x) for x in p.x₄)
+
+"""
+    ϕ(x,p;∫G,kwargs...)
+
+Disturbance potential `∫G(x,p)` of panel `p` on point `x`.
+"""
+ϕ(x,p;∫G=∫G,kwargs...) = ∫G(x,p;kwargs...)
+
 """ 
     ∂ₙϕ(pᵢ,pⱼ;kwargs...) = Aᵢⱼ
 
@@ -49,8 +50,8 @@ Normal velocity influence of panel `pⱼ` on `pᵢ`.
 """ 
    influence(panels;kwargs...) = ∂ₙϕ.(panels,panels';kwargs...) = A
 
-Normal velocity influence matrix. Computation is accelerated with 
-multi-threading when `Threads.nthreads()>1`.
+Normal velocity influence matrix. 
+Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
 """
 influence(panels;kwargs...) = influence!(Array{Float64}(undef,length(panels),length(panels)),panels;kwargs...)
 function influence!(A,panels;kwargs...)
@@ -63,6 +64,7 @@ end
     φ(x,q,panels;kwargs...)
 
 Potential `φ(x) = ∫ₛ q(x')G(x-x')ds' = ∑ᵢqᵢϕ(x,pᵢ)` of `panels` with strengths `q`.
+Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
 """
 φ(x,q,panels;kwargs...) = ThreadsX.sum(qᵢ*ϕ(x,pᵢ;kwargs...) for (qᵢ,pᵢ) in zip(q,panels))
 ∇φ(x,q,panels;kwargs...) = gradient(x->φ(x,q,panels;kwargs...),x)
@@ -73,6 +75,7 @@ Potential `φ(x) = ∫ₛ q(x')G(x-x')ds' = ∑ᵢqᵢϕ(x,pᵢ)` of `panels` wi
 
 Integrated pressure force coefficient Cₚ =∫ₛ cₚ n da of `panels` with strengths `q`.
 where cₚ = 1-u²/U², `U` is the freestreeam velocity and u=U+∇φ is the flow velocity.
+Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
 """
 steady_force(q,panels;U=SVector(-1,0,0),kwargs...) = ThreadsX.sum(panels) do pᵢ
     u² = sum(abs2,U+∇φ(pᵢ.x,q,panels;kwargs...))
@@ -82,8 +85,9 @@ end
 """
     added_mass(panels;kwargs...)
 
-Added mass matrix mᵢⱼ = -∫ₛ φᵢ(x) nⱼda for a set of `panels`, 
-where φᵢ is the potential due to unit motion in direction i.
+Added mass matrix mᵢⱼ = -∫ₛ φᵢ(x) nⱼ da for a set of `panels`, where φᵢ is the 
+potential due to unit motion in direction i.
+Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
 """
 function added_mass(panels;kwargs...)
     A = influence(panels;kwargs...)

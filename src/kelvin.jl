@@ -12,8 +12,8 @@ reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
 """
     kelvin(ξ,α;Fn)
 
-Green Function `G(ξ)` for a reflected source at position `α` moving with 
-`Fn≡U/√gL`. The free surface is at z=0, the coordinates are scaled by L, 
+Green Function `G(ξ)` for a source at reflected position `α` moving with `Fn≡U/√gL`
+excluding the sink term. The free surface is at z=0, the coordinates are scaled by L, 
 and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
 """
 function kelvin(ξ,α;Fn=1,kwargs...)

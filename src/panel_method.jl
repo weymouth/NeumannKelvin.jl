@@ -8,7 +8,7 @@ vectors `T₁=dξ₁*∂x/∂ξ₁` and `T₂=dξ₂*∂x/∂ξ₂`, where `n≡
 function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂)
     T₁,T₂ = dξ₁*derivative(ξ₁->S(ξ₁,ξ₂),ξ₁),dξ₂*derivative(ξ₂->S(ξ₁,ξ₂),ξ₂) 
     n = T₁×T₂; mag = hypot(n...); x = S(ξ₁,ξ₂)
-    x₄ = @SMatrix [x+0.5T₁*x₁+0.5T₂*x₂ for x₁ in xgl2, x₂ in xgl2]
+    x₄ = @SMatrix [x+0.5T₁*x₁+0.5T₂*x₂ for x₁ in (-1/√3,1/√3), x₂ in (-1/√3,1/√3)]
     (x=x, n=n/mag, dA=mag, x₄=x₄)
 end
 

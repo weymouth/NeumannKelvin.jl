@@ -3,7 +3,7 @@ using Test
 
 using QuadGK
 @testset "quad.jl" begin
-    using NeumannKelvin: xgl2,wgl2
+    xgl2,wgl2 = (-1/√3,1/√3),(1,1)
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
 

@@ -1,15 +1,17 @@
 """
-    param_props(S,ξ₁,ξ₂,dξ₁,dξ₂) -> (x,n̂,dA,T₁,T₂)
+    param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true) -> (x,n̂,dA,x₄)
 
-Properties of a parametric surface function `x=S(ξ₁,ξ₂)`. Returns `x`, 
-the unit normal `n̂=n/|n|`, the surface area `dA≈|n|`, and the tangent 
-vectors `T₁=dξ₁*∂x/∂ξ₁` and `T₂=dξ₂*∂x/∂ξ₂`, where `n≡T₁×T₂`.
+Properties of a parametric surface function `x=S(ξ₁,ξ₂)`. Returns `x`, the 
+unit normal `n̂=n/|n|` and the surface area `dA≈|n|`, where `n≡T₁×T₂` and the 
+tangent vectors are `T₁=dξ₁*∂x/∂ξ₁` and `T₂=dξ₂*∂x/∂ξ₂`. x₄ are the 2x2 
+Gauss-point locations, optionally projected onto the `tangentplane`.
 """
-function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂)
+function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true)
     T₁,T₂ = dξ₁*derivative(ξ₁->S(ξ₁,ξ₂),ξ₁),dξ₂*derivative(ξ₂->S(ξ₁,ξ₂),ξ₂) 
     n = T₁×T₂; mag = hypot(n...); x = S(ξ₁,ξ₂)
-    x₄ = @SMatrix [x+0.5T₁*x₁+0.5T₂*x₂ for x₁ in (-1/√3,1/√3), x₂ in (-1/√3,1/√3)]
-    (x=x, n=n/mag, dA=mag, x₄=x₄)
+    dx = SA[-1/√3,1/√3]; x₄ = S.(ξ₁ .+ 0.5dξ₁*dx,ξ₂ .+ 0.5dξ₂*dx') # Gauss-points
+    tangentplane && (x₄ = ((a,b)->(x+0.5T₁*a+0.5T₂*b)).(dx,dx'))
+    (x=x, n=n/mag, dA=mag, x₄=x₄::SMatrix{2,2})
 end
 
 """ source(x,a) 

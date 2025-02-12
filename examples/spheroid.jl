@@ -64,31 +64,32 @@ function spheroid(h;L=1,Z=-1/8,r=1/12)
         param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
     end |> Table
 end
-Cw(panels,d²,G=kelvin,Fn=0.5) = steady_force(influence(panels;G,Fn,d²)\first.(panels.n),panels;G,Fn,d²)[1]
+Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
+kwargs = (ϕ=∫kelvin,Fn=0.5)
 dat = map(0.5 .^ (3:0.5:5.5)) do h
 	panels = spheroid(h)
 	@show h,length(panels)
-	(h=h,N=length(panels),d²0=Cw(panels,0),d²4=Cw(panels,4))
+	(h=h,N=length(panels),d²0=Cw(panels;d²=0,kwargs...),d²4=Cw(panels;d²=4,kwargs...))
 end |> Table
 CSV.write("submerged_spheroid_Cw_convergence.csv",dat)
 
 function surface_spheroid(h,r)
 	S(θ₁,θ₂) = SA[0.5cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)]
 	dθ₁ = π/round(π*0.5/h) # azimuth step size
-	dθ₂ = π/round(π*r/h)   # constant polar step size (classic)
     x,y,z = eachrow(S.(0.5dθ₁:dθ₁:π,0)|>stack) # WL
 	x,y,mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
 		dθ₂ = π/max(2,round(2π*r*sin(θ₁)/h)) # adaptive polar step
-		param_props.(S,θ₁,π+0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
+		param_props.(S,θ₁,π+0.5dθ₂:dθ₂:2π,dθ₁,dθ₂,tangentplane=false)
 	end |> Table
 end
 
-plot(); G,Fn,d² = kelvin,0.4,0
+using Plots
+kwargs = (ϕ=∫kelvin,Fn=0.4,d²=4,dz=10); plot(title=kwargs); r=1/12
 for h in 2r .* (0.5 .^ (1.75:0.25:2.75))
 	xp,yp,panels = surface_spheroid(h,r)
-    q = influence(panels;G,Fn,d²)\first.(panels.n)
-	d = round(1000steady_force(q,panels;G,Fn,d²)[1],digits=4)
-	plot!(xp,ζ.(xp,yp,Ref(q),Ref(panels);G,Fn,d²),label="$(length(panels)) panels, 10³Cw=$d")
+    q = influence(panels;kwargs...)\first.(panels.n)
+	d = round(1000steady_force(q,panels;kwargs...)[1],digits=4)
+	plot!(xp,ζ.(xp,yp,Ref(q),Ref(panels);kwargs...),label="$(length(panels)) panels, 10³Cw=$d")
 end
 plot!(xlabel="x/L",ylabel="ζ/L")
-savefig("waterline.png")
+savefig("waterline_Cw_convergence.png")

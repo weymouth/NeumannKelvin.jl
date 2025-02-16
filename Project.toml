@@ -1,7 +1,7 @@
 name = "NeumannKelvin"
 uuid = "7f078b06-e5c4-4cf8-bb56-b92882a0ad03"
 authors = ["Gabriel Weymouth"]
-version = "0.5.0"
+version = "0.5.1"
 
 [deps]
 FastChebInterp = "cf66c380-9a80-432c-aff8-4f9c79c0bdde"

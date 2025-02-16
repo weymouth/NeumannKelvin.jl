@@ -74,6 +74,8 @@ function finite_ranges(S,g,Δg,R;atol=0.3Δg)
         (fz(a,-R),(a,false)),((a,false),fz(a,R))
     else
         a,b = S
-        (fz(a,-R),fz(a,a/2+b/2)),(fz(b,a/2+b/2),fz(b,R))
+        p,q = fz(a,a/2+b/2),fz(b,a/2+b/2)
+        !p[2] && (q=p); !q[2] && (p=q)
+        (fz(a,-R),p),(q,fz(b,R))
     end
 end

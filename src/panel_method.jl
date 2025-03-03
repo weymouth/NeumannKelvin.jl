@@ -40,7 +40,7 @@ _∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum
 
 Normal velocity influence of panel `pⱼ` on `pᵢ`.
 """
-∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = derivative(t->ϕ(pᵢ.x+t*pᵢ.n,pⱼ;kwargs...),0.)::Float64
+∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = derivative(t->ϕ(pᵢ.x+t*pᵢ.n,pⱼ;kwargs...),0.)
 
 """ 
    influence(panels;kwargs...) = ∂ₙϕ.(panels,panels';kwargs...) = A

@@ -1,13 +1,13 @@
 """
-    ∫kelvin(x,p;d²,dz,Fn)
+    ∫kelvin(x,p;Fn,d²=0)
 
 Integrated NeumanKelvin disturbance of panel `p` on point `x`. 
 Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
-∫kelvin(x,p;d²=4,dz=10,Fn=1) = ∫G(x,p;d²)-∫G(x,reflect(p);d²)+_∫kelvin(x,reflect(p);dz,Fn)
-_∫kelvin(ξ,p;dz,Fn) = p.x[3]-ξ[3]<dz*Fn^2 ? 0.25*p.dA*sum(kelvin(ξ,x;Fn) for x in p.x₄) : p.dA*kelvin(ξ,p.x;Fn)
-reflect(p::NamedTuple) = (x=reflect(p.x),n=reflect(p.n),dA=p.dA,x₄=reflect.(p.x₄))
-reflect(x::SVector{3}) = SA[x[1],x[2],-x[3]]
+∫kelvin(x,p;d²=0,Fn=1) = ∫G(x,p;d²)-∫G(x,reflect(p);d²)+p.dA*kelvin(x,reflect(p.x);Fn)
+# _∫kelvin(ξ,p;dz,Fn) = p.x[3]-ξ[3]<dz*Fn^2 ? 0.25*p.dA*sum(kelvin(ξ,x;Fn) for x in p.x₄) : p.dA*kelvin(ξ,p.x;Fn)
+reflect(p::NamedTuple,flip=SA[1,1,-1]) = (x=reflect(p.x,flip),n=reflect(p.n,flip),dA=p.dA,x₄=reflect.(p.x₄,Ref(flip)))
+reflect(x::SVector{3},flip=SA[1,1,-1]) = x.*flip
 
 """
     kelvin(ξ,α;Fn)
@@ -16,13 +16,13 @@ Green Function `G(ξ)` for a source at reflected position `α` moving with `Fn�
 excluding the sink term. The free surface is at z=0, the coordinates are scaled by L, 
 and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;Fn=1,kwargs...)
+function kelvin(ξ,α;Fn=1,z_max=-0.,kwargs...)
     # Check inputs
     α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
-    # reflected source, nearfield, and wavelike disturbance
-    x,y,z = (ξ-α)/Fn^2; z = min(z,-0.)
+    # nearfield, and wavelike disturbance
+    x,y,z = (ξ-α)/Fn^2; z = min(z,z_max)
     return (nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
 end
 

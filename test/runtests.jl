@@ -34,6 +34,26 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
+@testset "panels.jl" begin
+    torus(θ₁,θ₂;r=0.3,R=1) = SA[(R+r*cos(θ₂))*cos(θ₁),(R+r*cos(θ₂))*sin(θ₁),r*sin(θ₂)]
+    spheroid(θ₁,θ₂;a=1.,b=1.,c=1.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
+
+    function ptests(dA,goal)
+        mdA = sum(dA)/length(dA)
+        @test mdA ≈ goal rtol = 0.08
+        @test maximum(abs,panels.dA .- mdA) < 0.08goal
+    end
+
+    panels = equiarea_panels(spheroid,0,pi,0,2pi,hᵤ=0.5)
+    ptests(panels.dA,0.5^2)
+    panels = equiarea_panels((u,v)->spheroid(u,v;c=3),0,pi,0,2pi,hᵤ=1,hᵥ=0.5)
+    ptests(panels.dA,0.5)
+    panels_bad = equiarea_panels(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3)
+    panels = equiarea_panels(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true)
+    ptests(panels.dA,0.18)
+    @test panels[1].n ⋅ panels_bad[1].n > 0.99
+end
+
 using LinearAlgebra
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
@@ -81,12 +101,13 @@ end
 Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
 function spheroid(h;L=1,Z=-1/8,r=1/12,AR=2)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-    dθ₁ = π/round(π*0.5L/√AR/h) # cosine sampling increases density at ends 
-    mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
-        dx = dθ₁*hypot(r*cos(θ₁),0.5L*sin(θ₁))
-        dθ₂ = π/round(π*r*sin(θ₁)*AR/dx) # polar step size at this azimuth
-        param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
-    end |> Table
+    equiarea_panels(S,0,pi,0,2pi,hᵤ=h,hᵥ=h/AR)
+    # dθ₁ = π/round(π*0.5L/√AR/h) # cosine sampling increases density at ends 
+    # mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
+    #     dx = dθ₁*hypot(r*cos(θ₁),0.5L*sin(θ₁))
+    #     dθ₂ = π/round(π*r*sin(θ₁)*AR/dx) # polar step size at this azimuth
+    #     param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
+    # end |> Table
 end
 function prism(h;q=0.2,Z=1)
     S(θ,z) = 0.5SA[cos(θ),q*sin(θ),z]
@@ -96,7 +117,7 @@ function prism(h;q=0.2,Z=1)
 end
 @testset "NeumannKelvin.jl" begin
     # Compare submerged spheroid drag to Farell/Baar
-    d = Cw(spheroid(0.06);ϕ=∫kelvin,Fn=0.5)
+    d = Cw(spheroid(0.05);ϕ=∫kelvin,Fn=0.5)
     @test d ≈ 6e-3 rtol=0.02
     # Compared elliptical prism drag to Guevel/Baar
     d = Cw(prism(0.1);ϕ=∫kelvin,Fn=0.55)

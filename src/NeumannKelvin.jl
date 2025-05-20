@@ -15,8 +15,13 @@ using ThreadsX # multi-threaded map,sum, & foreach
 include("kelvin.jl")
 export ∫kelvin
 
+# Panels
+using ApproxFun
+include("panels.jl")
+export param_props,equiarea_panels
+
 # Panel method
 include("panel_method.jl")
-export param_props,∂ₙϕ,influence,ζ,steady_force,added_mass
+export ∂ₙϕ,influence,ζ,steady_force,added_mass
 
 end

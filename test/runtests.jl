@@ -44,12 +44,12 @@ end
         @test maximum(abs,panels.dA .- mdA) < 0.08goal
     end
 
-    panels = equiarea_panels(spheroid,0,pi,0,2pi,hᵤ=0.5)
+    panels = panelize(spheroid,0,pi,0,2pi,hᵤ=0.5)
     ptests(panels.dA,0.5^2)
-    panels = equiarea_panels((u,v)->spheroid(u,v;c=3),0,pi,0,2pi,hᵤ=1,hᵥ=0.5)
+    panels = panelize((u,v)->spheroid(u,v;c=3),0,pi,0,2pi,hᵤ=1,hᵥ=0.5)
     ptests(panels.dA,0.5)
-    panels_bad = equiarea_panels(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3)
-    panels = equiarea_panels(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true)
+    panels_bad = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3)
+    panels = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true)
     ptests(panels.dA,0.18)
     @test panels[1].n ⋅ panels_bad[1].n > 0.99
 end
@@ -101,7 +101,7 @@ end
 Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
 function spheroid(h;L=1,Z=-1/8,r=1/12,AR=2)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-    equiarea_panels(S,0,pi,0,2pi,hᵤ=h,hᵥ=h/AR)
+    panelize(S,0,pi,0,2pi,hᵤ=h,hᵥ=h/AR)
     # dθ₁ = π/round(π*0.5L/√AR/h) # cosine sampling increases density at ends 
     # mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
     #     dx = dθ₁*hypot(r*cos(θ₁),0.5L*sin(θ₁))

@@ -15,16 +15,15 @@ function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true,signn=1)
 end
 
 """
-Sets a local pseudo-arcspeed 
-
-`s̃' = max(s',√(ϵ|s''|/8))`
-
-where `s'=|d curve/du|` is the arcspeed, `s''` is the acceleration and `ϵ` is a distance-scale. 
-In regions of large curvature `|κ| ∝ s''/s'²`, the second term will activate. Integrating `s̃'` in 
-such a region gives `Δs̃=Δs √(ϵ|κ|/8)` meaning our panel's true arclength Δs is scaled down
-proportionally to √(ϵ|κ|/8), ensuring the deviation along the Δs arc is bounded by ϵ.
+Pseudo-arcspeed `s̃' = s' max(1,√(L|κ|/8c))`, where `s'≡||r'||` is the arcspeed, `|κ|` 
+is the curvature, `L` is the arclength-scale and `c` is the max percent deviation.
 """
-pseudospeed(curve,ϵ) = u->max(hypot(derivative(curve,u)...),√(ϵ*hypot(derivative(u->derivative(curve,u),u)...)/8))
+pseudospeed(r,L,c) = u->max(hypot(derivative(r,u)...),√(L*κₙ(r,u)/8c))
+
+"""
+Normal curvature `κₙ ≡ s'² |κ| = √(||r''||²-(s'')²)`
+"""
+κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(u->hypot(derivative(r,u)...),u)^2)
 dist⁻¹(speed,s) = first(roots(cumsum(speed)-s))
 linear(a,b,x₀,x₁) = x->(r=(x-x₀)/(x₁-x₀); a*(1-r)+b*r)
 """
@@ -37,12 +36,12 @@ high. Use `transpose=true` to change the strip direction and `signn=-1` to flip 
 The parameter `c` sets the max percent devitation of the panel from a straight line, clustering panels
 in regions of high curvature.
 """
-function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
-    transpose && return equiarea_panels((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,transpose=false,signn=-signn,kwargs...)
+function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.5,transpose=false,signn=1,kwargs...)
+    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,transpose=false,signn=-signn,kwargs...)
 
     # Get arcspeed along bottom & top edges as a Fun
-    speed₀ = Fun(pseudospeed(u->surface(u,v₀),hᵤ/c),u₀..u₁)
-    speed₁ = Fun(pseudospeed(u->surface(u,v₁),hᵤ/c),u₀..u₁)
+    speed₀ = Fun(pseudospeed(u->surface(u,v₀),hᵤ,c),u₀..u₁)
+    speed₁ = Fun(pseudospeed(u->surface(u,v₁),hᵤ,c),u₀..u₁)
 
     # Get arclength (integral of speed) and number of strips
     S₀,S₁ = sum(speed₀),sum(speed₁)
@@ -60,7 +59,7 @@ function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,tr
         du = linear(u₀ᵢ[i+1]-u₀ᵢ[i],u₁ᵢ[i+1]-u₁ᵢ[i],v₀,v₁)          # Parametric width
 
         # Find equidistant points along strip
-        speed = Fun(pseudospeed(v->surface(u(v),v),hᵥ/c),v₀..v₁)   # speed along strip center
+        speed = Fun(pseudospeed(v->surface(u(v),v),hᵥ,c),v₀..v₁)   # speed along strip center
         S = sum(speed); S ≤ 0.5hᵥ && return []        # not enough height
         ve = dist⁻¹.(speed,0:S/round(S/hᵥ):S)         # panel endpoints
         v = 0.5*(ve[2:end]+ve[1:end-1])               # panel centers

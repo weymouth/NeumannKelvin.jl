@@ -18,7 +18,7 @@ export ∫kelvin
 # Panels
 using ApproxFun
 include("panels.jl")
-export param_props,equiarea_panels
+export param_props,panelize
 
 # Panel method
 include("panel_method.jl")

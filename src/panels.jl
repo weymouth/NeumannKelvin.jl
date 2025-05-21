@@ -14,19 +14,35 @@ function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true,signn=1)
     (x=x, n=n/mag, dA=mag, x₄=x₄::SMatrix{2,2})
 end
 
-curve_speed(curve,low=0,high=1) = Fun(u->hypot(derivative(curve,u)...),low..high)
+"""
+Sets a local pseudo-arcspeed 
+
+`s̃' = max(s',√(ϵ|s''|/8))`
+
+where `s'=|d curve/du|` is the arcspeed, `s''` is the acceleration and `ϵ` is a distance-scale. 
+In regions of large curvature `|κ| ∝ s''/s'²`, the second term will activate. Integrating `s̃'` in 
+such a region gives `Δs̃=Δs √(ϵ|κ|/8)` meaning our panel's true arclength Δs is scaled down
+proportionally to √(ϵ|κ|/8), ensuring the deviation along the Δs arc is bounded by ϵ.
+"""
+pseudospeed(curve,ϵ) = u->max(hypot(derivative(curve,u)...),√(ϵ*hypot(derivative(u->derivative(curve,u),u)...)/8))
 dist⁻¹(speed,s) = first(roots(cumsum(speed)-s))
 linear(a,b,x₀,x₁) = x->(r=(x-x₀)/(x₁-x₀); a*(1-r)+b*r)
 """
-    equiarea_panels(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,transpose=false,signn=1)
+    panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
 
+Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]` into a `Table` of panels. 
+
+The surface is split into strips roughly `hᵤ` wide, which are then split into panels roughly `hᵥ`
+high. Use `transpose=true` to change the strip direction and `signn=-1` to flip the normal direction. 
+The parameter `c` sets the max percent devitation of the panel from a straight line, clustering panels
+in regions of high curvature.
 """
-function equiarea_panels(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,transpose=false,signn=1,kwargs...)
+function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
     transpose && return equiarea_panels((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,transpose=false,signn=-signn,kwargs...)
 
-    # Get arcspeed along bottom & top edges
-    speed₀ = curve_speed(u->surface(u,v₀),u₀,u₁)
-    speed₁ = curve_speed(u->surface(u,v₁),u₀,u₁)
+    # Get arcspeed along bottom & top edges as a Fun
+    speed₀ = Fun(pseudospeed(u->surface(u,v₀),hᵤ/c),u₀..u₁)
+    speed₁ = Fun(pseudospeed(u->surface(u,v₁),hᵤ/c),u₀..u₁)
 
     # Get arclength (integral of speed) and number of strips
     S₀,S₁ = sum(speed₀),sum(speed₁)
@@ -44,7 +60,7 @@ function equiarea_panels(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,tr
         du = linear(u₀ᵢ[i+1]-u₀ᵢ[i],u₁ᵢ[i+1]-u₁ᵢ[i],v₀,v₁)          # Parametric width
 
         # Find equidistant points along strip
-        speed = curve_speed(v->surface(u(v),v),v₀,v₁) # arc-speed along strip center
+        speed = Fun(pseudospeed(v->surface(u(v),v),hᵥ/c),v₀..v₁)   # speed along strip center
         S = sum(speed); S ≤ 0.5hᵥ && return []        # not enough height
         ve = dist⁻¹.(speed,0:S/round(S/hᵥ):S)         # panel endpoints
         v = 0.5*(ve[2:end]+ve[1:end-1])               # panel centers

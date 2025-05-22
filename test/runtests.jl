@@ -34,7 +34,25 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
+using ApproxFun
 @testset "panels.jl" begin
+    circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
+    @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
+    @test NeumannKelvin.κₙ(circ,0.) ≈ NeumannKelvin.κₙ(circ,0.5pi) ≈ 4
+    @test NeumannKelvin.κₙ(NeumannKelvin.linear(0,8,0,1),0.)==0
+    @test NeumannKelvin.κₙ(ellip,0.) ≈ 1
+    @test NeumannKelvin.κₙ(ellip,0.5pi) ≈ 3
+
+    for c in (1,0.1,0.01)
+        speed = NeumannKelvin.pseudospeed(ellip,1,c,0..pi)
+        c==1 && @test NeumannKelvin.arcspeed(ellip)(0.5pi)≈speed(0.5pi)
+        c==0.01 && @test NeumannKelvin.curvespeed(ellip,1,c)(0.5pi)≈speed(0.5pi)
+
+        S = sum(speed); N = 2Int(round(S/2))
+        u = NeumannKelvin.dist⁻¹.(speed,range(0,S,N))
+        @test 3-ellip(u[N÷2])[1] ≤ 1.15c
+    end
+
     torus(θ₁,θ₂;r=0.3,R=1) = SA[(R+r*cos(θ₂))*cos(θ₁),(R+r*cos(θ₂))*sin(θ₁),r*sin(θ₂)]
     spheroid(θ₁,θ₂;a=1.,b=1.,c=1.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
 
@@ -44,14 +62,22 @@ end
         @test maximum(abs,panels.dA .- mdA) < 0.08goal
     end
 
-    panels = panelize(spheroid,0,pi,0,2pi,hᵤ=0.5)
+    # Equal areas checks
+    panels = panelize(spheroid,0,pi,0,2pi,hᵤ=0.5,c=Inf)
     ptests(panels.dA,0.5^2)
-    panels = panelize((u,v)->spheroid(u,v;c=3),0,pi,0,2pi,hᵤ=1,hᵥ=0.5)
+    panels = panelize((u,v)->spheroid(u,v;c=3),0,pi,0,2pi,hᵤ=1,hᵥ=0.5,c=Inf)
     ptests(panels.dA,0.5)
-    panels_bad = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3)
-    panels = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true)
+    panels = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true,c=Inf)
     ptests(panels.dA,0.18)
+
+    # Check sign is correct when flipped
+    panels_bad = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,c=Inf)
     @test panels[1].n ⋅ panels_bad[1].n > 0.99
+
+    # Finite error checks
+    panels_refined = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true)
+    @test length(panels_refined)>length(panels)
+    # panels_refined = panelize((u,v)->spheroid(u,v;c=3),0,pi,0,2pi,hᵤ=1,hᵥ=0.5,verbosecheck=true)
 end
 
 using LinearAlgebra

@@ -1,17 +1,18 @@
 """
-    param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true) -> (x,n̂,dA,x₄)
+    param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true) -> (x,n̂,dA,x₄,c₄)
 
 Properties of a parametric surface function `x=S(ξ₁,ξ₂)`. Returns `x`, the 
 unit normal `n̂=n/|n|` and the surface area `dA≈|n|`, where `n≡T₁×T₂` and the 
 tangent vectors are `T₁=dξ₁*∂x/∂ξ₁` and `T₂=dξ₂*∂x/∂ξ₂`. x₄ are the 2x2 
-Gauss-point locations, optionally projected onto the `tangentplane`.
+Gauss-point locations, optionally projected onto the `tangentplane`. c₄
+are the panel corners. 
 """
 function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true,signn=1)
     T₁,T₂ = dξ₁*derivative(ξ₁->S(ξ₁,ξ₂),ξ₁),dξ₂*derivative(ξ₂->S(ξ₁,ξ₂),ξ₂) 
     n = signn*T₁×T₂; mag = hypot(n...); x = S(ξ₁,ξ₂)
     dx = SA[-1/√3,1/√3] # Gauss-points
     x₄ = tangentplane ? ((a,b)->(x+0.5T₁*a+0.5T₂*b)).(dx,dx') : S.(ξ₁ .+ 0.5dξ₁*dx,ξ₂ .+ 0.5dξ₂*dx') 
-    (x=x, n=n/mag, dA=mag, x₄=x₄::SMatrix{2,2})
+    (x=x, n=n/mag, dA=mag, x₄=x₄::SMatrix{2,2},c₄=S.(ξ₁ .+ 0.5√3*dξ₁*dx,ξ₂ .+ 0.5√3*dξ₂*dx') )
 end
 
 """
@@ -37,7 +38,7 @@ Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]` into 
 
 The surface is split into strips roughly `hᵤ` wide, which are then split into panels roughly `hᵥ`
 high. Use `transpose=true` to change the strip direction and `signn=-1` to flip the normal direction. 
-The parameter `c` sets the max percent devitation of the panel from a straight line, clustering panels
+The parameter `h*c` sets the max devitation of the panel from a straight line by reducing panel size
 in regions of high curvature.
 """
 function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,
@@ -80,3 +81,4 @@ function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,
         @. param_props(surface,u(v),v,du(v),dv;signn,kwargs...) 
     end |> Table
 end
+

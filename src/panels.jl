@@ -4,17 +4,24 @@
 Properties of a parametric surface function `x=S(ξ₁,ξ₂)`. Returns `x`, the 
 unit normal `n̂=n/|n|` and the surface area `dA≈|n|`, where `n≡T₁×T₂` and the 
 tangent vectors are `T₁=dξ₁*∂x/∂ξ₁` and `T₂=dξ₂*∂x/∂ξ₂`. x₄ are the 2x2 
-Gauss-point locations, optionally projected onto the `tangentplane`. c₄
-are the panel corners. 
+Gauss-point locations, optionally projected onto the `tangentplane`. 
+The panel corners ⛶ are only used for panel visualization & assessment.
 """
 function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true,signn=1)
     T₁,T₂ = dξ₁*derivative(ξ₁->S(ξ₁,ξ₂),ξ₁),dξ₂*derivative(ξ₂->S(ξ₁,ξ₂),ξ₂) 
     n = signn*T₁×T₂; mag = hypot(n...); x = S(ξ₁,ξ₂)
     dx = SA[-1/√3,1/√3] # Gauss-points
     x₄ = tangentplane ? ((a,b)->(x+0.5T₁*a+0.5T₂*b)).(dx,dx') : S.(ξ₁ .+ 0.5dξ₁*dx,ξ₂ .+ 0.5dξ₂*dx') 
-    (x=x, n=n/mag, dA=mag, x₄=x₄::SMatrix{2,2},c₄=S.(ξ₁ .+ 0.5√3*dξ₁*dx,ξ₂ .+ 0.5√3*dξ₂*dx') )
+    (x=x, n=n/mag, dA=mag, x₄=x₄::SMatrix{2,2},⛶=S.(ξ₁ .+ dξ₁*SA[-0.5,0.5],ξ₂ .+ dξ₂*SA[-0.5,0.5]'))
 end
-
+"""
+    deviation = distance from panel center to plane defined by the corners
+"""
+function deviation(p)
+    a =   0.5p.⛶[1,1]+0.5p.⛶[1,2]    # plane base
+    l = a-0.5p.⛶[2,1]-0.5p.⛶[2,2]    # vector to plane top
+    hypot((p.x-a-l*(p.x-a)'l/l'l...)) # distance from center
+end
 """
 pseudospeed = max(arcspeed,curvespeed) wrapped in an ApproxFun for later analysis
 """
@@ -36,15 +43,13 @@ linear(a,b,x₀,x₁) = x->(r=(x-x₀)/(x₁-x₀); a*(1-r)+b*r)
 
 Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]` into a `Table` of panels. 
 
-The surface is split into strips roughly `hᵤ` wide, which are then split into panels roughly `hᵥ`
-high. Use `transpose=true` to change the strip direction and `signn=-1` to flip the normal direction. 
-The parameter `h*c` sets the max devitation of the panel from a straight line by reducing panel size
-in regions of high curvature.
+The surface is split into strips roughly `hᵤ` wide, which are split into panels roughly `hᵥ` high. 
+Use `transpose=true` to change the strip direction and `signn=-1` to flip the normal direction. 
+The parameter `(hᵤ+hᵥ)*c` sets the max devitation of the panel from a straight line by reducing 
+panel size in regions of high curvature.
 """
-function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,
-                  transpose=false,signn=1,verbosecheck=false,kwargs...)
-    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,
-                                 transpose=false,signn=-signn,verbosecheck,kwargs...)
+function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
+    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,transpose=false,signn=-signn,kwargs...)
 
     # Get arcspeed along bottom & top edges as a Fun
     speed₀ = pseudospeed(u->surface(u,v₀),hᵤ,c,u₀..u₁)
@@ -72,13 +77,7 @@ function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,
         v = 0.5*(ve[2:end]+ve[1:end-1])        # panel centers
         dv = ve[2:end]-ve[1:end-1]             # panel heights
 
-        # Measure max deviation & panel Properties
-        verbosecheck && (error = extrema(map(eachindex(v)) do i
-                p,a = surface(u(v[i]),v[i]),surface(u(ve[i]),ve[i])
-                l = a-surface(u(ve[i+1]),ve[i+1])
-                hypot((p-a-l*(p-a)'l/l'l...))/(hᵥ*c)
-        end); @show error)
+        # Measure panel Properties
         @. param_props(surface,u(v),v,du(v),dv;signn,kwargs...) 
     end |> Table
 end
-

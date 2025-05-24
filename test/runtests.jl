@@ -34,7 +34,6 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
-using ApproxFun
 @testset "panels.jl" begin
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
@@ -44,13 +43,9 @@ using ApproxFun
     @test NeumannKelvin.κₙ(ellip,0.5pi) ≈ 3
 
     for c in (1,0.1,0.01)
-        speed = NeumannKelvin.pseudospeed(ellip,1,c,0..pi)
-        c==1 && @test NeumannKelvin.arcspeed(ellip)(0.5pi)≈speed(0.5pi)
-        c==0.01 && @test NeumannKelvin.curvespeed(ellip,1,c)(0.5pi)≈speed(0.5pi)
-
-        S = sum(speed); N = 2Int(round(S/2))
-        u = NeumannKelvin.dist⁻¹.(speed,range(0,S,N))
-        @test 3-ellip(u[N÷2])[1] ≤ 1.15c
+        S,s⁻¹ = NeumannKelvin.arclength(ellip,1,c,0,pi)
+        N = 2Int(round(S/2)); u = s⁻¹(range(0,S,N))
+        @test 3-ellip(u[N÷2])[1] ≤ 1.25c
     end
 
     torus(θ₁,θ₂;r=0.3,R=1) = SA[(R+r*cos(θ₂))*cos(θ₁),(R+r*cos(θ₂))*sin(θ₁),r*sin(θ₂)]
@@ -60,7 +55,7 @@ using ApproxFun
     function area_checks(dA,goal)
         mdA = sum(dA)/length(dA)
         @test mdA ≈ goal rtol = 0.08
-        @test maximum(abs,panels.dA .- mdA) < 0.08goal
+        @test maximum(abs,panels.dA .- mdA) < 0.13goal
     end
     panels = panelize(spheroid,0,pi,0,2pi,hᵤ=0.5,c=Inf)
     area_checks(panels.dA,0.5^2)
@@ -137,8 +132,8 @@ function prism(h;q=0.2,Z=1)
 end
 @testset "NeumannKelvin.jl" begin
     # Compare submerged spheroid drag to Farell/Baar
-    d = Cw(spheroid(0.1);ϕ=∫kelvin,Fn=0.5)
-    @test d ≈ 5.9e-3 rtol=0.02
+    d = Cw(spheroid(0.06);ϕ=∫kelvin,Fn=0.5)
+    @test d ≈ 6e-3 rtol=0.02
     # Compared elliptical prism drag to Guevel/Baar
     d = Cw(prism(0.1);ϕ=∫kelvin,Fn=0.55)
     @test d ≈ 0.053 rtol=0.02

@@ -22,21 +22,28 @@ function deviation(p)
     l = a-0.5p.⛶[2,1]-0.5p.⛶[2,2]    # vector to plane top
     hypot((p.x-a-l*(p.x-a)'l/l'l...)) # distance from center
 end
+
+using QuadGK,Interpolations
 """
-pseudospeed = max(arcspeed,curvespeed) wrapped in an ApproxFun for later analysis
+    arclength(r,L,c,low,high) -> S,(s⁻¹(s)->u)
+
+Find the pseudo-arclength `S` along a curve `r(u), u ∈ [low,high]` 
+by integrating the pseudo-arcspeed `p = max(s',√(L*κₙ/8c)))` where 
+`s' ≡ ∥r'∥` is the arcspeed and `κₙ ≡ s'² |κ| is the normal curvature. 
+The inverse arclength function `s⁻¹(s) = ∫₀ˢ 1/dp` is also returned.
+
+The pseudo-speed is defined such that `S/L` equal pseudo-length segments 
+along `r` deviate `≤L*c` from the curve if `|κ|≈C` locally.
 """
-pseudospeed(r,L,c,rng) = max(Fun(arcspeed(r),rng),Fun(curvespeed(r,L,c),rng))
-"""
-curvespeed = `s' √(L|κ|/8c))`, where `s'≡||r'||` is the arcspeed, `|κ|` is the curvature, 
-`L` is the arclength-scale and `c` is the max percent deviation.
-"""
-curvespeed(r,L,c) = u->√(L*κₙ(r,u)/8c)
+function arclength(r,L,c,low,high)
+    @inline speed(u) = max(arcspeed(r)(u),√(L*κₙ(r,u)/8c))
+    S,_,segs = quadgk_segbuf(speed,low,high)
+    sort!(segs,by=s->s.a)
+    u,s = [low; map(s->s.b,segs)],[zero(S); cumsum(map(s->s.I,segs))]
+    S,extrapolate(interpolate(s, u, SteffenMonotonicInterpolation()),Flat())
+end
 arcspeed(r) = u->hypot(derivative(r,u)...)
-"""
-Normal curvature `κₙ ≡ s'² |κ| = √(||r''||²-(s'')²)`
-"""
 κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
-dist⁻¹(speed,s) = first(roots(cumsum(speed)-s))
 linear(a,b,x₀,x₁) = x->(r=(x-x₀)/(x₁-x₀); a*(1-r)+b*r)
 """
     panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
@@ -50,32 +57,30 @@ panel size in regions of high curvature.
 """
 function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
     transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,transpose=false,signn=-signn,kwargs...)
+    p = param_props(surface,0.5u₀+0.5u₁,u₁-u₀,0.5v₀+0.5v₁,v₁-v₀;kwargs...) # for type
 
-    # Get arcspeed along bottom & top edges as a Fun
-    speed₀ = pseudospeed(u->surface(u,v₀),hᵤ,c,u₀..u₁)
-    speed₁ = pseudospeed(u->surface(u,v₁),hᵤ,c,u₀..u₁)
+    # Get arcslength and inverse along bottom & top edges
+    S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)
+    S₁,s₁⁻¹ = arclength(u->surface(u,v₁),hᵤ,c,u₀,u₁)
 
-    # Get arclength (integral of speed) and number of strips
-    S₀,S₁ = sum(speed₀),sum(speed₁)
+    # Set number of strips
     min(S₀,S₁) ≤ 0.5hᵤ && return nothing # not enough width
     N = Int(round((S₀+S₁)/2hᵤ))          # number of strips
 
     # Find equidistant points along bottom & top edges
-    u₀ᵢ = dist⁻¹.(speed₀,range(0,S₀,N+1)) 
-    u₁ᵢ = dist⁻¹.(speed₁,range(0,S₁,N+1))
+    u₀ᵢ,u₁ᵢ = s₀⁻¹(range(0,S₀,N+1)),s₁⁻¹(range(0,S₁,N+1))
 
     # Mapreduce across strips
-    mapreduce(vcat,1:N) do i
-        # Define index functions for strip i
+    mapreduce(vcat,1:N, init = Vector{typeof(p)}()) do i
         u = linear(0.5(u₀ᵢ[i+1]+u₀ᵢ[i]),0.5(u₁ᵢ[i+1]+u₁ᵢ[i]),v₀,v₁) # Parametric center
         du = linear(u₀ᵢ[i+1]-u₀ᵢ[i],u₁ᵢ[i+1]-u₁ᵢ[i],v₀,v₁)          # Parametric width
 
         # Find equidistant points along strip
-        speed = pseudospeed(v->surface(u(v),v),hᵥ,c,v₀..v₁)   # speed along strip center
-        S = sum(speed); S ≤ 0.5hᵥ && return [] # not enough height
-        ve = dist⁻¹.(speed,0:S/round(S/hᵥ):S)  # panel endpoints
-        v = 0.5*(ve[2:end]+ve[1:end-1])        # panel centers
-        dv = ve[2:end]-ve[1:end-1]             # panel heights
+        S,s⁻¹ = arclength(v->surface(u(v),v),hᵥ,c,v₀,v₁) # speed along strip center
+        S ≤ 0.5hᵥ && return []          # not enough height
+        ve = s⁻¹(0:S/round(S/hᵥ):S)    # panel endpoints
+        v = 0.5*(ve[2:end]+ve[1:end-1]) # panel centers
+        dv = ve[2:end]-ve[1:end-1]      # panel heights
 
         # Measure panel Properties
         @. param_props(surface,u(v),v,du(v),dv;signn,kwargs...) 

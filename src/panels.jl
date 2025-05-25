@@ -1,5 +1,5 @@
 """
-    param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true) -> (x,n̂,dA,x₄,c₄)
+    param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true) -> (x,n̂,dA,x₄,⛶)
 
 Properties of a parametric surface function `x=S(ξ₁,ξ₂)`. Returns `x`, the 
 unit normal `n̂=n/|n|` and the surface area `dA≈|n|`, where `n≡T₁×T₂` and the 

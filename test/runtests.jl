@@ -42,24 +42,28 @@ end
     @test NeumannKelvin.κₙ(ellip,0.) ≈ 1
     @test NeumannKelvin.κₙ(ellip,0.5pi) ≈ 3
 
-    for c in (1,0.1,0.01)
+    for c in (1,0.1301,0.029165) # tuned s.t. S≈N-1
         S,s⁻¹ = NeumannKelvin.arclength(ellip,1,c,0,pi)
         N = 2Int(round(S/2)); u = s⁻¹(range(0,S,N))
-        @test 3-ellip(u[N÷2])[1] ≤ 1.25c
+        if c==1 # should be equal length
+            l = [quadgk(NeumannKelvin.arcspeed(ellip),u[i],u[i+1])[1] for i in 1:N-1]
+            @test l ≈ [sum(l)/(N-1) for i in 1:N-1] rtol=0.01
+        end
+        @test 3-ellip(u[N÷2])[1] ≤ 1.10c # should have bounded deviation
     end
 
     torus(θ₁,θ₂;r=0.3,R=1) = SA[(R+r*cos(θ₂))*cos(θ₁),(R+r*cos(θ₂))*sin(θ₁),r*sin(θ₂)]
     spheroid(θ₁,θ₂;a=1.,b=1.,c=1.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
 
-    # Equal areas checks
+    # Equal areas sanity checks
     function area_checks(dA,goal)
         mdA = sum(dA)/length(dA)
         @test mdA ≈ goal rtol = 0.08
-        @test maximum(abs,panels.dA .- mdA) < 0.13goal
+        @test maximum(abs,panels.dA .- mdA) < 0.1goal
     end
     panels = panelize(spheroid,0,pi,0,2pi,hᵤ=0.5,c=Inf)
     area_checks(panels.dA,0.5^2)
-    panels = panelize((u,v)->spheroid(u,v;c=3),0,pi,0,2pi,hᵤ=1,hᵥ=0.5,c=Inf)
+    panels = panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=1,hᵥ=0.5,c=Inf)
     area_checks(panels.dA,0.5)
     panels = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true,c=Inf)
     area_checks(panels.dA,0.18)
@@ -71,7 +75,7 @@ end
     # Deviation checks
     dev_checks(panels,goal) = @test maximum(NeumannKelvin.deviation,panels) ≤ goal
     dev_checks(panelize(spheroid,0,pi,0,2pi,hᵤ=0.5),0.05)
-    dev_checks(panelize((u,v)->spheroid(u,v;c=3),0,pi,0,2pi,hᵤ=1,hᵥ=0.5),0.075)
+    dev_checks(panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=1,hᵥ=0.5),0.075)
     dev_checks(panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true),0.045)
 end
 

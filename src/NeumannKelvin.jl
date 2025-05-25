@@ -16,7 +16,6 @@ include("kelvin.jl")
 export ∫kelvin
 
 # Panels
-using ApproxFun
 include("panels.jl")
 export param_props,panelize
 

@@ -23,7 +23,7 @@ function deviation(p)
     hypot((p.x-a-l*(p.x-a)'l/l'l...)) # distance from center
 end
 
-using QuadGK,Interpolations
+using QuadGK,DataInterpolations
 """
     arclength(r,L,c,low,high) -> S,(s⁻¹(s)->u)
 
@@ -37,10 +37,10 @@ along `r` deviate `≤L*c` from the curve if `|κ|≈C` locally.
 """
 function arclength(r,L,c,low,high)
     @inline speed(u) = max(arcspeed(r)(u),√(L*κₙ(r,u)/8c))
-    S,_,segs = quadgk_segbuf(speed,low,high)
+    S,_,segs = quadgk_segbuf(speed,low,low+0.05*(high-low),high-0.05*(high-low),high,rtol=1e-6,order=3)
     sort!(segs,by=s->s.a)
     u,s = [low; map(s->s.b,segs)],[zero(S); cumsum(map(s->s.I,segs))]
-    S,extrapolate(interpolate(s, u, SteffenMonotonicInterpolation()),Flat())
+    S,CubicSpline(u,s,extrapolation = ExtrapolationType.Constant)
 end
 arcspeed(r) = u->hypot(derivative(r,u)...)
 κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
@@ -52,7 +52,7 @@ Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]` into 
 
 The surface is split into strips roughly `hᵤ` wide, which are split into panels roughly `hᵥ` high. 
 Use `transpose=true` to change the strip direction and `signn=-1` to flip the normal direction. 
-The parameter `(hᵤ+hᵥ)*c` sets the max devitation of the panel from a straight line by reducing 
+The parameter `(hᵤ+hᵥ)*c` sets the max deviation of the panel from a flat plane by reducing 
 panel size in regions of high curvature.
 """
 function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
@@ -78,7 +78,7 @@ function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,tr
         # Find equidistant points along strip
         S,s⁻¹ = arclength(v->surface(u(v),v),hᵥ,c,v₀,v₁) # speed along strip center
         S ≤ 0.5hᵥ && return []          # not enough height
-        ve = s⁻¹(0:S/round(S/hᵥ):S)    # panel endpoints
+        ve = s⁻¹(0:S/round(S/hᵥ):S)     # panel endpoints
         v = 0.5*(ve[2:end]+ve[1:end-1]) # panel centers
         dv = ve[2:end]-ve[1:end-1]      # panel heights
 

@@ -4,10 +4,10 @@ authors = ["Gabriel Weymouth"]
 version = "0.5.1"
 
 [deps]
+DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 FastChebInterp = "cf66c380-9a80-432c-aff8-4f9c79c0bdde"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
@@ -18,10 +18,10 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [compat]
+DataInterpolations = "8.0.1"
 FastChebInterp = "1"
 FastGaussQuadrature = "1"
 ForwardDiff = "0.10"
-Interpolations = "0.16.1"
 QuadGK = "2.9"
 Reexport = "1"
 Roots = "2.2.3"

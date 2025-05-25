@@ -4,7 +4,7 @@ authors = ["Gabriel Weymouth"]
 version = "0.5.1"
 
 [deps]
-ApproxFun = "28f2ccd6-bb30-5033-b560-165f7b14dc2f"
+DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 FastChebInterp = "cf66c380-9a80-432c-aff8-4f9c79c0bdde"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
@@ -18,7 +18,7 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [compat]
-ApproxFun = "0.13"
+DataInterpolations = "8.0.1"
 FastChebInterp = "1"
 FastGaussQuadrature = "1"
 ForwardDiff = "0.10"

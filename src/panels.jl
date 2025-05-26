@@ -68,30 +68,30 @@ function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,tr
     transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,transpose=false,signn=-signn,kwargs...)
     # Check inputs and get output type
     @assert u₀<u₁ && v₀<v₁ && hᵤ>0 && hᵥ>0 && c>0 && abs(signn)==1 "Invalid panelize inputs"
-    p = param_props(surface,0.5u₀+0.5u₁,u₁-u₀,0.5v₀+0.5v₁,v₁-v₀;kwargs...)
+    init = typeof(param_props(surface,0.5u₀+0.5u₁,u₁-u₀,0.5v₀+0.5v₁,v₁-v₀;kwargs...))[]
 
     # Get arcslength and inverse along bottom & top edges
     S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)
     S₁,s₁⁻¹ = arclength(u->surface(u,v₁),hᵤ,c,u₀,u₁)
 
     # Set number of strips
-    min(S₀,S₁) ≤ 0.5hᵤ && return nothing # not enough width
-    N = Int(round((S₀+S₁)/2hᵤ))          # number of strips
+    min(S₀,S₁) ≤ 0.5hᵤ && return init # not enough width
+    N = round(Int,(S₀+S₁)/2hᵤ)        # number of strips
 
     # Find equidistant points along bottom & top edges
     u₀ᵢ,u₁ᵢ = s₀⁻¹(range(0,S₀,N+1)),s₁⁻¹(range(0,S₁,N+1))
 
     # Mapreduce across strips
-    mapreduce(vcat,1:N, init = Vector{typeof(p)}()) do i
+    mapreduce(vcat,1:N; init) do i
         u = linear(0.5(u₀ᵢ[i+1]+u₀ᵢ[i]),0.5(u₁ᵢ[i+1]+u₁ᵢ[i]),v₀,v₁) # Parametric center
         du = linear(u₀ᵢ[i+1]-u₀ᵢ[i],u₁ᵢ[i+1]-u₁ᵢ[i],v₀,v₁)          # Parametric width
 
         # Find equidistant points along strip
         S,s⁻¹ = arclength(v->surface(u(v),v),hᵥ,c,v₀,v₁) # speed along strip center
-        S ≤ 0.5hᵥ && return []          # not enough height
-        ve = s⁻¹(0:S/round(S/hᵥ):S)     # panel endpoints
-        v = 0.5*(ve[2:end]+ve[1:end-1]) # panel centers
-        dv = ve[2:end]-ve[1:end-1]      # panel heights
+        S ≤ 0.5hᵥ && return init               # not enough height
+        ve = s⁻¹(range(0,S,round(Int,S/hᵥ)+1)) # panel endpoints
+        v = 0.5*(ve[2:end]+ve[1:end-1])        # panel centers
+        dv = ve[2:end]-ve[1:end-1]             # panel heights
 
         # Measure panel Properties
         @. param_props(surface,u(v),v,du(v),dv;signn,kwargs...) 

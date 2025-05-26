@@ -25,25 +25,34 @@ end
 
 using QuadGK,DataInterpolations
 """
-    arclength(r,L,c,low,high) -> S,(s⁻¹(s)->u)
+    arclength(r,Δs,c,low,high) -> S,(s⁻¹(s)->u)
 
 Find the pseudo-arclength `S` along a curve `r(u), u ∈ [low,high]` 
-by integrating the pseudo-arcspeed `p = max(s',√(L*κₙ/8c)))` where 
-`s' ≡ ∥r'∥` is the arcspeed and `κₙ ≡ s'² |κ| is the normal curvature. 
-The inverse arclength function `s⁻¹(s) = ∫₀ˢ 1/dp` is also returned.
+by integrating the pseudo-arcspeed `s' = max(l',√(Δs*κₙ/8c)))` where 
+`l' ≡ ∥r'∥` is the arcspeed and `κₙ` is the normal curvature. 
+The inverse function `s⁻¹(s) = ∫₀ˢ du/ds = u` is also returned.
 
-The pseudo-speed is defined such that `S/L` equal pseudo-length segments 
-along `r` deviate `≤L*c` from the curve if `|κ|≈C` locally.
+The speed `s'` is defined such that `S/Δs` equal length segments 
+along `r` deviate `δ≤Δs*c` from the curve. Starting from `δ≈Δl²/8κ`,
+`Δl≈l'*Δu` and `Δs≈s'*Δu` gives `s'≥l'√(Δs*κ/8c)`. Demanding `s'≥l'` 
+and substituting `κₙ = l'² κ` gives the rate equation above.
 """
-function arclength(r,L,c,low,high)
-    @inline speed(u) = max(arcspeed(r)(u),√(L*κₙ(r,u)/8c))
-    S,_,segs = quadgk_segbuf(speed,low,low+0.05*(high-low),high-0.05*(high-low),high,rtol=1e-6,order=3)
-    sort!(segs,by=s->s.a)
-    u,s = [low; map(s->s.b,segs)],[zero(S); cumsum(map(s->s.I,segs))]
-    S,CubicSpline(u,s,extrapolation = ExtrapolationType.Constant)
+function arclength(r,Δs,c,low,high)
+    # Use quadgk to adaptively sample ∫ds, returning S and subintervals Δᵢ
+    @inline speed(u) = max(arcspeed(r)(u),√(Δs*κₙ(r,u)/8c))
+    S,_,Δᵢ = quadgk_segbuf(speed,low,high,rtol=1e-5,order=3)
+    # Order the subintervals and accumulate the arclength data s(uᵢ)=∑ⁱⱼ₌₀ Δsⱼ
+    sort!(Δᵢ,by=Δ->Δ.a)
+    u,s = [low; map(Δ->Δ.b,Δᵢ)],[zero(S); cumsum(map(Δ->Δ.I,Δᵢ))]
+    # Get the bounded derivative data and construct a Monotonic Hermite Cubic Spline for s⁻¹
+    du = map(eachindex(u)) do i
+        min(3secant(Δᵢ[max(1,i-1)]),3secant(Δᵢ[min(i,length(Δᵢ))]),inv(speed(i==1 ? Δᵢ[1].a : Δᵢ[i-1].b)))
+    end
+    S,CubicHermiteSpline(du,u,s,extrapolation = ExtrapolationType.Constant)
 end
 arcspeed(r) = u->hypot(derivative(r,u)...)
 κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
+secant(Δ)=(Δ.b-Δ.a)/Δ.I
 linear(a,b,x₀,x₁) = x->(r=(x-x₀)/(x₁-x₀); a*(1-r)+b*r)
 """
     panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
@@ -57,7 +66,9 @@ panel size in regions of high curvature.
 """
 function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,signn=1,kwargs...)
     transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,transpose=false,signn=-signn,kwargs...)
-    p = param_props(surface,0.5u₀+0.5u₁,u₁-u₀,0.5v₀+0.5v₁,v₁-v₀;kwargs...) # for type
+    # Check inputs and get output type
+    @assert u₀<u₁ && v₀<v₁ && hᵤ>0 && hᵥ>0 && c>0 && abs(signn)==1 "Invalid panelize inputs"
+    p = param_props(surface,0.5u₀+0.5u₁,u₁-u₀,0.5v₀+0.5v₁,v₁-v₀;kwargs...)
 
     # Get arcslength and inverse along bottom & top edges
     S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)

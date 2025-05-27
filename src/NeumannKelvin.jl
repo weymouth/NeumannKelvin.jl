@@ -23,4 +23,16 @@ export param_props,panelize
 include("panel_method.jl")
 export ∂ₙϕ,influence,ζ,steady_force,added_mass
 
+components(data) = ntuple(i -> getindex.(data, i), 3)
+export components
+
+# Backward compatibility for extensions
+if !isdefined(Base, :get_extension)
+    using Requires
+end
+function __init__()
+    @static if !isdefined(Base, :get_extension)
+        @require WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008" include("../ext/NeumannKelvinWGLMakieExt.jl")
+    end
+end
 end

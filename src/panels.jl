@@ -1,25 +1,38 @@
 """
-    param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true) -> (x,n̂,dA,x₄,⛶)
+    measure_panel(S,u,v,du,dv;tangentplane=true,flip=false) -> (x,n̂,dA,x₄)
 
-Properties of a parametric surface function `x=S(ξ₁,ξ₂)`. Returns `x`, the 
-unit normal `n̂=n/|n|` and the surface area `dA≈|n|`, where `n≡T₁×T₂` and the 
-tangent vectors are `T₁=dξ₁*∂x/∂ξ₁` and `T₂=dξ₂*∂x/∂ξ₂`. x₄ are the 2x2 
-Gauss-point locations, optionally projected onto the `tangentplane`. 
-The panel corners ⛶ are only used for panel visualization & assessment.
+Measures a parametric surface function `S` for a `u,v ∈ [u±0.5du]×[v±0.5dv]` panel.
+Returns center point `x`, the unit normal `n̂=n/|n|`, the surface area `dA≈|n|`, and the 
+2x2 Gauss-point locations `x₄`, optionally projected onto the `tangentplane`. Setting 
+`flip=true` flips the panel to point the other way.
+
+Note `n≡Tᵤ×Tᵥ` and the tangent vectors are `Tᵤ=dξᵤ*∂x/∂ξᵤ` and `Tᵥ=dξᵥ*∂x/∂ξᵥ`.
 """
-function param_props(S,ξ₁,ξ₂,dξ₁,dξ₂;tangentplane=true,signn=1)
-    T₁,T₂ = dξ₁*derivative(ξ₁->S(ξ₁,ξ₂),ξ₁),dξ₂*derivative(ξ₂->S(ξ₁,ξ₂),ξ₂) 
-    n = signn*T₁×T₂; mag = hypot(n...); x = S(ξ₁,ξ₂)
-    dx = SA[-1/√3,1/√3] # Gauss-points
-    x₄ = tangentplane ? ((a,b)->(x+0.5T₁*a+0.5T₂*b)).(dx,dx') : S.(ξ₁ .+ 0.5dξ₁*dx,ξ₂ .+ 0.5dξ₂*dx') 
-    (x=x, n=n/mag, dA=mag, x₄=x₄::SMatrix{2,2},⛶=S.(ξ₁ .+ dξ₁*SA[-0.5,0.5],ξ₂ .+ dξ₂*SA[-0.5,0.5]'))
+function measure_panel(S,u,v,du,dv;tangentplane=true,flip=false)
+    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;tangentplane)
+    # measure properties at center
+    n,dA,Tᵤ,Tᵥ = measure(S,u,v,du,dv,false); x = S(u,v)
+    # get 2x2 Gauss-points
+    dx = SA[-0.5/√3,0.5/√3]
+    x₄ = tangentplane ? ((a,b)->(x+Tᵤ*a+Tᵥ*b)).(dx,dx') : S.(u .+ du*dx,v .+ dv*dx') 
+    # get corner info for plotting and combine everything into named tuple
+    dx = SA[-0.5,0.5]
+    (x=x, n=n, dA=dA, x₄=x₄::SMatrix{2,2},
+        xᵤᵥ=S.(u .+ du*dx,v .+ dv*dx'), 
+        nᵤᵥ=measure.(S,u .+ du*dx,v .+ dv*dx',du,dv))
+end
+function measure(S,u,v,du,dv,normal_only=true)
+    Tᵤ,Tᵥ = du*derivative(u->S(u,v),u),dv*derivative(v->S(u,v),v)
+    n = Tᵤ×Tᵥ; mag = hypot(n...)
+    normal_only && return n/mag
+    return n/mag,mag,Tᵤ,Tᵥ
 end
 """
     deviation = distance from panel center to plane defined by the corners
 """
 function deviation(p)
-    a =   0.5p.⛶[1,1]+0.5p.⛶[1,2]    # plane base
-    l = a-0.5p.⛶[2,1]-0.5p.⛶[2,2]    # vector to plane top
+    a =   0.5p.xᵤᵥ[1,1]+0.5p.xᵤᵥ[1,2] # plane base
+    l = a-0.5p.xᵤᵥ[2,1]-0.5p.xᵤᵥ[2,2] # vector to plane top
     hypot((p.x-a-l*(p.x-a)'l/l'l...)) # distance from center
 end
 
@@ -63,21 +76,21 @@ arcspeed(r) = u->hypot(derivative(r,u)...)
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
 linear(a,b,x₀,x₁) = x->(r=(x-x₀)/(x₁-x₀); a*(1-r)+b*r)
 """
-    panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,flipn=false,N_max=1000,kwargs...)
+    panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,flip=false,N_max=1000,kwargs...)
 
-Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]` into a `Table` of panels. 
+Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]`, returning a `Table` of panels.
 
 The surface is split into strips roughly `hᵤ` wide, which are split into panels roughly `hᵥ` high. 
-Use `transpose=true` to change the strip direction and `flipn=true` to flip the normal direction. 
+Use `transpose=true` to change the strip direction and `flip=true` to flip the normal direction. 
 The parameter `(hᵤ+hᵥ)*c` sets the max deviation of the panel from a flat plane by reducing 
 panel size in regions of high curvature. Errors if the adaptive routine gives more than `N_max` panels.
 """
-function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,flipn=false,N_max=1000,kwargs...)
-    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,transpose=false,flipn=!flipn,N_max,kwargs...)
+function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,flip=false,N_max=1000,kwargs...)
+    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,transpose=false,flip=!flip,N_max,kwargs...)
     # Check inputs and get output type
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))
     (hᵤ≤0 || hᵥ≤0 || c≤0) && throw(ArgumentError("Need positive hᵤ,hᵥ,c. Got $hᵤ,$hᵥ,$c."))
-    init = typeof(param_props(surface,0.5u₀+0.5u₁,u₁-u₀,0.5v₀+0.5v₁,v₁-v₀;kwargs...))[]
+    init = typeof(measure_panel(surface,0.5u₀+0.5u₁,u₁-u₀,0.5v₀+0.5v₁,v₁-v₀;kwargs...))[]
 
     # Get arcslength and inverse along bottom & top edges
     S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)
@@ -102,9 +115,11 @@ function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,tr
         v = 0.5*(ve[2:end]+ve[1:end-1])        # panel centers
         dv = ve[2:end]-ve[1:end-1]             # panel heights
 
-        # Measure panel Properties
-        @. param_props(surface,u(v),v,du(v),dv;signn=flipn ? -1 : 1 ,kwargs...) 
+        # Measure panels along strip
+        @. measure_panel(surface,u(v),v,du(v),dv;flip,kwargs...) 
     end 
+
+    # Check length and return as a Table
     length(panels)>N_max && throw(ArgumentError("length(panels)=$(length(panels))>$N_max. Increase hᵤ,hᵥ,c and/or N_max."))
-    panels |> Table
+    Table(panels)
 end

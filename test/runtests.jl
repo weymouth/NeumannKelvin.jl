@@ -89,7 +89,7 @@ using LinearAlgebra
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     dθ₁ = π-2acos(1/√3) # places x in octant centers
-    panels = param_props.(S,[π-dθ₁,π+dθ₁]'/2,π/4:π/2:2π,dθ₁,π/2) |> Table
+    panels = measure_panel.(S,[π-dθ₁,π+dθ₁]'/2,π/4:π/2:2π,dθ₁,π/2) |> Table
     @test size(panels) == (8,)
     @test panels.n ⋅ panels.x == 8
     @test sum(panels.dA) ≈ 4π rtol=0.006
@@ -138,7 +138,7 @@ function prism(h;q=0.2,Z=1)
     S(θ,z) = 0.5SA[cos(θ),q*sin(θ),z]
     dθ = π/round(π*0.5/h) # cosine sampling
     dz = Z/round(Z/h)
-    param_props.(S,dθ:dθ:2π,-(0.5dz:dz:Z)',dθ,dz) |> Table
+    measure_panel.(S,dθ:dθ:2π,-(0.5dz:dz:Z)',dθ,dz) |> Table
 end
 @testset "NeumannKelvin.jl" begin
     # Compare submerged spheroid drag to Farell/Baar

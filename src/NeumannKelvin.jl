@@ -17,7 +17,7 @@ export ∫kelvin
 
 # Panels
 include("panels.jl")
-export param_props,panelize
+export measure_panel,panelize
 
 # Panel method
 include("panel_method.jl")

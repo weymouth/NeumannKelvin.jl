@@ -1,15 +1,7 @@
-module NeumannKelvinWGLMakieExt
-
-if isdefined(Base, :get_extension)
-    using WGLMakie; WGLMakie.activate!(inline=false)
-else
-    using ..WGLMakie; WGLMakie.activate!(inline=false)
-end
-
-using NeumannKelvin
-
+module NeumannKelvinMakieExt
+using NeumannKelvin,Makie
 # Generate full triangle mesh and color array
-function viz(panels, values; vectors=panels.n, colormap=:viridis)
+function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=0.3panels.n, colormap=:viridis, kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1], aspect=:data)
 
@@ -28,9 +20,7 @@ function viz(panels, values; vectors=panels.n, colormap=:viridis)
 
     # Normals & color bar
     arrows!(ax, components(panels.x)..., components(vectors)...; color=colors)
-    Colorbar(fig[1, 2], limits=(vmin, vmax); colormap)
+    Colorbar(fig[1, 2], limits=(vmin, vmax); colormap, kwargs...)
     fig
 end
-export viz
-
 end

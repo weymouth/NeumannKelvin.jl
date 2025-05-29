@@ -106,10 +106,8 @@ using LinearAlgebra
     @test added_mass(panels)≈2π/3*I rtol=0.09 # ϵ=9% with 8 panels
 end
 
-function bruteW(x,y,z)
-	Wi(t) = exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t))
-	4quadgk(Wi,-Inf,Inf,atol=1e-10)[1]
-end
+@inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]
+@inline bruteN(x,y,z) = -2*(1-z/(hypot(x,y,z)+abs(x)))+NeumannKelvin.Ngk(x,y,z)
 using SpecialFunctions
 @testset "green.jl" begin
     @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
@@ -124,7 +122,7 @@ using SpecialFunctions
         x = -R*cos(atan(a))
         y = R*sin(atan(a))
         x==y==0 && continue
-        @test NeumannKelvin.nearfield(x,y,z)≈NeumannKelvin.bruteN(x,y,z) atol=3e-4 rtol=31e-5
+        @test NeumannKelvin.nearfield(x,y,z)≈bruteN(x,y,z) atol=3e-4 rtol=31e-5
         @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-4
     end
 end

@@ -8,7 +8,7 @@ Use `transpose=true` to change the strip direction and `flip=true` to flip the n
 The parameter `(hᵤ+hᵥ)*c` sets the max deviation of the panel from a flat plane by reducing 
 panel size in regions of high curvature. Errors if the adaptive routine gives more than `N_max` panels.
 """
-function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,flip=false,N_max=1000,kwargs...)
+function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.05,transpose=false,flip=false,N_max=1000,verbose=false,kwargs...)
     transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,transpose=false,flip=!flip,N_max,kwargs...)
     # Check inputs and get output type
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))
@@ -18,28 +18,31 @@ function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,tr
     # Get arcslength and inverse along bottom & top edges
     S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)
     S₁,s₁⁻¹ = arclength(u->surface(u,v₁),hᵤ,c,u₀,u₁)
+    @show S₀,S₁
 
     # Set number of strips
     min(S₀,S₁) ≤ 0.5hᵤ && return init # not enough width
     N = round(Int,(S₀+S₁)/2hᵤ)        # number of strips
 
     # Find equidistant points along bottom & top edges
-    u₀ᵢ,u₁ᵢ = s₀⁻¹(range(0,S₀,N+1)),s₁⁻¹(range(0,S₁,N+1))
+    uᵢ = 0.5s₀⁻¹(range(0,S₀,N+1)) .+ 0.5s₁⁻¹(range(0,S₁,N+1))
+    @show uᵢ
 
     # Mapreduce across strips
     panels = mapreduce(vcat,1:N; init) do i
-        u = linear(0.5(u₀ᵢ[i+1]+u₀ᵢ[i]),0.5(u₁ᵢ[i+1]+u₁ᵢ[i]),v₀,v₁) # Parametric center
-        du = linear(u₀ᵢ[i+1]-u₀ᵢ[i],u₁ᵢ[i+1]-u₁ᵢ[i],v₀,v₁)          # Parametric width
+        u,du = 0.5uᵢ[i+1]+0.5uᵢ[i],uᵢ[i+1]-uᵢ[i] # Parametric center & width
 
         # Find equidistant points along strip
-        S,s⁻¹ = arclength(v->surface(u(v),v),hᵥ,c,v₀,v₁) # speed along strip center
+        S,s⁻¹ = arclength(v->surface(u,v),hᵥ,c,v₀,v₁) # speed along strip center
+        @show i,S
         S ≤ 0.5hᵥ && return init               # not enough height
         ve = s⁻¹(range(0,S,round(Int,S/hᵥ)+1)) # panel endpoints
+        @show ve
         v = 0.5*(ve[2:end]+ve[1:end-1])        # panel centers
         dv = ve[2:end]-ve[1:end-1]             # panel heights
 
         # Measure panels along strip
-        @. measure_panel(surface,u(v),v,du(v),dv;flip,kwargs...) 
+        @. measure_panel(surface,u,v,du,dv;flip,kwargs...) 
     end 
 
     # Check length and return as a Table
@@ -85,7 +88,7 @@ end
 arcspeed(r) = u->hypot(derivative(r,u)...)
 κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
-linear(a,b,x₀,x₁) = x->(r=(x-x₀)/(x₁-x₀); a*(1-r)+b*r)
+# linear(a,b,x₀,x₁) = x->(r=(x-x₀)/(x₁-x₀); a*(1-r)+b*r)
 """
     measure_panel(S,u,v,du,dv;tangentplane=true,flip=false) -> (x,n̂,dA,x₄)
 
@@ -105,11 +108,9 @@ function measure_panel(S,u,v,du,dv;tangentplane=true,flip=false)
     x₄ = tangentplane ? ((a,b)->(x+Tᵤ*a+Tᵥ*b)).(dx,dx') : S.(u .+ du*dx,v .+ dv*dx') 
     # get corner info for plotting and combine everything into named tuple
     dx = SA[-0.5,0.5]
-    (x=x, n=n, dA=dA, x₄=x₄::SMatrix{2,2},
-        xᵤᵥ=S.(u .+ du*dx,v .+ dv*dx'), 
-        nᵤᵥ=measure.(S,u .+ du*dx,v .+ dv*dx',du,dv))
+    (x=x, n=n, dA=dA, x₄=x₄, xᵤᵥ=S.(u .+ du*dx,v .+ dv*dx'), nᵤᵥ=measure.(S,u .+ du*dx,v .+ dv*dx'))
 end
-function measure(S,u,v,du,dv,normal_only=true)
+function measure(S,u,v,du=1,dv=1,normal_only=true)
     Tᵤ,Tᵥ = du*derivative(u->S(u,v),u),dv*derivative(v->S(u,v),v)
     n = Tᵤ×Tᵥ; mag = hypot(n...)
     normal_only && return n/mag

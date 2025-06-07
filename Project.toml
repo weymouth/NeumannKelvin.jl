@@ -19,19 +19,20 @@ TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [weakdeps]
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 NURBS = "dde13934-061e-461b-aa91-2c0fad390a0d"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 
 [extensions]
 NeumannKelvinMakieExt = "Makie"
-NeumannKelvinPlotsExt = "Plots"
 NeumannKelvinNURBSExt = "NURBS"
+NeumannKelvinPlotsExt = "Plots"
 
 [compat]
 DataInterpolations = "8.0.1"
 FastChebInterp = "1"
 FastGaussQuadrature = "1"
 ForwardDiff = "0.10"
+NURBS = "0.8.0"
 QuadGK = "2.9"
 Reexport = "1"
 Roots = "2.2.3"

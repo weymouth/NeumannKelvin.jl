@@ -13,7 +13,7 @@ function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=0.3panels.n,
     mesh!(ax, quad.(panels); color=values, colorrange=clims, kwargs...)
 
     # Normals & color bar
-    arrows!(ax, components(panels.x)..., components(vectors)...; color=values, colorrange=clims, kwargs...)
+    !isnothing(vectors) && arrows!(ax, components(panels.x)..., components(vectors)...; color=values, colorrange=clims, kwargs...)
     Colorbar(fig[1, 2];colorrange=clims, kwargs...)
     fig
 end

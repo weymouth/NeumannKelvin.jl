@@ -1,3 +1,11 @@
-using NeumannKelvin,FileIO,GLMakie
-svec = load("examples/optiwise_test_step.step") .|> s->NurbsSurface(s,1/300)
-panels = mapreduce(s->panelize(s,hᵤ=0.02),vcat,svec[1:4])
+using NeumannKelvin
+using NURBS,FileIO
+patches = load("examples/optiwise_test_step.step")[[1,2,4]] # read three patches
+tvec = [false,true,true] # transpose a few patches for best results
+h=(10,5) # set "largest" panel size
+panels = mapreduce(vcat,eachindex(patches)) do i
+    (hᵤ,hᵥ) = tvec[i] ? reverse(h) : h
+    panelize(patches[i];hᵤ,hᵥ,transpose=tvec[i])
+end
+using GLMakie
+viz(panels,panels.dA/prod(h),vectors=nothing,colormap=:ice,label="dA/hᵤhᵥ")

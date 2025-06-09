@@ -94,11 +94,11 @@ secant(Δ)=(Δ.b-Δ.a)/Δ.I
 const Δg,Δx = SA[-0.5/√3,0.5/√3],SA[-0.5,0.5]
 using HCubature
 """
-    measure_panel(S,u,v,du,dv;flip=false) -> (x,n̂,dA,x₄)
+    measure_panel(S,u,v,du,dv;flip=false) -> (x,n,dA,x₄,dA₄)
 
 Measures a parametric surface function `S` for a `u,v ∈ [u±0.5du]×[v±0.5dv]` panel.
-Returns center point `x`, the unit normal `n`, the surface area `dA`, and the 2x2
-Gauss-point locations `x₄`. Setting `flip=true` flips the panel to point the other way.
+Returns centroid point and normal `x,n`, the surface area `dA`, and the 2x2 Gauss-point
+locations and weights `x₄,dA₄`. Setting `flip=true` flips the panel to point the other way.
 """
 function measure_panel(S,u,v,du,dv;flip=false,cubature=false)
     flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;cubature)
@@ -112,7 +112,7 @@ function measure_panel(S,u,v,du,dv;flip=false,cubature=false)
     # get centroid
     x = cubature ? cube(uv->S(uv...)*norm(normal(S,uv...)))/dA : sum(x₄ .* dA₄)/sum(dA₄)
     n = cubature ? normalize(cube(uv->normal(S,uv...))) : normalize(sum(n₄))
-    # get corners
+    # get corners (only for pretty plots)
     xᵤᵥ = S.(u .+ du*Δx, v .+ dv*Δx')
     nᵤᵥ = normalize.(normal.(S, u .+ du*Δx, v .+ dv*Δx'))
     # combine everything into named tuple

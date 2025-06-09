@@ -100,26 +100,26 @@ Measures a parametric surface function `S` for a `u,v ∈ [u±0.5du]×[v±0.5dv]
 Returns center point `x`, the unit normal `n`, the surface area `dA`, and the 2x2
 Gauss-point locations `x₄`. Setting `flip=true` flips the panel to point the other way.
 """
-function measure_panel(S,u,v,du,dv;flip=false)
-    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du)
-    # get properties at center
-    x,n = S(u,v),normal(S,u,v)
+function measure_panel(S,u,v,du,dv;flip=false,cubature=false)
+    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;cubature)
     # get 2x2 Gauss-points
     x₄ = S.(u .+ du*Δg, v .+ dv*Δg')
+    n₄ = normal.(S, u .+ du*Δg, v .+ dv*Δg')
+    dA₄ = norm.(n₄)*du*dv/4
+    # get area
+    cube(f) = hcubature(f,SA[u-0.5du,v-0.5dv],SA[u+0.5du,v+0.5dv],rtol=0.01)[1]
+    dA = cubature ? cube(uv->norm(normal(S,uv...))) : sum(dA₄)
+    # get centroid
+    x = cubature ? cube(uv->S(uv...)*norm(normal(S,uv...)))/dA : sum(x₄ .* dA₄)/sum(dA₄)
+    n = cubature ? normalize(cube(uv->normal(S,uv...))) : normalize(sum(n₄))
     # get corners
     xᵤᵥ = S.(u .+ du*Δx, v .+ dv*Δx')
-    nᵤᵥ = normal.(S, u .+ du*Δx, v .+ dv*Δx')
-    # fancy area
-    dA = hcubature(uv->normal(S,uv...,true),
-        SA[u-0.5du,v-0.5dv],SA[u+0.5du,v+0.5dv],rtol=0.01)[1]
+    nᵤᵥ = normalize.(normal.(S, u .+ du*Δx, v .+ dv*Δx'))
     # combine everything into named tuple
-    (x=x, n=n, dA=dA, x₄=x₄, xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
+    (x=x, n=n, dA=dA, x₄=x₄, dA₄ = dA₄ .* dA/sum(dA₄), xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
 end
-function normal(S,u,v,mag=false)
-    n = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
-    m = norm(n)
-    mag ? m : n/m
-end
+normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
+normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
 """
     deviation = distance from panel center to plane defined by the corners
 """

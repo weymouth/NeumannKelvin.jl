@@ -17,7 +17,7 @@ function ∫G(d::AbstractVector{<:Dual{Tag}},p;d²=4,kwargs...) where Tag
     value(d) ≠ p.x && return _∫G(d,p;d²) # use auto-diff
     Dual{Tag}(0.,2π*stack(partials.(d))*p.n...) # enforce ∇∫G(x,x)=2πn̂
 end
-_∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : p.dA*sum(source(ξ,x) for x in p.x₄)/4
+_∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : sum(dA*source(ξ,x) for (dA,x) in zip(p.dA₄,p.x₄))
 
 """
     ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = Aᵢⱼ

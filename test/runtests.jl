@@ -90,21 +90,23 @@ end
 using LinearAlgebra
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-    dθ₁ = π-2acos(1/√3) # places x in octant centers
-    panels = measure_panel.(S,[π-dθ₁,π+dθ₁]'/2,π/4:π/2:2π,π/2,π/2) |> Table
+    panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
     @test size(panels) == (8,)
-    @test panels.n ⋅ panels.x == 8
+    @test panels.dA ≈ fill(π/2,8) rtol=1e-6   # cubature gives perfect areas
+    @test panels.n ⋅ panels.x ≈ 4√3 rtol=1e-6 # ...and centroids
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
     @test A ≈ influence(panels)
     @test tr(A) ≈ 8*2π
-    @test 4minimum(A) ≈ panels[1].dA rtol=0.1
+    @test minimum(A) ≈ panels[1].dA/4 rtol=0.2 # rough estimate
     @test sum(b)<8eps()
 
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    @test added_mass(panels) ≈ 2π/3*I rtol=0.09 # ϵ=9% with 8 panels
+    Ma = added_mass(panels)
+    @test Ma ≈ 2π/3*I rtol=0.1 # ϵ=10% with 8 panels
+    @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
 end
 
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]

@@ -87,7 +87,7 @@ function arclength(r,Δs,c,low,high)
     end
     S,CubicHermiteSpline(duᵢ,uᵢ,sᵢ,extrapolation = ExtrapolationType.Constant)
 end
-arcspeed(r) = u->hypot(derivative(r,u)...)
+arcspeed(r) = u->norm(derivative(r,u))
 κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
 
@@ -102,28 +102,31 @@ Gauss-point locations `x₄`. Setting `flip=true` flips the panel to point the o
 function measure_panel(S,u,v,du,dv;flip=false)
     flip && return measure_panel((v,u)->S(u,v),v,u,dv,du)
     # get properties at center
-    x,n = S(u,v),norm(S,u,v)
+    x,(n,dA) = S(u,v),normal(S,u,v,true)
     # get 2x2 Gauss-points
     x₄ = S.(u .+ du*Δg, v .+ dv*Δg')
     # get corners
     xᵤᵥ = S.(u .+ du*Δx, v .+ dv*Δx')
-    nᵤᵥ = norm.(S, u .+ du*Δx, v .+ dv*Δx')
+    nᵤᵥ = normal.(S, u .+ du*Δx, v .+ dv*Δx')
     # combine everything into named tuple
-    (x=S(u,v), n=n, dA=area(xᵤᵥ...), x₄=x₄, xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
+    (x=x, n=n, dA=dA*du*dv, x₄=x₄, xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
 end
-function norm(S,u,v)
+function normal(S,u,v,mag=false)
     n = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
-    n/hypot(n...)
+    m = norm(n)
+    mag ? (n/m,m) : n/m
 end
 """
-    area = area based on splitting the panel into 2 triangles
+    tri_area = area based on splitting the panel into 2 triangles
 """
-area(a,b,c,d) = 0.5hypot(((b-a)×(c-a))...)+0.5hypot(((b-d)×(c-d))...)
+tri_area(a,b,c,d) = 0.5norm((b-a)×(c-a))+0.5norm((b-d)×(c-d))
+tri_area(p::NamedTuple) = tri_area(p.xᵤᵥ...)
 """
     deviation = distance from panel center to plane defined by the corners
 """
-function deviation(p)
-    a =   0.5p.xᵤᵥ[1,1]+0.5p.xᵤᵥ[1,2] # plane base
-    l = a-0.5p.xᵤᵥ[2,1]-0.5p.xᵤᵥ[2,2] # vector to plane top
-    hypot((p.x-a-l*(p.x-a)'l/l'l...)) # distance from center
+function deviation(x,xᵤᵥ)
+    a =   0.5xᵤᵥ[1,1]+0.5xᵤᵥ[1,2] # plane base
+    l = a-0.5xᵤᵥ[2,1]-0.5xᵤᵥ[2,2] # vector to plane top
+    norm(x-a-l*(x-a)'l/l'l)       # distance from center
 end
+deviation(p::NamedTuple) = deviation(p.x,p.xᵤᵥ)

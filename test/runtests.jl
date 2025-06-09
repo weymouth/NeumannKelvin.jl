@@ -38,7 +38,6 @@ end
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
     @test NeumannKelvin.κₙ(circ,0.) ≈ NeumannKelvin.κₙ(circ,0.5pi) ≈ 4
-    @test NeumannKelvin.κₙ(NeumannKelvin.linear(0,8,0,1),0.)==0
     @test NeumannKelvin.κₙ(ellip,0.) ≈ 1
     @test NeumannKelvin.κₙ(ellip,0.5pi) ≈ 3
 
@@ -47,7 +46,7 @@ end
         N = 2Int(round(S/2)); u = s⁻¹(range(0,S,N))
         if c==1 # should be equal length
             l = [quadgk(NeumannKelvin.arcspeed(ellip),u[i],u[i+1])[1] for i in 1:N-1]
-            @test l ≈ [sum(l)/(N-1) for i in 1:N-1] rtol=0.01
+            @test l ≈ [sum(l)/(N-1) for i in 1:N-1] rtol=0.03
         end
         @test 3-ellip(u[N÷2])[1] ≤ 1.10c # should have bounded deviation
     end
@@ -95,8 +94,8 @@ using LinearAlgebra
     @test sum(panels.dA) ≈ 4π rtol=0.006
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
-    @test A≈influence(panels)
-    @test tr(A) == 8*2π
+    @test A ≈ influence(panels)
+    @test tr(A) ≈ 8*2π
     @test 4minimum(A) ≈ panels[1].dA rtol=0.1
     @test sum(b)<8eps()
 

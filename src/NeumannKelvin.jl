@@ -5,7 +5,7 @@ using Reexport
 @reexport using TypedTables,StaticArrays
 Base.adjoint(t::Table) = permutedims(t)
 @reexport using ForwardDiff: derivative,gradient
-@reexport using LinearAlgebra: ×,⋅,tr
+@reexport using LinearAlgebra: ×,⋅,tr,norm
 
 # Quadrature functions & utilities
 include("quad.jl")
@@ -32,10 +32,10 @@ and the `vectors` are plotted extending from each panel center.
 
 # Details
 
-If Plots is loaded, the panels are visualized with colored markers and the 
+If Plots is loaded, the panels are visualized with colored markers and the
 vectors are grey lines.
 
-If a Makie library is loaded, the panels are visualized as two triangles extending 
+If a Makie library is loaded, the panels are visualized as two triangles extending
 to the corners, and the vectors are colored 3D arrows.
 
 # Example

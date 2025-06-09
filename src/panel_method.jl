@@ -1,14 +1,14 @@
-""" source(x,a) 
+""" source(x,a)
 
 Green function `G(x)` for a source at position `a`.
 """
-source(x,a) = -1/hypot(x-a...)
+source(x,a) = -1/norm(x-a)
 
 using ForwardDiff: value, partials, Dual
 """
     ∫G(x,p;d²=4)
 
-Approximate integral `∫ₚ G(x,x')ds'` over source panel `p`. 
+Approximate integral `∫ₚ G(x,x')ds'` over source panel `p`.
 
 A 2x2 quadrature is used when `|x-p.x|²≤d²p.dA`, otherwise it uses the midpoint.
 """
@@ -17,19 +17,19 @@ function ∫G(d::AbstractVector{<:Dual{Tag}},p;d²=4,kwargs...) where Tag
     value(d) ≠ p.x && return _∫G(d,p;d²) # use auto-diff
     Dual{Tag}(0.,2π*stack(partials.(d))*p.n...) # enforce ∇∫G(x,x)=2πn̂
 end
-_∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : 0.25p.dA*sum(source(ξ,x) for x in p.x₄)
+_∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : sum(dA*source(ξ,x) for (dA,x) in zip(p.dA₄,p.x₄))
 
-""" 
+"""
     ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = Aᵢⱼ
 
 Normal velocity influence of panel `pⱼ` on `pᵢ`.
 """
 ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = derivative(t->ϕ(pᵢ.x+t*pᵢ.n,pⱼ;kwargs...),0.)
 
-""" 
+"""
    influence(panels;kwargs...) = ∂ₙϕ.(panels,panels';kwargs...) = A
 
-Normal velocity influence matrix. 
+Normal velocity influence matrix.
 Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
 """
 influence(panels;kwargs...) = influence!(Array{Float64}(undef,length(panels),length(panels)),panels;kwargs...)
@@ -64,7 +64,7 @@ end
 """
     added_mass(panels;kwargs...)
 
-Added mass matrix mᵢⱼ = -∫ₛ Φᵢ(x) nⱼ da for a set of `panels`, where Φᵢ is the 
+Added mass matrix mᵢⱼ = -∫ₛ Φᵢ(x) nⱼ da for a set of `panels`, where Φᵢ is the
 potential due to unit motion in direction i.
 Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
 """

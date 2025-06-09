@@ -123,9 +123,8 @@ normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
 """
     deviation = distance from panel center to plane defined by the corners
 """
-function deviation(x,xᵤᵥ)
-    a =   0.5xᵤᵥ[1,1]+0.5xᵤᵥ[1,2] # plane base
-    l = a-0.5xᵤᵥ[2,1]-0.5xᵤᵥ[2,2] # vector to plane top
-    norm(x-a-l*(x-a)'l/l'l)       # distance from center
+function deviation(p)
+    a =   0.5p.xᵤᵥ[1,1]+0.5p.xᵤᵥ[1,2] # plane base
+    l = a-0.5p.xᵤᵥ[2,1]-0.5p.xᵤᵥ[2,2] # vector to plane top
+    hypot((p.x-a-l*(p.x-a)'l/l'l...)) # distance from center
 end
-deviation(p::NamedTuple) = deviation(p.x,p.xᵤᵥ)

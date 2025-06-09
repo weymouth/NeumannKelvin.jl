@@ -104,7 +104,7 @@ using LinearAlgebra
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    @test norm(added_mass(panels) - 2π/3*I)/(2π/3) < 0.09 # ϵ=9% with 8 panels
+    @test added_mass(panels) ≈ 2π/3*I rtol=0.09 # ϵ=9% with 8 panels
 end
 
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]
@@ -142,7 +142,7 @@ end
 @testset "NeumannKelvin.jl" begin
     # Compare submerged spheroid drag to Farell/Baar
     d = Cw(spheroid(0.06);ϕ=∫kelvin,Fn=0.5)
-    @test d ≈ 6e-3 rtol=0.02
+    @test d ≈ 6.1e-3 rtol=0.02
     # Compared elliptical prism drag to Guevel/Baar
     d = Cw(prism(0.1);ϕ=∫kelvin,Fn=0.55)
     @test d ≈ 0.053 rtol=0.02

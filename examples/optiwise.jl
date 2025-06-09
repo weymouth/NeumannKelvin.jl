@@ -5,7 +5,7 @@ tvec = [false,true,true] # transpose a few patches for best results
 h=(10,5) # set "largest" panel size
 panels = mapreduce(vcat,eachindex(patches)) do i
     (hᵤ,hᵥ) = tvec[i] ? reverse(h) : h
-    panelize(patches[i];hᵤ,hᵥ,transpose=tvec[i],checkarea=true)
+    panelize(patches[i];hᵤ,hᵥ,transpose=tvec[i])
 end
 using GLMakie
 viz(panels,panels.dA/prod(h),vectors=nothing,colormap=:ice,label="dA/hᵤhᵥ")

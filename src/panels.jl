@@ -92,6 +92,7 @@ arcspeed(r) = u->norm(derivative(r,u))
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
 
 const Δg,Δx = SA[-0.5/√3,0.5/√3],SA[-0.5,0.5]
+using HCubature
 """
     measure_panel(S,u,v,du,dv;flip=false) -> (x,n̂,dA,x₄)
 
@@ -99,19 +100,18 @@ Measures a parametric surface function `S` for a `u,v ∈ [u±0.5du]×[v±0.5dv]
 Returns center point `x`, the unit normal `n`, the surface area `dA`, and the 2x2
 Gauss-point locations `x₄`. Setting `flip=true` flips the panel to point the other way.
 """
-function measure_panel(S,u,v,du,dv;flip=false,checkarea=false)
-    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;checkarea)
+function measure_panel(S,u,v,du,dv;flip=false)
+    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du)
     # get properties at center
     x,n = S(u,v),normal(S,u,v)
     # get 2x2 Gauss-points
     x₄ = S.(u .+ du*Δg, v .+ dv*Δg')
-    dA = sum(normal.(S, u .+ du*Δg, v .+ dv*Δg', true))*du*dv/4
     # get corners
     xᵤᵥ = S.(u .+ du*Δx, v .+ dv*Δx')
     nᵤᵥ = normal.(S, u .+ du*Δx, v .+ dv*Δx')
-    # check area and fallback if needed
-    dAtri = tri_area(xᵤᵥ...)
-    (dAtri > dA || checkarea && abs(normal(S,u,v,true)*du*dv-dA)/dA > 0.05) && (dA=dAtri)
+    # fancy area
+    dA = hcubature(uv->normal(S,uv...,true),
+        SA[u-0.5du,v-0.5dv],SA[u+0.5du,v+0.5dv],rtol=0.01)[1]
     # combine everything into named tuple
     (x=x, n=n, dA=dA, x₄=x₄, xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
 end
@@ -120,11 +120,6 @@ function normal(S,u,v,mag=false)
     m = norm(n)
     mag ? m : n/m
 end
-"""
-    tri_area = area based on splitting the panel into 2 triangles
-"""
-tri_area(a,b,c,d) = 0.5norm((b-a)×(c-a))+0.5norm((b-d)×(c-d))
-tri_area(p::NamedTuple) = tri_area(p.xᵤᵥ...)
 """
     deviation = distance from panel center to plane defined by the corners
 """

@@ -99,22 +99,26 @@ Measures a parametric surface function `S` for a `u,v ∈ [u±0.5du]×[v±0.5dv]
 Returns center point `x`, the unit normal `n`, the surface area `dA`, and the 2x2
 Gauss-point locations `x₄`. Setting `flip=true` flips the panel to point the other way.
 """
-function measure_panel(S,u,v,du,dv;flip=false)
-    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du)
+function measure_panel(S,u,v,du,dv;flip=false,checkarea=false)
+    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;checkarea)
     # get properties at center
-    x,(n,dA) = S(u,v),normal(S,u,v,true)
+    x,n = S(u,v),normal(S,u,v)
     # get 2x2 Gauss-points
     x₄ = S.(u .+ du*Δg, v .+ dv*Δg')
+    dA = sum(normal.(S, u .+ du*Δg, v .+ dv*Δg', true))*du*dv/4
     # get corners
     xᵤᵥ = S.(u .+ du*Δx, v .+ dv*Δx')
     nᵤᵥ = normal.(S, u .+ du*Δx, v .+ dv*Δx')
+    # check area and fallback if needed
+    dAtri = tri_area(xᵤᵥ...)
+    (dAtri > dA || checkarea && abs(normal(S,u,v,true)*du*dv-dA)/dA > 0.05) && (dA=dAtri)
     # combine everything into named tuple
-    (x=x, n=n, dA=dA*du*dv, x₄=x₄, xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
+    (x=x, n=n, dA=dA, x₄=x₄, xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
 end
 function normal(S,u,v,mag=false)
     n = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
     m = norm(n)
-    mag ? (n/m,m) : n/m
+    mag ? m : n/m
 end
 """
     tri_area = area based on splitting the panel into 2 triangles

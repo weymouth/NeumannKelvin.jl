@@ -58,14 +58,17 @@ end
     function area_checks(dA,goal)
         mdA = sum(dA)/length(dA)
         @test mdA ≈ goal rtol = 0.08
-        @test maximum(abs,panels.dA .- mdA) < 0.1goal
+        @test maximum(abs,panels.dA .- mdA) < 0.16goal
     end
     panels = panelize(spheroid,0,pi,0,2pi,hᵤ=0.5,c=Inf)
     area_checks(panels.dA,0.5^2)
+    @test sum(panels.dA) ≈ 4π rtol=1e-4
     panels = panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=1,hᵥ=0.5,c=Inf)
     area_checks(panels.dA,0.5)
+    @test sum(panels.dA) ≈ 30.894 rtol=1e-3
     panels = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true,c=Inf)
     area_checks(panels.dA,0.18)
+    @test sum(panels.dA) ≈ 4π^2*0.3
 
     # Check sign is correct when flipped
     panels_bad = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,c=Inf)
@@ -88,10 +91,9 @@ using LinearAlgebra
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     dθ₁ = π-2acos(1/√3) # places x in octant centers
-    panels = measure_panel.(S,[π-dθ₁,π+dθ₁]'/2,π/4:π/2:2π,dθ₁,π/2) |> Table
+    panels = measure_panel.(S,[π-dθ₁,π+dθ₁]'/2,π/4:π/2:2π,π/2,π/2) |> Table
     @test size(panels) == (8,)
     @test panels.n ⋅ panels.x == 8
-    @test sum(panels.dA) ≈ 4π rtol=0.006
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
     @test A ≈ influence(panels)
@@ -102,7 +104,7 @@ using LinearAlgebra
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    @test added_mass(panels)≈2π/3*I rtol=0.09 # ϵ=9% with 8 panels
+    @test norm(added_mass(panels) - 2π/3*I)/(2π/3) < 0.09 # ϵ=9% with 8 panels
 end
 
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]

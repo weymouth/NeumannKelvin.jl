@@ -17,7 +17,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
     # Check inputs and get output type
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))
     (hᵤ≤0 || hᵥ≤0 || c≤0) && throw(ArgumentError("Need positive `hᵤ,hᵥ,c`. Got $hᵤ,$hᵥ,$c."))
-    !(typeof(surface(0.5u₀+0.5u₁,0.5v₀+0.5v₁)) <: SVector) && throw(ArgumentError("`surface` function doesn't return an SVector."))
+    !(typeof(surface(u₀,v₀)) <: SVector) && throw(ArgumentError("`surface` function doesn't return an SVector."))
     init = typeof(measure_panel(surface,0.5u₀+0.5u₁,0.5v₀+0.5v₁,u₁-u₀,v₁-v₀))[]
 
     # Get arcslength and inverse along bottom & top edges

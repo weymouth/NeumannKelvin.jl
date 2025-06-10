@@ -85,6 +85,7 @@ end
     @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,0,hᵤ=0.2)
     @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,0,0,2pi,hᵤ=0.2)
     @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=0.1)
+    @test_throws ArgumentError panelize((u,v)->[u,u,v])
 end
 
 using LinearAlgebra
@@ -107,6 +108,14 @@ using LinearAlgebra
     Ma = added_mass(panels)
     @test Ma ≈ 2π/3*I rtol=0.1 # ϵ=10% with 8 panels
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
+
+    #check reflections
+    ∫G₃(x,p) = ∫G(x,p)+∫G(x,reflect(p))                  # 2 ∫G calls
+    @test influence(panels[1:4],ϕ=∫G₃)\b[1:4] ≈ q[1:4]   # ×4² coeffs => 32 ∫G calls
+    ∫G₂₃(x,p) = ∫G₃(x,p)+∫G₃(x,reflect(p,SA[1,-1,1]))    # 2² calls
+    @test influence(panels[1:2],ϕ=∫G₂₃)\b[1:2] ≈ q[1:2]  # ×2² coeffs => 16 calls
+    ∫G₁₂₃(x,p) = ∫G₂₃(x,p)-∫G₂₃(x,reflect(p,SA[-1,1,1])) # 2³ calls
+    @test influence(panels[1:1],ϕ=∫G₁₂₃)\b[1:1] ≈ q[1:1] # ×1 coeff(!) => 8 calls
 end
 
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]

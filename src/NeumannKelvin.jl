@@ -10,18 +10,18 @@ Base.adjoint(t::Table) = permutedims(t)
 # Quadrature functions & utilities
 include("quad.jl")
 
-# Green function definitions
-using ThreadsX # multi-threaded map,sum, & foreach
-include("kelvin.jl")
-export ∫kelvin
-
-# Panels
+# Panel set-up
 include("panels.jl")
 export measure_panel,panelize
 
 # Panel method
+using ThreadsX # multi-threaded map,sum, & foreach
 include("panel_method.jl")
-export ∂ₙϕ,influence,ζ,steady_force,added_mass
+export ∫G,∂ₙϕ,influence,ζ,steady_force,added_mass
+
+# Kelvin Green function definitions
+include("kelvin.jl")
+export ∫kelvin,reflect
 
 # Plotting fallback
 """

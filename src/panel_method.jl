@@ -8,7 +8,7 @@ using ForwardDiff: value, partials, Dual
 """
     ∫G(x,p;d²=4)
 
-Approximate integral `∫ₚ G(x,x')ds'` over source panel `p`.
+Approximate integral `∫ₚ G(x,x')da'` over source panel `p`.
 
 A 2x2 quadrature is used when `|x-p.x|²≤d²p.dA`, otherwise it uses the midpoint.
 """
@@ -17,7 +17,7 @@ function ∫G(d::AbstractVector{<:Dual{Tag}},p;d²=4,kwargs...) where Tag
     value(d) ≠ p.x && return _∫G(d,p;d²) # use auto-diff
     Dual{Tag}(0.,2π*stack(partials.(d))*p.n...) # enforce ∇∫G(x,x)=2πn̂
 end
-_∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : sum(dA*source(ξ,x) for (dA,x) in zip(p.dA₄,p.x₄))
+_∫G(ξ,p;d²) = sum(abs2,ξ-p.x)>d²*p.dA ? p.dA*source(ξ,p.x) : sum(w*source(ξ,x) for (w,x) in zip(p.w₄,p.x₄))
 
 """
     ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = Aᵢⱼ

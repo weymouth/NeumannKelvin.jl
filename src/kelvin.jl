@@ -6,8 +6,9 @@ Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
 ∫kelvin(x,p;d²=0,Fn=1) = ∫G(x,p;d²)-∫G(x,reflect(p);d²)+p.dA*kelvin(x,reflect(p.x);Fn)
 # _∫kelvin(ξ,p;dz,Fn) = p.x[3]-ξ[3]<dz*Fn^2 ? 0.25*p.dA*sum(kelvin(ξ,x;Fn) for x in p.x₄) : p.dA*kelvin(ξ,p.x;Fn)
-reflect(p::NamedTuple,flip=SA[1,1,-1]) = (x=reflect(p.x,flip),n=reflect(p.n,flip),dA=p.dA,x₄=reflect.(p.x₄,Ref(flip)))
-reflect(x::SVector{3},flip=SA[1,1,-1]) = x.*flip
+reflect(x::AbstractVector,flip=SA[1,1,-1]) = x.*flip   # reflect vectors
+reflect(x::Number,flip) = x                            # ...not scalars
+reflect(p,flip=SA[1,1,-1]) = map(q->reflect(q,flip),p) # map over everything else
 
 """
     kelvin(ξ,α;Fn)

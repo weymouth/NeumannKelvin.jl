@@ -94,29 +94,31 @@ secant(Δ)=(Δ.b-Δ.a)/Δ.I
 const Δg,Δx = SA[-0.5/√3,0.5/√3],SA[-0.5,0.5]
 using HCubature
 """
-    measure_panel(S,u,v,du,dv;flip=false) -> (x,n,dA,x₄,dA₄)
+    measure_panel(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,x₄,w₄)
 
-Measures a parametric surface function `S` for a `u,v ∈ [u±0.5du]×[v±0.5dv]` panel.
+Measures a parametric surface function `S(u,v)` for a `u,v ∈ [u±0.5du]×[v±0.5dv]` panel.
 Returns centroid point and normal `x,n`, the surface area `dA`, and the 2x2 Gauss-point
-locations and weights `x₄,dA₄`. Setting `flip=true` flips the panel to point the other way.
+locations and weights `x₄,w₄`. Panel corner data `xᵤᵥ,nᵤᵥ` is used only for plotting.
+ - `flip=true` flips the panel to point the other way.
+ - `cubature=true` uses an adaptive "h-cubature" for `dA,x,n`.
 """
 function measure_panel(S,u,v,du,dv;flip=false,cubature=false)
     flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;cubature)
     # get 2x2 Gauss-points
     x₄ = S.(u .+ du*Δg, v .+ dv*Δg')
     n₄ = normal.(S, u .+ du*Δg, v .+ dv*Δg')
-    dA₄ = norm.(n₄)*du*dv/4
+    dA₄ = norm.(n₄)*du*dv/4 # area-scaled weights (normalized at end)
     # get area
     cube(f) = hcubature(f,SA[u-0.5du,v-0.5dv],SA[u+0.5du,v+0.5dv],rtol=0.01)[1]
     dA = cubature ? cube(uv->norm(normal(S,uv...))) : sum(dA₄)
     # get centroid
-    x = cubature ? cube(uv->S(uv...)*norm(normal(S,uv...)))/dA : sum(x₄ .* dA₄)/sum(dA₄)
+    x = cubature ? cube(uv->S(uv...)*norm(normal(S,uv...)))/dA : sum(x₄ .* dA₄)/dA
     n = cubature ? normalize(cube(uv->normal(S,uv...))) : normalize(sum(n₄))
     # get corners (only for pretty plots)
     xᵤᵥ = S.(u .+ du*Δx, v .+ dv*Δx')
     nᵤᵥ = normalize.(normal.(S, u .+ du*Δx, v .+ dv*Δx'))
     # combine everything into named tuple
-    (x=x, n=n, dA=dA, x₄=x₄, dA₄ = dA₄ .* dA/sum(dA₄), xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
+    (x=x, n=n, dA=dA, x₄=x₄, w₄=dA₄ .* dA/sum(dA₄), xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))

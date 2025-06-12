@@ -4,7 +4,6 @@ authors = ["Gabriel Weymouth"]
 version = "0.6.0"
 
 [deps]
-DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 FastChebInterp = "cf66c380-9a80-432c-aff8-4f9c79c0bdde"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
@@ -29,7 +28,6 @@ NeumannKelvinNURBSExt = "NURBS"
 NeumannKelvinPlotsExt = "Plots"
 
 [compat]
-DataInterpolations = "8.0.1"
 FastChebInterp = "1"
 FastGaussQuadrature = "1"
 ForwardDiff = "0.10"

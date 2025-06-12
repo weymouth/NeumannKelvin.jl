@@ -17,4 +17,17 @@ function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=0.3panels.n,
     Colorbar(fig[1, 2];colorrange=clims, kwargs...)
     fig
 end
+
+function viz_split(data)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+
+    for item in data
+        low, high = item.low, item.high
+        rect = Point2f.([low, SA[high[1],low[2]], high, SA[low[1],high[2]]])
+        color = RGBf(rand(), rand(), rand())
+        poly!(ax, rect, color=color, strokewidth=1, strokecolor=:black)
+    end
+    fig
+end
 end

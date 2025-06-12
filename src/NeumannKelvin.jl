@@ -12,7 +12,7 @@ include("quad.jl")
 
 # Panel set-up
 include("panels.jl")
-export measure_panel,panelize
+export measurepanel,surfsplit,panelize
 
 # Panel method
 using ThreadsX # multi-threaded map,sum, & foreach
@@ -44,7 +44,7 @@ to the corners, and the vectors are colored 3D arrows.
     viz(panels)
 """
 viz(args...; kwargs...) = @warn "Pass a Table() of panels and load Plots or GLMakie (terminal/VSCode) or WGLMakie (browser/Pluto) for viz functionality."
-components(data) = ntuple(i -> getindex.(data, i), 3)
+components(data::AbstractVector{T}) where T<:SVector{n} where n = ntuple(i -> getindex.(data, i), n)
 export viz,components
 
 end

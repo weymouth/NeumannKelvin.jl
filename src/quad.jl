@@ -1,12 +1,13 @@
 using FastGaussQuadrature
-const xlag,wlag = gausslaguerre(4)
-const xgl,wgl = gausslegendre(16)
+const xlag,wlag = SVector{4}.(gausslaguerre(4))
+const xgl,wgl = SVector{16}.(gausslegendre(16))
+const xgl4,wgl4 = SVector{4}.(gausslegendre(4))
 """
     quadgl(f,a=-1,b=1;x,w)
 
 Approximate ∫f(x)dx from x=[a,b] using the Gauss-Legendre weights and points `w,x`.
 """
-function quadgl(f;x,w) 
+function quadgl(f;x,w)
     I = 0.
     @simd for i in eachindex(x,w)
         I += w[i]*f(x[i])
@@ -18,9 +19,9 @@ quadgl(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
     complex_path(g,dg,rngs,skp)
 
 Estimate the integral `imag(∫exp(im*g(t))dt)` from `t=[-∞,∞]` using
-a complex path. The finite phase ranges `rngs` are integrated along 
-the real line using Gauss-Legendre. The range endpoints where 
-`flag=true` are integrated in the complex-plane using the phase 
+a complex path. The finite phase ranges `rngs` are integrated along
+the real line using Gauss-Legendre. The range endpoints where
+`flag=true` are integrated in the complex-plane using the phase
 derivative `dg(t)=g'` and numerical stationary phase.
 """
 function complex_path(g,dg,rngs)
@@ -40,7 +41,7 @@ using Roots
 """
     nsp(h₀,g,dg)
 
-Integrate the contributions of `imag(∫exp(im*g(h))dh)` from 
+Integrate the contributions of `imag(∫exp(im*g(h))dh)` from
 `h = [h₀,∞]` using numerical stationary phase. The complex path
 is found as the roots of `ϵ(h)=g(h)-g(h₀)-im*p=0` where `p`
 are Gauss-Laguerre integration points.
@@ -57,8 +58,8 @@ end
 """
     finite_ranges(S,g,Δg,R;atol=0.3Δg)
 
-Return a set of flagged ranges `(a₁,f₁),(a₂,f₂)` around each point `a∈S∈[-R,R]` 
-such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap and 
+Return a set of flagged ranges `(a₁,f₁),(a₂,f₂)` around each point `a∈S∈[-R,R]`
+such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap and
 the flag `fᵢ=true` if `aᵢ` is off those limits.
 """
 function finite_ranges(S,g,Δg,R;atol=0.3Δg)

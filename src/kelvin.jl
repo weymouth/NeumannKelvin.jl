@@ -1,14 +1,21 @@
 """
-    ∫kelvin(x,p;Fn,d²=0)
+    ∫kelvin(ξ,p;Fn)
 
-Integrated NeumanKelvin disturbance of panel `p` on point `x`. 
+Integrated NeumanKelvin disturbance of panel `p` on point `ξ`.
 Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
-∫kelvin(x,p;d²=0,Fn=1) = ∫G(x,p;d²)-∫G(x,reflect(p);d²)+p.dA*kelvin(x,reflect(p.x);Fn)
-# _∫kelvin(ξ,p;dz,Fn) = p.x[3]-ξ[3]<dz*Fn^2 ? 0.25*p.dA*sum(kelvin(ξ,x;Fn) for x in p.x₄) : p.dA*kelvin(ξ,p.x;Fn)
+function ∫kelvin(ξ,p;Fn=1,d²=4,λ=0.2/Fn^2)
+    p′ = reflect(p)            # image panel
+    ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
+    # Get scaled panel size for wave phase filter
+    sx,sy,_ = λ.*adiff.(extrema.(components(p′.xᵤᵥ)))
+    # Integrate filtered NeumanKelvin disturbance
+    ϕ+quadgl(x->kelvin(ξ,x;Fn,sx,sy),x=p′.x₄,w=p′.w₄)
+end
 reflect(x::SVector,flip=SA[1,1,-1]) = x.*flip          # reflect vectors
 reflect(x::Number,flip) = x                            # ...not scalars
 reflect(p,flip=SA[1,1,-1]) = map(q->reflect(q,flip),p) # map over everything else
+adiff(p::NTuple{2}) = abs(p[2]-p[1])
 
 """
     kelvin(ξ,α;Fn)
@@ -17,14 +24,14 @@ Green Function `G(ξ)` for a source at reflected position `α` moving with `Fn�
 excluding the sink term. The free surface is at z=0, the coordinates are scaled by L, 
 and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;Fn=1,z_max=-0.,kwargs...)
+function kelvin(ξ,α;Fn=1,kwargs...)
     # Check inputs
     α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
     # nearfield, and wavelike disturbance
-    x,y,z = (ξ-α)/Fn^2; z = min(z,z_max)
-    return (nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
+    x,y,z = (ξ-α)/Fn^2; z = min(z,-0.)
+    return (nearfield(x,y,z)+wavelike(x,abs(y),z;kwargs...))/Fn^2
 end
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987 
@@ -66,16 +73,19 @@ end
 Ngk(X::SVector{3}) = Ngk(X...)
 
 # Wave-like disturbance 
-function wavelike(x,y,z,ltol=-5log(10))
+function wavelike(x,y,z,ltol=-5log(10);sx=0,sy=0)
     (x≥0 || z≤ltol) && return 0.
     R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
     S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
-    rngs = finite_ranges(S,t->g(x,y,t),2π,R) # finite phase ranges
-    4complex_path(t->g(x,y,t)-im*z*(1+t^2),  # complex phase
-                  t->dg(x,y,t)-2im*z*t,rngs) # it's derivative
+    rngs = finite_ranges(S,t->g(x,y,t),2π,R)   # finite phase ranges
+    g̃(t) = g(x,y,t)+im*(g⁴(sx,sy,t)-z*(1+t^2)) # filtered complex phase
+    dg̃(t) = dg(x,y,t)+im*(dg⁴(sx,sy,t)-2z*t)   # it's derivative
+    4complex_path(g̃,dg̃,rngs)
 end
 g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative
+g⁴(x,y,t) = (x+y*t)^4*(1+t^2)^2           # phase to the 4th
+dg⁴(x,y,t) = 4(x+y*t)^3*(1+t^2)*(y+t*x+2y*t^2) # it's derivative
 ⎷(z::Complex) = π/2≤angle(z)≤π ? -√z : √z # move √ branch-cut
 ⎷(x) = √x
 

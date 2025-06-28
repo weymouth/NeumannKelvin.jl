@@ -7,15 +7,17 @@ Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 function ∫kelvin(ξ,p;Fn=1,d²=4,λ=0.2/Fn^2)
     p′ = reflect(p)            # image panel
     ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
-    # Get scaled panel size for wave phase filter
-    sx,sy,_ = λ.*adiff.(extrema.(components(p′.xᵤᵥ)))
+    # Get scaled panel size for wavenumber filter
+    sy = min(λ*extent(components(p′.xᵤᵥ,2)),0.05)
+    # Are we far from p′?
+    far = (p′.x[3]-ξ[3])^2>d²*p.dA*Fn^4 && sum(abs2,p′.x-ξ)>d²*p.dA
     # Integrate filtered NeumanKelvin disturbance
-    ϕ+quadgl(x->kelvin(ξ,x;Fn,sx,sy),x=p′.x₄,w=p′.w₄)
+    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn,sy)
+    ϕ+quadgl(x->kelvin(ξ,x;Fn,sy),x=p′.x₄,w=p′.w₄)
 end
 reflect(x::SVector,flip=SA[1,1,-1]) = x.*flip          # reflect vectors
 reflect(x::Number,flip) = x                            # ...not scalars
 reflect(p,flip=SA[1,1,-1]) = map(q->reflect(q,flip),p) # map over everything else
-adiff(p::NTuple{2}) = abs(p[2]-p[1])
 
 """
     kelvin(ξ,α;Fn)
@@ -77,17 +79,17 @@ function wavelike(x,y,z,ltol=-5log(10);sx=0,sy=0)
     (x≥0 || z≤ltol) && return 0.
     R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
     S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
-    rngs = finite_ranges(S,t->g(x,y,t),2π,R)   # finite phase ranges
-    g̃(t) = g(x,y,t)+im*(g⁴(sx,sy,t)-z*(1+t^2)) # filtered complex phase
-    dg̃(t) = dg(x,y,t)+im*(dg⁴(sx,sy,t)-2z*t)   # it's derivative
+    rngs = finite_ranges(S,t->g(x,y,t),2π,R)     # finite phase ranges
+    g̃(t) = g(x,y,t)+im*(λ(sy,t)-z*(1+t^2))       # filtered complex phase
+    dg̃(t) = dg(x,y,t)+im*(dλ(sy,t)-2z*t)         # it's derivative
     4complex_path(g̃,dg̃,rngs)
 end
 g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative
-g⁴(x,y,t) = (x+y*t)^4*(1+t^2)^2           # phase to the 4th
-dg⁴(x,y,t) = 4(x+y*t)^3*(1+t^2)*(y+t*x+2y*t^2) # it's derivative
 ⎷(z::Complex) = π/2≤angle(z)≤π ? -√z : √z # move √ branch-cut
 ⎷(x) = √x
+λ(y,t) = (y*t)^4*(1+t^2)^2                # penalty = (Δ₂k₂)⁴
+dλ(y,t) = 4y^4*t^3*(1+3t^2+2t^4)          # it's derivative
 
 # Return points where dg=0
 function stationary_points(x,y) 

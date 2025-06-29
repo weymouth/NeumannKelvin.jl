@@ -12,7 +12,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
                   transpose=false,flip=false,N_max=1000,verbose=false,kwargs...)
     # Transpose arguments u,v -> v,u
     transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,
-                                 transpose=false,flip=!flip,N_max,kwargs...)
+                                 transpose=false,flip=!flip,N_max,verbose,kwargs...)
 
     # Check inputs and get output type
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))

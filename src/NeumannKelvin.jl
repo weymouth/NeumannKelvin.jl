@@ -45,7 +45,7 @@ to the corners, and the vectors are colored 3D arrows.
 """
 viz(args...; kwargs...) = @warn "Pass a Table() of panels and load Plots or GLMakie (terminal/VSCode) or WGLMakie (browser/Pluto) for viz functionality."
 components(data,i) = getindex.(data, i)
-components(data::AbstractVector{SVector{n}}) where n = components.(Ref(data),1:n)
+components(data::AbstractVector{S}) where {S<:SVector{n}} where n = components.(Ref(data),1:n)
 extent(a) = (p = extrema(a); p[2]-p[1])
 export viz,components,extent
 

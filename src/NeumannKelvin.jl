@@ -21,7 +21,7 @@ export ∫G,∂ₙϕ,influence,ζ,steady_force,added_mass
 
 # Kelvin Green function definitions
 include("kelvin.jl")
-export ∫kelvin,reflect
+export ∫kelvin,reflect,makethin,onwaterline
 
 # Plotting fallback
 """

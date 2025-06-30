@@ -150,11 +150,19 @@ function prism(h;q=0.2,Z=1)
     dz = Z/round(Z/h)
     measure_panel.(S,dθ:dθ:2π,-(0.5dz:dz:Z)',dθ,dz) |> Table
 end
+wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure_panel.(
+    (u,v)->SA[u-0.5,2B*u*(1-u)*(v)*(2-v),D*(v-1)],
+    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) .|> makethin |> Table
+
 @testset "NeumannKelvin.jl" begin
+    # Compare thin-ship wigley to Tuck 2008
+    panels = wigley(0.05)
+    d = Cw(panels;ϕ=∫kelvin,Fn=0.51)/0.5sum(panels.dA)
+    @test d ≈ 0.0088-0.0035 rtol=0.02 # Remove ITTC Cf
     # Compare submerged spheroid drag to Farell/Baar
-    d = Cw(spheroid(0.06);ϕ=∫kelvin,Fn=0.5)
+    d = Cw(spheroid(0.04,AR=6);ϕ=∫kelvin,Fn=0.5,λ=0)
     @test d ≈ 6e-3 rtol=0.02
-    # Compared elliptical prism drag to Guevel/Baar
+    # Compare elliptical prism drag to Guevel/Baar
     d = Cw(prism(0.1);ϕ=∫kelvin,Fn=0.55)
     @test d ≈ 0.053 rtol=0.02
 end

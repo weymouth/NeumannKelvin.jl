@@ -1,11 +1,9 @@
-using NeumannKelvin,Plots,FastGaussQuadrature,HCubature,JLD2,FileIO,ColorSchemes
+using NeumannKelvin,Plots,ColorSchemes
 
 # Thin-ship theory projects allocation points on the centerplane
-makethin(p,flat=SA[1,0,1]) = (x=reflect(p.x,flat),n=p.n,dA=p.dA,x₄=reflect(p.x₄,flat),w₄=p.w₄,xᵤᵥ=p.xᵤᵥ,nᵤᵥ=p.nᵤᵥ)
 wigley(hᵤ;B=0.01,D=0.05,hᵥ=hᵤ/D) = measure_panel.(
     (u,v)->SA[u-0.5,2B*u*(1-u)*(v)*(2-v),D*(v-1)],
     0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) .|> makethin |> Table
-onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 
 # Convergence test at low Fn (hardest case)
 ps = (ϕ=∫kelvin,Fn=0.2); B=0.01

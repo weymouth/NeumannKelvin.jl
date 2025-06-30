@@ -55,41 +55,32 @@ plot!(xlabel="b/a",title="Spheroid M components")
 savefig("spheroid_ma_sweep.png")
 
 # Submerged spheroid wavemaking drag convergence
-function spheroid(h;L=1,Z=-1/8,r=1/12)
-    S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-    dθ₁ = π/round(π*0.5/h)
-    mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
-        dx = dθ₁*hypot(r*cos(θ₁),0.5L*sin(θ₁)) # use |T₁| instead of h
-        dθ₂ = 2π/max(3,round(2π*r*sin(θ₁)/dx)) # ...to set T₂ spacing
-        param_props.(S,θ₁,0.5dθ₂:dθ₂:2π,dθ₁,dθ₂)
-    end |> Table
+function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,θ₂₀=0,kwargs...)
+    S(θ₁,θ₂) = SA[0.5L*cos(θ₁),-r*sin(θ₂)*sin(θ₁),r*cos(θ₂)*sin(θ₁)+Z]
+    panelize(S,0,π,θ₂₀,π,hᵤ=h*√AR,hᵥ=h/√AR;kwargs...)
 end
-Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
-kwargs = (ϕ=∫kelvin,Fn=0.5)
+Cw(panels;kwargs...) = 2steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
+∫kelvin_S₂(x,p;kwargs...) = ∫kelvin(x,p;kwargs...)+∫kelvin(x,reflect(p,SA[1,-1,1]);kwargs...)
+kwargs = (ϕ=∫kelvin_S₂,Fn=0.5)
 dat = map(0.5 .^ (3:0.5:5.5)) do h
 	panels = spheroid(h)
-	@show h,length(panels)
-	(h=h,N=length(panels),d²0=Cw(panels;d²=0,kwargs...),d²4=Cw(panels;d²=4,kwargs...))
+	(h=h,N=length(panels),Cw=Cw(panels;kwargs...))
 end |> Table
 CSV.write("submerged_spheroid_Cw_convergence.csv",dat)
 
-function surface_spheroid(h,r)
-	S(θ₁,θ₂) = SA[0.5cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)]
-	dθ₁ = π/round(π*0.5/h) # azimuth step size
-    x,y,z = eachrow(S.(0.5dθ₁:dθ₁:π,0)|>stack) # WL
-	x,y,mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
-		dθ₂ = π/max(2,round(2π*r*sin(θ₁)/h)) # adaptive polar step
-		param_props.(S,θ₁,π+0.5dθ₂:dθ₂:2π,dθ₁,dθ₂,tangentplane=false)
-	end |> Table
-end
+kwargs = (ϕ=∫kelvin_S₂,Fn=0.2)
+plot(); for (n,c) in zip((20,40,60,80),colorschemes[:Blues_4])
+	h = 1/n; panels = spheroid(h,N_max=1500)
+    q = influence(panels;kwargs...)\components(panels.n,1);
+    plot!(-2:h:1,x->ζ(x,0,q,panels;kwargs...),label="h/L=1/$n";c)
+end; plot!(xlabel="x/L",ylabel="ζg/U²",ylims=(-0.15,0.15))
+savefig("submerged_spheroid_WL_convergence.png")
 
-using Plots
-kwargs = (ϕ=∫kelvin,Fn=0.4,d²=4,dz=10); plot(title=kwargs); r=1/12
-for h in 2r .* (0.5 .^ (1.75:0.25:2.75))
-	xp,yp,panels = surface_spheroid(h,r)
-    q = influence(panels;kwargs...)\first.(panels.n)
-	d = round(1000steady_force(q,panels;kwargs...)[1],digits=4)
-	plot!(xp,ζ.(xp,yp,Ref(q),Ref(panels);kwargs...),label="$(length(panels)) panels, 10³Cw=$d")
-end
-plot!(xlabel="x/L",ylabel="ζ/L")
-savefig("waterline_Cw_convergence.png")
+# kwargs = (ϕ=∫kelvin_S₂,Fn=0.3);
+# plot(title=kwargs); for (n,c) in zip((20,40,60,80),colorschemes[:Blues_4])
+# 	h = 1/n; panels = spheroid(h,Z=0,θ₂₀=0.5π,N_max=1500)
+#     q = influence(panels;kwargs...)\first.(panels.n)
+# 	x,y,_ = filter(onwaterline,panels) |> p -> components(p.x)
+# 	plot!(x,ζ.(x,y,Ref(q),Ref(panels);kwargs...),label="$(length(panels)) panels";c)
+# end; plot!(xlabel="x/L",ylabel="ζg/U²")
+# savefig("piercing_spheroid_WL_convergence.png")

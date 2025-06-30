@@ -4,17 +4,18 @@
 Integrated NeumanKelvin disturbance of panel `p` on point `ξ`.
 Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
-function ∫kelvin(ξ,p;Fn=1,d²=4)
+function ∫kelvin(ξ,p;Fn=1,d²=4,Γ=false,λ=0.2/Fn^2)
     p′ = reflect(p)            # image panel
-    # ∫G(ξ,p;d²)-∫G(ξ,p′;d²)+p′.dA*kelvin(ξ,p′.x;Fn)
     ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
-    # # Get scaled panel size for wavenumber filter
-    # sy = min(λ*extent(components(p′.xᵤᵥ,2)),0.05)
+    # Get scaled panel size for wavenumber filter
+    sy = min(λ*extent(components(p′.xᵤᵥ,2)),0.05)
     # Are we far from p′?
     far = (p′.x[3]-ξ[3])^2>d²*p.dA*Fn^4 && sum(abs2,p′.x-ξ)>d²*p.dA
+    # WL countour contribution
+    c = (Γ && onwaterline(p)) ? 1 - abs(p.n[1]) : one(p.n[1])
     # Integrate filtered NeumanKelvin disturbance
-    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn)
-    ϕ+quadgl(x->kelvin(ξ,x;Fn),x=p′.x₄,w=p′.w₄)
+    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn,sy)*c
+    ϕ+quadgl(x->kelvin(ξ,x;Fn,sy),x=p′.x₄,w=p′.w₄)*c
 end
 reflect(x::SVector,flip=SA[1,1,-1]) = x.*flip          # reflect vectors
 reflect(x::Number,flip) = x                            # ...not scalars

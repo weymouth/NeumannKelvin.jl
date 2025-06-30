@@ -1,6 +1,6 @@
 using NeumannKelvin
-function spheroid(h;Z=-0.5,L=1,r=0.25)
-	S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
+function spheroid(h;L=1,r=0.25)
+	S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)]
 	dθ₁ = π/round(π*0.5L/h)
 	odd = true
 	mapreduce(vcat,0.5dθ₁:dθ₁:π) do θ₁
@@ -11,11 +11,11 @@ function spheroid(h;Z=-0.5,L=1,r=0.25)
 end
 
 # Sphere area and added mass convergence
-using LinearAlgebra,Plots
+using LinearAlgebra,Plots,ColorSchemes
 r = 0.5
 A,V = 4π*r^2,4π/3*r^3
 dat = map(0.5 .^(1:6)) do h
-	panels = spheroid(h;Z=0,r)
+	panels = spheroid(h;r)
 	Aerror = sum(panels.dA)/A-1
 	Merror = added_mass(panels)./0.5V-I
 	(log2h=log2(h),normAerror=norm(Aerror),normMerror=norm(Merror))
@@ -31,7 +31,7 @@ savefig("sphere_convergence.png")
 r = 0.5/6.01
 V = 4π/3*0.5*r^2; sol = [0.045 0 0; 0 0.918 0; 0 0 0.918]
 dat = map(0.5 .^(0:0.5:3)) do h
-	panels = spheroid(h*2r;Z=0,r)
+	panels = spheroid(h*2r;r)
 	Merror = added_mass(panels)./V-sol
 	(log2h=log2(h),normMerror=norm(Merror))
 end |> Table
@@ -42,7 +42,7 @@ savefig("spheroid_ma_convergence.png")
 
 # Spheroid added_mass sweep
 dat = map(0.025:0.025:0.75) do r
-	panels = spheroid(min(0.5r,1/8);Z=0,r)
+	panels = spheroid(min(0.5r,1/8);r)
 	V = 4π/3*0.5*r^2
 	M = added_mass(panels)./V
 	(r=r,M₁₁=M[1,1],M₂₂=M[2,2],M₃₃=M[3,3])
@@ -76,11 +76,11 @@ plot(); for (n,c) in zip((20,40,60,80),colorschemes[:Blues_4])
 end; plot!(xlabel="x/L",ylabel="ζg/U²",ylims=(-0.15,0.15))
 savefig("submerged_spheroid_WL_convergence.png")
 
-# kwargs = (ϕ=∫kelvin_S₂,Fn=0.3);
-# plot(title=kwargs); for (n,c) in zip((20,40,60,80),colorschemes[:Blues_4])
-# 	h = 1/n; panels = spheroid(h,Z=0,θ₂₀=0.5π,N_max=1500)
-#     q = influence(panels;kwargs...)\first.(panels.n)
-# 	x,y,_ = filter(onwaterline,panels) |> p -> components(p.x)
-# 	plot!(x,ζ.(x,y,Ref(q),Ref(panels);kwargs...),label="$(length(panels)) panels";c)
-# end; plot!(xlabel="x/L",ylabel="ζg/U²")
-# savefig("piercing_spheroid_WL_convergence.png")
+kwargs = (ϕ=∫kelvin_S₂,Fn=0.3,Γ=true)
+plot(title=kwargs); for (n,c) in zip((40,60,80,100),colorschemes[:Blues_4])
+	h = 1/n; panels = spheroid(h,Z=0,θ₂₀=0.5π,N_max=1500)
+    q = influence(panels;kwargs...)\first.(panels.n)
+	x,y,_ = filter(onwaterline,panels) |> p -> components(p.x)
+	plot!(x,ζ.(x,y,Ref(q),Ref(panels);kwargs...),label="$(length(panels)) panels";c)
+end; plot!(xlabel="x/L",ylabel="ζg/U²",ylims=(-0.5,0.5))
+savefig("piercing_spheroid_WL_convergence.png")

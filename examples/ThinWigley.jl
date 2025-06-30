@@ -17,7 +17,7 @@ for (n,c) in zip((20,40,60),colorschemes[:Blues_4][2:end])
     A = influence(panels;ps...);
     q = A\components(panels.n,1);
     plot!(x,x->ζ(x,0,q,panels;ps...)*ps.Fn^2/B,label="h/L=1/$n",
-        line=(2,:dash),marker=(3);c)
+        line=(2,:dash),marker=(2,),markerstrokewidth=0;c)
 end;plot!(xlabel="x/L",ylabel="ζ/B",title="Thin Wigley, Fn=$(ps.Fn)")
 savefig("examples/thinWigleyWL.png")
 
@@ -25,7 +25,8 @@ begin
     h = 1/40; panels = wigley(h;B,D=0.05)
     A = influence(panels;ps...);
     q = A\components(panels.n,1);
-    contour(-2:h:1,-1:0.5h:1,(x,y)->ζ(x,y,q,panels;ps...)*ps.Fn^2/B)
+    contour(-2:h:1,-1:0.5h:1,(x,y)->ζ(x,y,q,panels;ps...)*ps.Fn^2/B,
+            cmap=:seismic,clims=(-0.07,0.07),levels=(10))
     plot!([-0.5,0.5],[0,0],c=:grey,line=(3),label="")
 end;plot!(aspectratio=:equal,xlabel="x/L",ylabel="y/L",colorbartitle="ζ/B")
 savefig("examples/thinWigleyζ.png")

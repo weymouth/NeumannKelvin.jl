@@ -1,14 +1,25 @@
 """
-    ∫kelvin(x,p;Fn,d²=0)
+    ∫kelvin(ξ,p;Fn)
 
-Integrated NeumanKelvin disturbance of panel `p` on point `x`. 
+Integrated Neumann-Kelvin disturbance of panel `p` on point `ξ`.
 Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
-∫kelvin(x,p;d²=0,Fn=1) = ∫G(x,p;d²)-∫G(x,reflect(p);d²)+p.dA*kelvin(x,reflect(p.x);Fn)
-# _∫kelvin(ξ,p;dz,Fn) = p.x[3]-ξ[3]<dz*Fn^2 ? 0.25*p.dA*sum(kelvin(ξ,x;Fn) for x in p.x₄) : p.dA*kelvin(ξ,p.x;Fn)
-reflect(x::SVector,flip=SA[1,1,-1]) = x.*flip          # reflect vectors
-reflect(x::Number,flip) = x                            # ...not scalars
-reflect(p,flip=SA[1,1,-1]) = map(q->reflect(q,flip),p) # map over everything else
+function ∫kelvin(ξ,p;Fn=1,d²=4)
+    p′ = reflect(p,3)          # image panel above z=0
+    ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
+    # Are we far from p′?
+    far = (p′.x[3]-ξ[3])^2>d²*p.dA*Fn^4 && sum(abs2,p′.x-ξ)>d²*p.dA
+    # Set filter width and integrate
+    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn)
+    ϕ+quadgl(x->kelvin(ξ,x;Fn),x=p′.x₄,w=p′.w₄)
+end
+reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],3)...]
+reflect(x::SVector{n},flip::SVector{n}) where n = x.*flip # reflect vectors
+reflect(x::Number,flip) = x                               # ...not scalars
+reflect(p,flip) = map(q->reflect(q,flip),p)               # map over everything else
+makethin(p,flat=SA[1,0,1]) = (x=reflect(p.x,flat),n=p.n,dA=p.dA,
+    x₄=reflect(p.x₄,flat),w₄=p.w₄,xᵤᵥ=p.xᵤᵥ,nᵤᵥ=p.nᵤᵥ)
+onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 
 """
     kelvin(ξ,α;Fn)

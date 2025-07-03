@@ -12,7 +12,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
                   transpose=false,flip=false,N_max=1000,verbose=false,kwargs...)
     # Transpose arguments u,v -> v,u
     transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,
-                                 transpose=false,flip=!flip,N_max,kwargs...)
+                                 transpose=false,flip=!flip,N_max,verbose,kwargs...)
 
     # Check inputs and get output type
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))
@@ -92,7 +92,6 @@ arcspeed(r) = u->norm(derivative(r,u))
 κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
 
-const Δg,Δx = SA[-0.5/√3,0.5/√3],SA[-0.5,0.5]
 using HCubature
 """
     measure_panel(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,x₄,w₄)
@@ -103,21 +102,21 @@ locations and weights `x₄,w₄`. Panel corner data `xᵤᵥ,nᵤᵥ` is used o
  - `flip=true` flips the panel to point the other way.
  - `cubature=true` uses an adaptive "h-cubature" for `dA,x,n`.
 """
-function measure_panel(S,u,v,du,dv;flip=false,cubature=false)
+function measure_panel(S,u,v,du,dv;flip=false,cubature=false,Δg=SA[-1/√3,1/√3],wg=SA[1,1])
     flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;cubature)
-    # get 2x2 Gauss-points
-    x₄ = S.(u .+ du*Δg, v .+ dv*Δg')
-    n₄ = normal.(S, u .+ du*Δg, v .+ dv*Δg')
-    dA₄ = norm.(n₄)*du*dv/4 # area-scaled weights (normalized at end)
+    # get Gauss-points
+    x₄ = S.(u .+ 0.5du*Δg, v .+ 0.5dv*Δg')
+    n₄ = normal.(S, u .+ 0.5du*Δg, v .+ 0.5dv*Δg')
+    dA₄ = norm.(n₄).*(wg*wg')*du*dv/4 # area-scaled weights
     # get area
     cube(f) = hcubature(f,SA[u-0.5du,v-0.5dv],SA[u+0.5du,v+0.5dv],rtol=0.01)[1]
     dA = cubature ? cube(uv->norm(normal(S,uv...))) : sum(dA₄)
     # get centroid
     x = cubature ? cube(uv->S(uv...)*norm(normal(S,uv...)))/dA : sum(x₄ .* dA₄)/dA
-    n = cubature ? normalize(cube(uv->normal(S,uv...))) : normalize(sum(n₄))
+    n = cubature ? normalize(cube(uv->normal(S,uv...))) : normalize(sum(n₄.*(wg*wg')))
     # get corners (only for pretty plots)
-    xᵤᵥ = S.(u .+ du*Δx, v .+ dv*Δx')
-    nᵤᵥ = normalize.(normal.(S, u .+ du*Δx, v .+ dv*Δx'))
+    xᵤᵥ = S.(u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]')
+    nᵤᵥ = normalize.(normal.(S, u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]'))
     # combine everything into named tuple
     (x=x, n=n, dA=dA, x₄=x₄, w₄=dA₄ .* dA/sum(dA₄), xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
 end

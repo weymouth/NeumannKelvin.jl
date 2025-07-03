@@ -4,23 +4,22 @@
 Integrated Neumann-Kelvin disturbance of panel `p` on point `ξ`.
 Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
-function ∫kelvin(ξ,p;Fn=1,d²=4,λ=0.2/Fn^2)
-    p′ = reflect(p)            # image panel
+function ∫kelvin(ξ,p;Fn=1,d²=4)
+    p′ = reflect(p,3)          # image panel above z=0
     ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
     # Are we far from p′?
     far = (p′.x[3]-ξ[3])^2>d²*p.dA*Fn^4 && sum(abs2,p′.x-ξ)>d²*p.dA
     # Set filter width and integrate
-    sy = min(λ*extent(components(p.xᵤᵥ,2)),0.05)
-    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn,sy)
-    ϕ+quadgl(x->kelvin(ξ,x;Fn,sy),x=p′.x₄,w=p′.w₄)
+    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn)
+    ϕ+quadgl(x->kelvin(ξ,x;Fn),x=p′.x₄,w=p′.w₄)
 end
-reflect(x::SVector,flip=SA[1,1,-1]) = x.*flip          # reflect vectors
-reflect(x::Number,flip) = x                            # ...not scalars
-reflect(p,flip=SA[1,1,-1]) = map(q->reflect(q,flip),p) # map over everything else
+reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],3)...]
+reflect(x::SVector{n},flip::SVector{n}) where n = x.*flip # reflect vectors
+reflect(x::Number,flip) = x                               # ...not scalars
+reflect(p,flip) = map(q->reflect(q,flip),p)               # map over everything else
 makethin(p,flat=SA[1,0,1]) = (x=reflect(p.x,flat),n=p.n,dA=p.dA,
     x₄=reflect(p.x₄,flat),w₄=p.w₄,xᵤᵥ=p.xᵤᵥ,nᵤᵥ=p.nᵤᵥ)
 onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
-dl(p) = onwaterline(p) ? extent(components(p.xᵤᵥ,2))*abs(p.n[1])/p.dA : 0.
 
 """
     kelvin(ξ,α;Fn)
@@ -78,13 +77,13 @@ end
 Ngk(X::SVector{3}) = Ngk(X...)
 
 # Wave-like disturbance 
-function wavelike(x,y,z,ltol=-5log(10);sx=0,sy=0)
+function wavelike(x,y,z,ltol=-5log(10))
     (x≥0 || z≤ltol) && return 0.
     R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
     S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
     rngs = finite_ranges(S,t->g(x,y,t),2π,R)     # finite phase ranges
-    g̃(t) = g(x,y,t)+im*(λ(sy,t)-z*(1+t^2))       # filtered complex phase
-    dg̃(t) = dg(x,y,t)+im*(dλ(sy,t)-2z*t)         # it's derivative
+    g̃(t) = g(x,y,t)-im*z*(1+t^2) # filtered complex phase
+    dg̃(t) = dg(x,y,t)-im*2z*t    # it's derivative
     4complex_path(g̃,dg̃,rngs)
 end
 g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function

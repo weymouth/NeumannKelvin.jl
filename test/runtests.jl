@@ -156,9 +156,10 @@ wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure_panel.(
 
 @testset "NeumannKelvin.jl" begin
     # Compare thin-ship wigley to Tuck 2008
-    ∫kelvin₀(x,p;kwargs...) = ∫kelvin(x,reflect(p,SA[1,0,1]);kwargs...)
+    ∫kelvin₀(x,p;kwargs...) = ∫kelvin(x,reflect(p,SA[1,0,1]);kwargs...) # centerplane
     panels = wigley(0.05)
-    d = steady_force(components(panels.n,1)/2π,panels;ϕ=∫kelvin₀,Fn=0.51)[1]/sum(panels.dA)
+    q = components(panels.n,1)/2π # thin-ship source density
+    d = steady_force(q,panels;ϕ=∫kelvin₀,Fn=0.51)[1]/sum(panels.dA)
     @test d ≈ 0.0088-0.0036 rtol=0.02 # Remove ITTC Cf
     # Compare submerged spheroid drag to Farell/Baar
     d = Cw(spheroid(0.04,AR=6);ϕ=∫kelvin,Fn=0.5)

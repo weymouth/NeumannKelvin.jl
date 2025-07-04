@@ -17,8 +17,6 @@ reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],3
 reflect(x::SVector{n},flip::SVector{n}) where n = x.*flip # reflect vectors
 reflect(x::Number,flip) = x                               # ...not scalars
 reflect(p,flip) = map(q->reflect(q,flip),p)               # map over everything else
-makethin(p,flat=SA[1,0,1]) = (x=reflect(p.x,flat),n=p.n,dA=p.dA,
-    x₄=reflect(p.x₄,flat),w₄=p.w₄,xᵤᵥ=p.xᵤᵥ,nᵤᵥ=p.nᵤᵥ)
 onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 
 """

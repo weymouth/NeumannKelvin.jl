@@ -9,7 +9,7 @@ function ∫kelvin(ξ,p;Fn=1,d²=4)
     ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
     # Are we far from p′?
     far = (p′.x[3]-ξ[3])^2>d²*p.dA*Fn^4 && sum(abs2,p′.x-ξ)>d²*p.dA
-    # Set filter width and integrate
+    # Integrate
     far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn)
     ϕ+quadgl(x->kelvin(ξ,x;Fn),x=p′.x₄,w=p′.w₄)
 end
@@ -17,8 +17,6 @@ reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],3
 reflect(x::SVector{n},flip::SVector{n}) where n = x.*flip # reflect vectors
 reflect(x::Number,flip) = x                               # ...not scalars
 reflect(p,flip) = map(q->reflect(q,flip),p)               # map over everything else
-makethin(p,flat=SA[1,0,1]) = (x=reflect(p.x,flat),n=p.n,dA=p.dA,
-    x₄=reflect(p.x₄,flat),w₄=p.w₄,xᵤᵥ=p.xᵤᵥ,nᵤᵥ=p.nᵤᵥ)
 onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 
 """
@@ -28,14 +26,14 @@ Green Function `G(ξ)` for a source at reflected position `α` moving with `Fn�
 excluding the sink term. The free surface is at z=0, the coordinates are scaled by L, 
 and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;Fn=1,kwargs...)
+function kelvin(ξ,α;Fn=1,z_max=-1/25)
     # Check inputs
     α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
     # nearfield, and wavelike disturbance
-    x,y,z = (ξ-α)/Fn^2; z = min(z,-0.)
-    return (nearfield(x,y,z)+wavelike(x,abs(y),z;kwargs...))/Fn^2
+    x,y,z = (ξ-α)/Fn^2; z = min(z,z_max)
+    return (nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
 end
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987 

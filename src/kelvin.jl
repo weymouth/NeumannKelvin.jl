@@ -4,14 +4,14 @@
 Integrated Neumann-Kelvin disturbance of panel `p` on point `ξ`.
 Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
-function ∫kelvin(ξ,p;Fn=1,d²=4)
+function ∫kelvin(ξ,p;Fn=1,d²=4,z_max=-1/50Fn^2)
     p′ = reflect(p,3)          # image panel above z=0
     ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
     # Are we far from p′?
     far = (p′.x[3]-ξ[3])^2>d²*p.dA*Fn^4 && sum(abs2,p′.x-ξ)>d²*p.dA
     # Integrate
-    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn)
-    ϕ+quadgl(x->kelvin(ξ,x;Fn),x=p′.x₄,w=p′.w₄)
+    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn,z_max)
+    ϕ+quadgl(x->kelvin(ξ,x;Fn,z_max),x=p′.x₄,w=p′.w₄)
 end
 reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],3)...]
 reflect(x::SVector{n},flip::SVector{n}) where n = x.*flip # reflect vectors
@@ -26,7 +26,7 @@ Green Function `G(ξ)` for a source at reflected position `α` moving with `Fn�
 excluding the sink term. The free surface is at z=0, the coordinates are scaled by L, 
 and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;Fn=1,z_max=-1/25)
+function kelvin(ξ,α;Fn=1,z_max=-0.)
     # Check inputs
     α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))

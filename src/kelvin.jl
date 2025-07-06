@@ -1,22 +1,26 @@
 """
-    ∫kelvin(ξ,p;Fn)
+    ∫Gₙₖ(ξ,p;ℓ,d²=4,contour=false,filter=contour)
 
-Integrated Neumann-Kelvin disturbance of panel `p` on point `ξ`.
-Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
+Integrated Neumann-Kelvin disturbance of panel `p` on point `ξ` with Froude length `ℓ ≡ U²/g`.
+Uses `∫G` for the source and reflected sink potentials and `kelvin` for the free-surface potential. 
+A 2x2 quadrature is used when `|x-p.x|² , (z-p.z)²/ℓ² ≤ d²p.dA`, otherwise it uses the midpoint.
+If `contour=true` and `p` touches the `z=0` plane, the contribution from the waterline contour 
+`ϕ₀=ℓ∫Gₙₖn₁dy` is included. See Noblesse 1983 and Barr & Price 1988.
+If `filter=true`, the `z_max` argument to `kelvin` is used to filter waves too small for the panel.
 """
-function ∫kelvin(ξ,p;Fn=1,d²=4,χ=false,filter=χ)
+function ∫kelvin(ξ,p;ℓ=1,d²=4,contour=false,filter=contour)
     p′ = reflect(p,3)          # image panel above z=0
     ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
     # Are we far from p′?
-    far = (p′.x[3]-ξ[3])^2>d²*p.dA*Fn^4 && sum(abs2,p′.x-ξ)>d²*p.dA
+    far = (p′.x[3]-ξ[3])^2>d²*p.dA*ℓ^2 && sum(abs2,p′.x-ξ)>d²*p.dA
     # Are we on the waterline?
     dx,dy,_ = extent.(components(p.xᵤᵥ)); dl = hypot(dx,dy)
-    c = χ && onwaterline(p) ? 1-Fn^2*dy^2/dl/p.dA : 1.
-    c < 0 && @warn "Waterline Fn²∫χn₁dy > ∫da" maxlog=2
+    c = contour && onwaterline(p) ? 1-ℓ*dy^2/(dl*p.dA) : 1.
+    c < 0 && @warn "Waterline ℓ∫n₁dy > ∫da" maxlog=2
     # Integrate with z' ≤ -dl to filter unresolved waves
-    z_max = filter ? -dl/Fn^2 : -0.
-    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn,z_max)*c
-    ϕ+quadgl(x->kelvin(ξ,x;Fn,z_max),x=p′.x₄,w=p′.w₄)*c
+    z_max = filter ? -dl : -0.
+    far && return ϕ+p′.dA*kelvin(ξ,p′.x;ℓ,z_max)*c
+    ϕ+quadgl(x->kelvin(ξ,x;ℓ,z_max),x=p′.x₄,w=p′.w₄)*c
 end
 reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],3)...]
 reflect(x::SVector{n},flip::SVector{n}) where n = x.*flip # reflect vectors
@@ -25,20 +29,20 @@ reflect(p,flip) = map(q->reflect(q,flip),p)               # map over everything 
 onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 
 """
-    kelvin(ξ,α;Fn)
+    kelvin(ξ,α;ℓ)
 
-Green Function `G(ξ)` for a source at reflected position `α` moving with `Fn≡U/√gL`
-excluding the sink term. The free surface is at z=0, the coordinates are scaled by L, 
-and the apparent velocity direction is Û=[-1,0,0]. See Noblesse 1981.
+Green Function `G(ξ)` for a traveling source at reflected position `α` with Froude length `ℓ ≡ U²/g`
+excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. 
+This function uses the Peterson formulation for the nearfield and waverlike terms; see Noblesse 1981.
 """
-function kelvin(ξ,α;Fn=1,z_max=-0.)
+function kelvin(ξ,α;ℓ=1,z_max=-0.)
     # Check inputs
     α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
     # nearfield, and wavelike disturbance
-    x,y,z = (ξ-α)/Fn^2; z = min(z,z_max)
-    return (nearfield(x,y,z)+wavelike(x,abs(y),z))/Fn^2
+    x,y,z = (ξ-α)/ℓ; z = min(z,z_max/ℓ)
+    return (nearfield(x,y,z)+wavelike(x,abs(y),z))/ℓ
 end
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987 

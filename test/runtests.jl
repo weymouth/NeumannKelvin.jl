@@ -152,13 +152,15 @@ function prism(h;q=0.2,Z=1)
 end
 wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure_panel.(
     (u,v)->SA[u-0.5,2B*u*(1-u)*(v)*(2-v),D*(v-1)],
-    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) .|> makethin |> Table
+    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) |> Table
 
 @testset "NeumannKelvin.jl" begin
     # Compare thin-ship wigley to Tuck 2008
+    ∫kelvin₀(x,p;kwargs...) = ∫kelvin(x,reflect(p,SA[1,0,1]);kwargs...) # centerplane
     panels = wigley(0.05)
-    d = Cw(panels;ϕ=∫kelvin,Fn=0.51)/0.5sum(panels.dA)
-    @test d ≈ 0.0088-0.0035 rtol=0.02 # Remove ITTC Cf
+    q = components(panels.n,1)/2π # thin-ship source density
+    d = steady_force(q,panels;ϕ=∫kelvin₀,Fn=0.51)[1]/sum(panels.dA)
+    @test d ≈ 0.0088-0.0036 rtol=0.02 # Remove ITTC Cf
     # Compare submerged spheroid drag to Farell/Baar
     d = Cw(spheroid(0.04,AR=6);ϕ=∫kelvin,Fn=0.5)
     @test d ≈ 6e-3 rtol=0.02

@@ -4,14 +4,19 @@
 Integrated Neumann-Kelvin disturbance of panel `p` on point `ξ`.
 Uses `∫G` for the source and reflected sink potentials. See `kelvin`.
 """
-function ∫kelvin(ξ,p;Fn=1,d²=4,z_max=-1/50Fn^2)
+function ∫kelvin(ξ,p;Fn=1,d²=4,χ=false,filter=χ)
     p′ = reflect(p,3)          # image panel above z=0
     ϕ = ∫G(ξ,p;d²)-∫G(ξ,p′;d²) # Rankine part
     # Are we far from p′?
     far = (p′.x[3]-ξ[3])^2>d²*p.dA*Fn^4 && sum(abs2,p′.x-ξ)>d²*p.dA
-    # Integrate
-    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn,z_max)
-    ϕ+quadgl(x->kelvin(ξ,x;Fn,z_max),x=p′.x₄,w=p′.w₄)
+    # Are we on the waterline?
+    dx,dy,_ = extent.(components(p.xᵤᵥ)); dl = hypot(dx,dy)
+    c = χ && onwaterline(p) ? 1-Fn^2*dy^2/dl/p.dA : 1.
+    c < 0 && @warn "Waterline Fn²∫χn₁dy > ∫da" maxlog=2
+    # Integrate with z' ≤ -dl to filter unresolved waves
+    z_max = filter ? -dl/Fn^2 : -0.
+    far && return ϕ+p′.dA*kelvin(ξ,p′.x;Fn,z_max)*c
+    ϕ+quadgl(x->kelvin(ξ,x;Fn,z_max),x=p′.x₄,w=p′.w₄)*c
 end
 reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],3)...]
 reflect(x::SVector{n},flip::SVector{n}) where n = x.*flip # reflect vectors

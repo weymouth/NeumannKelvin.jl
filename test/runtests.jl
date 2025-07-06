@@ -165,6 +165,6 @@ wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure_panel.(
     d = Cw(spheroid(0.04,AR=6);ϕ=∫kelvin,Fn=0.5)
     @test d ≈ 6e-3 rtol=0.02
     # Compare elliptical prism drag to Guevel/Baar
-    d = Cw(prism(0.1);ϕ=∫kelvin,Fn=0.55)
-    @test d ≈ 0.053 rtol=0.02
+    d = Cw(prism(0.1);ϕ=∫kelvin,Fn=0.55,χ=true)
+    @test d ≈ 0.042 rtol=0.02
 end

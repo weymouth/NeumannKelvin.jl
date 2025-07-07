@@ -55,20 +55,20 @@ plot!(xlabel="b/a",title="Spheroid M components")
 savefig("spheroid_ma_sweep.png")
 
 # Submerged spheroid wavemaking drag convergence
-function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,θ₂₀=0,kwargs...)
+function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,kwargs...)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),-r*sin(θ₂)*sin(θ₁),r*cos(θ₂)*sin(θ₁)+Z]
-    panelize(S,0,π,θ₂₀,π,hᵤ=h*√AR,hᵥ=h/√AR;kwargs...)
+    panelize(S,0,π,0,π,hᵤ=h*√AR,hᵥ=h/√AR;kwargs...)
 end
-Cw(panels;kwargs...) = 2steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
 ∫kelvin_S₂(x,p;kwargs...) = ∫kelvin(x,p;kwargs...)+∫kelvin(x,reflect(p,SA[1,-1,1]);kwargs...)
-kwargs = (ϕ=∫kelvin_S₂,Fn=0.5)
+Cw(panels;kwargs...) = 2steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
+kwargs = (ϕ=∫kelvin_S₂,ℓ=0.5^2)
 dat = map(0.5 .^ (3:0.5:5.5)) do h
 	panels = spheroid(h)
 	(h=h,N=length(panels),Cw=Cw(panels;kwargs...))
 end |> Table
 CSV.write("submerged_spheroid_Cw_convergence.csv",dat)
 
-kwargs = (ϕ=∫kelvin_S₂,Fn=0.2)
+kwargs = (ϕ=∫kelvin_S₂,ℓ=0.2^2)
 plot(); for (n,c) in zip((20,40,60,80),colorschemes[:Blues_4])
 	h = 1/n; panels = spheroid(h,N_max=1500)
     q = influence(panels;kwargs...)\components(panels.n,1);
@@ -76,11 +76,11 @@ plot(); for (n,c) in zip((20,40,60,80),colorschemes[:Blues_4])
 end; plot!(xlabel="x/L",ylabel="ζg/U²",ylims=(-0.15,0.15))
 savefig("submerged_spheroid_WL_convergence.png")
 
-kwargs = (ϕ=∫kelvin_S₂,Fn=0.3,Γ=true)
-plot(title=kwargs); for (n,c) in zip((40,60,80,100),colorschemes[:Blues_4])
-	h = 1/n; panels = spheroid(h,Z=0,θ₂₀=0.5π,N_max=1500)
-    q = influence(panels;kwargs...)\first.(panels.n)
-	x,y,_ = filter(onwaterline,panels) |> p -> components(p.x)
-	plot!(x,ζ.(x,y,Ref(q),Ref(panels);kwargs...),label="$(length(panels)) panels";c)
-end; plot!(xlabel="x/L",ylabel="ζg/U²",ylims=(-0.5,0.5))
-savefig("piercing_spheroid_WL_convergence.png")
+panels = spheroid(1/60)
+CwFn = map(0.15:0.05:1) do Fn
+	(Fn=Fn,Cw=Cw(panels;ϕ=∫kelvin_S₂,ℓ=Fn^2))
+end |> Table;
+CSV.write("submerged_spheroid_Cw_Fn.csv",CwFn)
+scatter(CwFn.Fn,CwFn.Cw,ylims=(0,1e-2),title="submerged spheroid wavemaking drag",
+    label=nothing,xlabel="U/√gL",ylabel="Fₓ/½ρU²L²")
+savefig("submerged_spheroid_Cw_Fn.png")

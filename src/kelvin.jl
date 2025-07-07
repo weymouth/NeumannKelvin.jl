@@ -1,7 +1,7 @@
 """
-    ∫Gₙₖ(ξ,p;ℓ,d²=4,contour=false,filter=contour)
+    ∫kelvin(ξ,p;ℓ,d²=4,contour=false,filter=contour)
 
-Integrated Neumann-Kelvin disturbance of panel `p` on point `ξ` with Froude length `ℓ ≡ U²/g`.
+Integrated disturbance of traveling submerged panel `p` on point `ξ` with Froude length `ℓ ≡ U²/g`.
 Uses `∫G` for the source and reflected sink potentials and `kelvin` for the free-surface potential. 
 A 2x2 quadrature is used when `|x-p.x|² , (z-p.z)²/ℓ² ≤ d²p.dA`, otherwise it uses the midpoint.
 If `contour=true` and `p` touches the `z=0` plane, the contribution from the waterline contour 
@@ -32,8 +32,7 @@ onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
     kelvin(ξ,α;ℓ)
 
 Green Function `G(ξ)` for a traveling source at reflected position `α` with Froude length `ℓ ≡ U²/g`
-excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. 
-This function uses the Peterson formulation for the nearfield and waverlike terms; see Noblesse 1981.
+excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. See Noblesse 1981.
 """
 function kelvin(ξ,α;ℓ=1,z_max=-0.)
     # Check inputs
@@ -88,17 +87,14 @@ function wavelike(x,y,z,ltol=-5log(10))
     (x≥0 || z≤ltol) && return 0.
     R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
     S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
-    rngs = finite_ranges(S,t->g(x,y,t),2π,R)     # finite phase ranges
-    g̃(t) = g(x,y,t)-im*z*(1+t^2) # filtered complex phase
-    dg̃(t) = dg(x,y,t)-im*2z*t    # it's derivative
-    4complex_path(g̃,dg̃,rngs)
+    rngs = finite_ranges(S,t->g(x,y,t),2π,R) # finite phase ranges
+    4complex_path(t->g(x,y,t)-im*z*(1+t^2),  # complex phase
+                  t->dg(x,y,t)-2im*z*t,rngs) # it's derivative
 end
 g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative
 ⎷(z::Complex) = π/2≤angle(z)≤π ? -√z : √z # move √ branch-cut
 ⎷(x) = √x
-λ(y,t) = (y*t)^4*(1+t^2)^2                # penalty = (Δ₂k₂)⁴
-dλ(y,t) = 4y^4*t^3*(1+3t^2+2t^4)          # it's derivative
 
 # Return points where dg=0
 function stationary_points(x,y) 

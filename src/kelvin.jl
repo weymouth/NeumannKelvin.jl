@@ -41,10 +41,10 @@ function kelvin(ξ,α;ℓ=1,z_max=-0.)
 
     # nearfield, and wavelike disturbance
     x,y,z = (ξ-α)/ℓ; z = min(z,z_max/ℓ)
-    return (nearfield(x,y,z)+wavelike(x,abs(y),z))/ℓ
+    return (nearfield(x,y,z)+wavelike(x,y,z))/ℓ
 end
 
-# Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987 
+# Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987
 function nearfield(x::T,y::T,z::T)::T where T
     if Threads.atomic_xchg!(isfirstcall, false)
         @warn "Creating Chebychev polynomials takes a moment"
@@ -82,7 +82,7 @@ function Ngk(x,y,z)
 end
 Ngk(X::SVector{3}) = Ngk(X...)
 
-# Wave-like disturbance 
+# Wave-like disturbance
 function wavelike(x,y,z,ltol=-5log(10))
     (x≥0 || z≤ltol) && return 0.
     R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
@@ -97,8 +97,8 @@ dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative
 ⎷(x) = √x
 
 # Return points where dg=0
-function stationary_points(x,y) 
-    y==0 && return (0.,) 
+function stationary_points(x,y)
+    abs(y)≤√eps() && return (0.,)
     diff = x^2-8y^2
     diff≤√eps() ? (-x/4y,) : @. (-x+(-1,1)*√diff)/4y
 end

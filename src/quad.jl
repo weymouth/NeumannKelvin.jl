@@ -44,15 +44,18 @@ Integrate the contributions of `imag(∫exp(im*g(h))dh)` from
 is found as the roots of `ϵ(h)=g(h)-g(h₀)-im*p=0` where `p`
 are Gauss-Laguerre integration points.
 """
-@fastmath function nsp(h₀::T,g,dg;xlag=xlag,wlag=wlag,atol=1e-3)::T where T
+@fastmath function nsp(h₀,g,dg;xlag=xlag,wlag=wlag,atol=1e-3)
     # Sum over complex Gauss-Laguerre points
-    s,g₀,h = zero(T),g(h₀),h₀+0im
+    g₀,h = promote(g(h₀),h₀)
+    s = zero(typeof(imag(g₀)))
     for (p,w) in zip(xlag,wlag)
         h = find_zero((h->g(h)-g₀-im*p,dg),h,Roots.Newton();atol)
         s += w*imag(exp(im*g₀)*im/dg(h))
     end;s
 end
 
+import ForwardDiff: value
+value(t::Tuple) = value.(t)
 """
     finite_ranges(S,g,Δg,R;atol=0.3Δg)
 
@@ -76,5 +79,5 @@ function finite_ranges(S,g,Δg,R;atol=0.3Δg)
         p,q = fz(a,a/2+b/2),fz(b,a/2+b/2)
         !p[2] && (q=p); !q[2] && (p=q)
         (fz(a,-R),p),(q,fz(b,R))
-    end
+    end |> value # ranges can't be Duals
 end

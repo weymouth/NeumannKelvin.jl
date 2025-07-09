@@ -11,7 +11,7 @@ function quadgl(f;x,w)
         I += w[i]*f(x[i])
     end; I
 end
-quadgl(f,a,b;x=xgl,w=wgl) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
+quadgl(f,a,b;x=SA[-1/√3,1/√3],w=SA[1,1]) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
     complex_path(g,dg,rngs,skp)
@@ -57,13 +57,13 @@ end
 import ForwardDiff: value
 value(t::Tuple) = value.(t)
 """
-    finite_ranges(S,g,Δg,R;atol=0.3Δg)
+    finite_ranges(S,g,Δg,R;atol=0.1Δg)
 
 Return a set of flagged ranges `(a₁,f₁),(a₂,f₂)` around each point `a∈S∈[-R,R]`
 such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap and
 the flag `fᵢ=true` if `aᵢ` is off those limits.
 """
-function finite_ranges(S,g,Δg,R;atol=0.3Δg)
+function finite_ranges(S,g,Δg,R;atol=0.1Δg)
     function fz(a,b)
         !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(1,b)),Order1();atol),true
         abs(g(a)-g(b))≤Δg+atol && return b,false

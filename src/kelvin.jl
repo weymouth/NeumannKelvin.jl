@@ -34,14 +34,14 @@ onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 Green Function `G(ξ)` for a traveling source at reflected position `α` with Froude length `ℓ ≡ U²/g`
 excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;ℓ=1,z_max=-0.)
+function kelvin(ξ,α;ℓ=1,z_max=-0.,ltol=-5log(10))
     # Check inputs
     α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
     # nearfield, and wavelike disturbance
     x,y,z = (ξ-α)/ℓ; z = min(z,z_max/ℓ)
-    return (nearfield(x,y,z)+wavelike(x,y,z))/ℓ
+    return (nearfield(x,y,z)+wavelike(x,y,z,ltol))/ℓ
 end
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987
@@ -87,9 +87,9 @@ function wavelike(x,y,z,ltol=-5log(10))
     (x≥0 || z≤ltol) && return 0.
     R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
     S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
-    rngs = finite_ranges(S,t->g(x,y,t),2π,R) # finite phase ranges
+    rngs = finite_ranges(S,t->g(x,y,t),-0.5ltol,R) # finite phase ranges
     4complex_path(t->g(x,y,t)-im*z*(1+t^2),  # complex phase
-                  t->dg(x,y,t)-2im*z*t,rngs) # it's derivative
+                  t->dg(x,y,t)-2im*z*t,rngs,exp(ltol)) # it's derivative
 end
 g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative

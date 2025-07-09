@@ -1,33 +1,32 @@
 using NeumannKelvin,Plots,ColorSchemes
 using NeumannKelvin: kelvin
 
-kelvin_contour(θ;x=-5,y=10/√8,z=-1,R=5) = kelvin(SA[x,y,z],SA[R*cos(θ),R*sin(θ),0])
-plot(range(0,2π,2^9),θ->kelvin_contour(θ,z=-0.1))
+R = 15
+# kelvin_contour(θ;x=-2R,y=R/√2,z=-R/100,R=R) = kelvin(SA[x,y,z],SA[R*cos(θ),R*sin(θ),0],ltol=-8log(10))
+kelvin_contour(θᵢ,θⱼ=3.;x=R*cos(θⱼ),y=R*sin(θⱼ),z=-R/100,R=R) = kelvin(SA[x,y,z],SA[R*cos(θᵢ),R*sin(θᵢ),0],ltol=-8log(10))
+using QuadGK,FastGaussQuadrature
+x,w = gausslegendre(10)
+plot(range(0,2π,2^12),kelvin_contour)
+θᵢ = 0.3; plot(range(θᵢ-0.1,θᵢ+0.1,1000),kelvin_contour)
+quadgk_count(kelvin_contour,θᵢ-0.05,θᵢ+0.05)
+NeumannKelvin.quadgl(kelvin_contour,θᵢ-0.05,θᵢ+0.05;x,w)
 
-N = 2^11
+N = 2^12
 θ = range(0,2π,N+1)[1:end-1]
-plt=plot(xlabel="θ",ylabel="G");
-for (z,c) in zip((-0.05,-0.1,-0.2),reverse(colorschemes[:Reds_4]))
-    G = kelvin_contour.(θ;z)
-    plot!(θ,G,label="z=$z";c)
-end;plot!(xlims=(0.9,1.1))
+begin; plt=plot(xlabel="θ",ylabel="G")
+for (z,c) in zip((-0.01,-0.02,-0.04),reverse(colorschemes[:Reds_4]))
+    G = kelvin_contour.(θ;z=z*R)
+    plot!(θ,G,label="z/R=$z";c)
+end;end;plt
 savefig("contour_G.png")
 
-dk = 1/5
-plt=plot(ylims=(1e-7,2),yscale=:log10,ylabel="|Ĝ|",xlabel="k");
-for (z,c) in zip((-0.05,-0.1,-0.2),reverse(colorschemes[:Reds_4]))
-    G = kelvin_contour.(θ;z)
+using FFTW
+begin;plt=plot(ylims=(1e-8,1),yscale=:log10,ylabel="|FFT(G)|",
+               xlims=(1e-1,100),xscale=:log10,xlabel="-kz");
+for (z,c) in zip((-0.01,-0.02,-0.04),reverse(colorschemes[:Reds_4]))
+    G = kelvin_contour.(θ;z=z*R)
     Ĝ = fft(G)
-    plot!(0:dk:(N÷2-1)*dk,abs.(Ĝ[1:N÷2])/N,label="z=$z";c)
-    plot!([-π/2z,-3π/z],[1e-2,1e-7]; line = (3,:black), label=nothing)
-    plot!([-π/2z,-3π/z],[1e-2,1e-7]; line = (2,:dash,c), label=nothing)
-    scatter!([-π/z],[1e-3]; c, label=nothing)
-end;plt
+    dk = -z
+    plot!(0:dk:(N÷2-1)*dk,abs.(Ĝ[1:N÷2])/N,label="z/R=$z";c)
+end;end;plt
 savefig("contour_spectral.png")
-
-panel = measure_panel((θ,z)->SA[5cos(θ),5sin(θ),z],1,-0.05,0.1,0.1)
-∫kelvin(SA[-5,10/√8,-0.05],panel)/10panel.dA
-using QuadGK,FastGaussQuadrature
-quadgk_count(θ->kelvin_contour(θ,z=-0.05),0.95,1.05,atol=2e-5) # x,y are too easy
-x,w = gausslegendre(ceil(Int,5*0.1/0.05))
-NeumannKelvin.quadgl(θ->kelvin_contour(θ,z=-0.05),0.95,1.05;x,w)

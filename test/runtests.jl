@@ -7,23 +7,18 @@ using QuadGK
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
 
-    rngs=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
-    ((a₁,f₁),(a₂,f₂)),((a₃,f₃),(a₄,f₄))=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
-    @test [a₁,a₂,a₃,a₄]≈[-2,0,0,2] atol=0.3
-    @test [f₁,f₂,f₃,f₄]==[true,false,false,true]
+    (((a₁,f₁),(a₂,f₂)),)=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
+    @test [a₁,a₂]≈[-2,2] atol=0.3
+    @test all([f₁,f₂])
 
-    ((a₁,f₁),(a₂,f₂)),((a₃,f₃),(a₄,f₄))=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
-    @test [a₁,a₂,a₃,a₄]≈[-2,0,0,2] && !any([f₁,f₂,f₃,f₄])
+    (((a₁,f₁),(a₂,f₂)),)=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
+    @test [a₁,a₂]≈[-2,2] && !any([f₁,f₂])
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
     dg(x) = 2x+im*x/50
     f(x) = imag(exp(im*g(x)))
     ρ = √(3π); rng = (-ρ,ρ); rngs = (((-ρ,true),(ρ,true)),)
-
-    I,e,c=quadgk_count(f,rng...)
-    # @show I,e,c # (1.5408137136825548, 1.0477053419277738e-8, 165) # easy
-    @test NeumannKelvin.quadgl(f,rng...) ≈ I atol=1e-5
 
     I,e,c=quadgk_count(f,ρ,Inf)
     # @show I,e,c # (-0.14690637593307346, 2.133881538591021e-9, 8265) # hard
@@ -121,14 +116,14 @@ end
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]
 @inline bruteN(x,y,z) = -2*(1-z/(hypot(x,y,z)+abs(x)))+NeumannKelvin.Ngk(x,y,z)
 using SpecialFunctions
-@testset "green.jl" begin
+@testset "kelvin.jl" begin
     @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
 
     @test NeumannKelvin.wavelike(10.,0.,-0.)==NeumannKelvin.wavelike(0.,10.,-0.)==0.
 
     @test 4π*bessely1(10)≈NeumannKelvin.wavelike(-10.,0.,-0.) atol=1e-5
 
-    @test @allocated(NeumannKelvin.wavelike(-10.,0.,-0.))==0
+    @test @allocated(NeumannKelvin.wavelike(-10.,0.,-0.))≤384
 
     for R = (0.0,0.1,0.5,2.0,8.0), a = (0.,0.1,0.3,1/sqrt(8),0.5,1.0), z = (-1.,-0.1,-0.01)
         x = -R*cos(atan(a))

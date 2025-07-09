@@ -1,6 +1,5 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(4)
-const xgl,wgl = gausslegendre(16)
 """
     quadgl(f,a=-1,b=1;x,w)
 
@@ -23,7 +22,7 @@ the real line using Gauss-Legendre. The range endpoints where
 `flag=true` are integrated in the complex-plane using the phase
 derivative `dg(t)=g'` and numerical stationary phase.
 """
-function complex_path(g,dg,rngs)
+function complex_path(g,dg,rngs,atol=1e-3)
     # Make an efficient integrand function for real t
     @fastmath @inline function f(t)
         u,v = reim(g(t))
@@ -31,8 +30,8 @@ function complex_path(g,dg,rngs)
     end
 
     # Sum the flagged endpoints and interval contributions
-    sum(rngs) do ((t₁,f₁),(t₂,f₂))
-        -(f₁ ? nsp(t₁,g,dg) : zero(t₁))+quadgl(f,t₁,t₂)+(f₂ ? nsp(t₂,g,dg) : zero(t₂))
+    sum(rngs) do ((t₁,∞₁),(t₂,∞₂))
+        (∞₁ ? -nsp(t₁,g,dg) : zero(t₁))+quadgk(f,t₁,t₂;atol)[1]+(∞₂ ? nsp(t₂,g,dg) : zero(t₂))
     end
 end
 
@@ -71,7 +70,7 @@ function finite_ranges(S,g,Δg,R;atol=0.3Δg)
         (((-R,false),(R,false)),)
     elseif length(S) == 1
         a = first(S)
-        (fz(a,-R),(a,false)),((a,false),fz(a,R))
+        ((fz(a,-R),fz(a,R)),)
     else
         a,b = extrema(S)
         p,q = fz(a,a/2+b/2),fz(b,a/2+b/2)

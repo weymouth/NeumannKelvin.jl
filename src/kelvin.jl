@@ -23,6 +23,21 @@ function ∫kelvin(ξ,p;ℓ=1,d²=4,contour=false,filter=contour)
     ϕ+quadgl(x->kelvin(ξ,x;ℓ,z_max),x=p′.x₄,w=p′.w₄)*c
 end
 """
+    kelvin(ξ,α;ℓ)
+
+Green Function `G(ξ)` for a traveling source at reflected position `α` with Froude length `ℓ ≡ U²/g`
+excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. See Noblesse 1981.
+"""
+function kelvin(ξ,α;ℓ=1,z_max=-0.,ltol=-5log(10))
+    # Check inputs
+    α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
+    ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
+
+    # nearfield, and wavelike disturbance
+    x,y,z = (ξ-α)/ℓ; z = min(z,z_max/ℓ)
+    return (nearfield(x,y,z)+wavelike(x,y,z,ltol))/ℓ
+end
+"""
     reflect(x::SVector,axis::Int,project::SVector)
 
 Reflects `x::Svector` across an `axis`. Can supply a multiplier vector `project` instead, returning  `x .* project`.
@@ -57,22 +72,6 @@ reflect(p,arg) = map(q->reflect(q,arg),p)                 # map over everything 
     onwaterline(panel) = any(panel.z≥0)
 """
 onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
-
-"""
-    kelvin(ξ,α;ℓ)
-
-Green Function `G(ξ)` for a traveling source at reflected position `α` with Froude length `ℓ ≡ U²/g`
-excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. See Noblesse 1981.
-"""
-function kelvin(ξ,α;ℓ=1,z_max=-0.,ltol=-5log(10))
-    # Check inputs
-    α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
-    ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
-
-    # nearfield, and wavelike disturbance
-    x,y,z = (ξ-α)/ℓ; z = min(z,z_max/ℓ)
-    return (nearfield(x,y,z)+wavelike(x,y,z,ltol))/ℓ
-end
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987
 function nearfield(x::T,y::T,z::T)::T where T

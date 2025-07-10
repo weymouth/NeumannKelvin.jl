@@ -1,32 +1,87 @@
 using NeumannKelvin,Plots,ColorSchemes
-using NeumannKelvin: kelvin
+using NeumannKelvin:quadgl,nearfield,wavelike
+# Define cylinder surface and Green's function on the surface contour
+R = 10; S(θ,z) = SA[R*cos(θ),R*sin(θ),z]
+kelvin(x,y,z;ltol) = nearfield(x,y,z)+wavelike(x,y,z,ltol)
+kelvin(v::SVector{3};ltol) = kelvin(v...;ltol)
+kelvin_contour(θᵢ,θⱼ;z=-R/100,ltol=-8log(10)) = kelvin(S(θⱼ,z)-S(θᵢ,0);ltol)
 
-R = 15
-# kelvin_contour(θ;x=-2R,y=R/√2,z=-R/100,R=R) = kelvin(SA[x,y,z],SA[R*cos(θ),R*sin(θ),0],ltol=-8log(10))
-kelvin_contour(θᵢ,θⱼ=3.;x=R*cos(θⱼ),y=R*sin(θⱼ),z=-R/100,R=R) = kelvin(SA[x,y,z],SA[R*cos(θᵢ),R*sin(θᵢ),0],ltol=-8log(10))
+# Find hardest segment
 using QuadGK,FastGaussQuadrature
 x,w = gausslegendre(10)
-plot(range(0,2π,2^12),kelvin_contour)
-θᵢ = 0.3; plot(range(θᵢ-0.1,θᵢ+0.1,1000),kelvin_contour)
-quadgk_count(kelvin_contour,θᵢ-0.05,θᵢ+0.05)
-NeumannKelvin.quadgl(kelvin_contour,θᵢ-0.05,θᵢ+0.05;x,w)
+N = 64; dθ = 2π/N; θₛ = 0.5dθ:dθ:2π
+err,θᵢ,θⱼ = maximum(θₛ) do θᵢ
+    maximum(θₛ[1:N÷2+1] .-0.5dθ) do θⱼ # need this shift to break symmetry
+        I,_ = quadgk(θ->kelvin_contour(θ,θⱼ),θᵢ-0.5dθ,θᵢ+0.5dθ)
+        I₀ = quadgl(θ->kelvin_contour(θ,θⱼ),θᵢ-0.5dθ,θᵢ+0.5dθ;x,w)
+        abs(I-I₀),θᵢ,θⱼ
+    end
+end
+kelvin_contour(θ;kwargs...) = kelvin_contour(θ,θⱼ;kwargs...)
+plot(range(θᵢ-0.5dθ,θᵢ+0.5dθ,1000),kelvin_contour)
+quadgk_count(kelvin_contour,θᵢ-0.5dθ,θᵢ+0.5dθ)
 
-N = 2^12
-θ = range(0,2π,N+1)[1:end-1]
+# Plot G
+N = 2^12; θ = range(0,2π,N+1)[1:end-1]
 begin; plt=plot(xlabel="θ",ylabel="G")
-for (z,c) in zip((-0.01,-0.02,-0.04),reverse(colorschemes[:Reds_4]))
-    G = kelvin_contour.(θ;z=z*R)
-    plot!(θ,G,label="z/R=$z";c)
+for (n,c) in zip((100,50,25),reverse(colorschemes[:Reds_4]))
+    plot!(θ,kelvin_contour.(θ;z=-R/n),label="z=-R/$n";c)
 end;end;plt
-savefig("contour_G.png")
+savefig("examples/contour_G.png")
 
+# Plot Ĝ
 using FFTW
 begin;plt=plot(ylims=(1e-8,1),yscale=:log10,ylabel="|FFT(G)|",
-               xlims=(1e-1,100),xscale=:log10,xlabel="-kz");
-for (z,c) in zip((-0.01,-0.02,-0.04),reverse(colorschemes[:Reds_4]))
-    G = kelvin_contour.(θ;z=z*R)
-    Ĝ = fft(G)
-    dk = -z
-    plot!(0:dk:(N÷2-1)*dk,abs.(Ĝ[1:N÷2])/N,label="z/R=$z";c)
+               xlims=(1e-1,1e2),xscale=:log10,xlabel="-kz");
+for (n,c) in zip((100,50,25),reverse(colorschemes[:Reds_4]))
+    Ĝ = fft(kelvin_contour.(θ;z=-R/n))/N
+    dk = 1/n
+    plot!(0:dk:(N÷2-1)*dk,abs.(Ĝ[1:N÷2]),label="z=-R/$n";c)
 end;end;plt
-savefig("contour_spectral.png")
+savefig("examples/contour_spectral.png")
+
+# Cylinder test with z-based contour sampling
+function ∫kelvin_cylinder(ξ,p;R=R,ℓ=1,ltol=-3log(10))
+    # reflected panel location & size
+    z,θᵢ = -p.x[3],atan(p.x[2],p.x[1])
+    dz = extent(components(p.xᵤᵥ,3)); dα = p.dA/dz
+    # evaluate kelvin along the contour
+    x,w = gausslegendre(ceil(Int,dα/abs(ξ[3]-z)))
+    θ = @. θᵢ+0.5dα/R*x
+    Gₖ = kelvin.((Ref(ξ) .- S.(θ,z))/ℓ;ltol)/ℓ
+    # integrate over panel
+    ϕₖ = 0.5p.dA*w'Gₖ
+    # Add WL contribution if needed
+    onwaterline(p) && (ϕₖ -= ℓ*0.5dα*w'*(Gₖ .* cos.(θ) .^2))
+    # Add source & sink contribution
+    ϕₖ+∫G(ξ,p)-∫G(ξ,reflect(p,3))
+end
+∫kelvin_cylinder₂ = reflect(∫kelvin_cylinder,2)
+
+function WL(panels;kwargs...)
+    x,y,_ = filter(onwaterline,panels) |> p -> components(p.x)
+    q = influence(panels;kwargs...)\components(panels.n,1)
+    z = map(xy->ζ(xy[1],xy[2],q,panels;kwargs...),zip(x,y))
+    x,z,q
+end
+
+begin
+    dθ = π/64; θₛ = 0.5dθ:dθ:π
+    dz = R/50 .* (1.31 .^ (0:15))
+    z = 0.5dz .- cumsum(dz)
+    ℓ = 0.16*2R
+    cylinder = measure_panel.(S,θₛ,z',dθ,dz') |> Table
+    x,z,q = WL(cylinder;ϕ=reflect(∫kelvin,2),ℓ,contour=true,filter=false)
+    plot(x,z,label="2x2: no filter")
+    x,z,q = WL(cylinder;ϕ=reflect(∫kelvin,2),ℓ,contour=true)
+    plot!(x,z,label="2x2: z_max filter")
+    x,z,q = WL(cylinder;ϕ=∫kelvin_cylinder₂,ℓ)
+    plot!(x,z,label="N-point Gauss")
+end
+
+Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
+dat = map(0.2:0.05:1) do Fn
+    (Fn=Fn,Cw=Cw(cylinder,ϕ=∫kelvin_cylinder₂,ℓ=Fn^2*2R)/4R^2)
+end |> Table
+dat = dat |> Table
+plot(dat.Fn,dat.Cw)

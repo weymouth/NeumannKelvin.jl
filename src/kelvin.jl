@@ -22,10 +22,40 @@ function ∫kelvin(ξ,p;ℓ=1,d²=4,contour=false,filter=contour)
     far && return ϕ+p′.dA*kelvin(ξ,p′.x;ℓ,z_max)*c
     ϕ+quadgl(x->kelvin(ξ,x;ℓ,z_max),x=p′.x₄,w=p′.w₄)*c
 end
-reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],3)...]
+"""
+    reflect(x::SVector,axis::Int,project::SVector)
+
+Reflects `x::Svector` across an `axis`. Can supply a multiplier vector `project` instead, returning  `x .* project`.
+Scalar `x` are not reflected, and reflect is recursively broadcasted over other structures.
+
+Examples:
+
+    julia> reflect((v=SA[1,1,1],s=12),3)
+    (v = [1, 1, -1], s = 12)
+
+---
+
+    reflect(f::Function,arg;op=+)
+
+Creates a symmetric (or _anti_-symmetric, if `op=-`) version of the function `f(x,p;kwargs...)`. For example:
+
+Examples:
+
+    julia> ∫G₂ = reflect(∫G,2);
+
+    julia> p = measure_panel((u,v)->SA[u,v,0],0.5,0.5,1,1);
+
+    julia> ∫G₂(p.x,p) == ∫G(p.x,p)+∫G(p.x,reflect(p,2))
+    true
+"""
+reflect(f::F,arg;op=+) where F<:Function = (x,p;kwargs...)->op(f(x,p;kwargs...),f(x,reflect(p,arg);kwargs...))
+reflect(x::SVector{n},axis::Int) where n = SA[ntuple(i->i==axis ? -x[i] : x[i],n)...]
 reflect(x::SVector{n},flip::SVector{n}) where n = x.*flip # reflect vectors
-reflect(x::Number,flip) = x                               # ...not scalars
-reflect(p,flip) = map(q->reflect(q,flip),p)               # map over everything else
+reflect(x::Number,arg) = x                                # don't change scalars
+reflect(p,arg) = map(q->reflect(q,arg),p)                 # map over everything else
+"""
+    onwaterline(panel) = any(panel.z≥0)
+"""
 onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 
 """

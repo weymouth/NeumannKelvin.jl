@@ -105,11 +105,11 @@ using LinearAlgebra
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
 
     #check reflections
-    ∫G₃(x,p) = ∫G(x,p)+∫G(x,reflect(p,3))                # 2 ∫G calls
+    ∫G₃ = reflect(∫G,3)                                  # 2 ∫G calls
     @test influence(panels[1:4],ϕ=∫G₃)\b[1:4] ≈ q[1:4]   # ×4² coeffs => 32 ∫G calls
-    ∫G₂₃(x,p) = ∫G₃(x,p)+∫G₃(x,reflect(p,2))             # 2² calls
+    ∫G₂₃ = reflect(∫G₃,2)                                # 2² calls
     @test influence(panels[1:2],ϕ=∫G₂₃)\b[1:2] ≈ q[1:2]  # ×2² coeffs => 16 calls
-    ∫G₁₂₃(x,p) = ∫G₂₃(x,p)-∫G₂₃(x,reflect(p,1))          # 2³ calls
+    ∫G₁₂₃ = reflect(∫G₂₃,1,op=-) # sign flip             # 2³ calls 
     @test influence(panels[1:1],ϕ=∫G₁₂₃)\b[1:1] ≈ q[1:1] # ×1 coeff(!) => 8 calls
 end
 

@@ -10,4 +10,30 @@ function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=0.3panels.n,
             color=:grey,xlims=(xc-h,xc+h),ylims=(yc-h,yc+h),zlims=(zc-h,zc+h))
     plot!()
 end
+@recipe function f(table::Table)
+    cols = columns(table)
+    col_names = columnnames(table)
+    
+    if length(col_names) < 2
+        error("Table must have at least 2 columns (x-axis and at least one y-series)")
+    end
+    
+    # First column as x-axis
+    x_data = cols[1]
+    x_name = string(col_names[1])
+    
+    # Set x-axis label
+    xlabel --> x_name
+    
+    # Plot each remaining column as a separate series
+    for i in 2:length(col_names)
+        y_data = cols[i]
+        y_name = string(col_names[i])
+        
+        @series begin
+            label --> y_name
+            x_data, y_data
+        end
+    end
+end
 end

@@ -41,18 +41,17 @@ end;end;plt
 savefig("examples/contour_spectral.png")
 
 # Cylinder test with z-based contour sampling
-function ∫kelvin_cylinder(ξ,p;R=R,ℓ=1,ltol=-3log(10))
+function ∫kelvin_cylinder(ξ,p;q=0.1,ℓ=1,ltol=-3log(10))
     # reflected panel location & size
-    z,θᵢ = -p.x[3],atan(p.x[2],p.x[1])
-    dz = extent(components(p.xᵤᵥ,3)); dα = p.dA/dz
+    z,θᵢ = -p.x[3],atan(p.x[2]/q,p.x[1])
+    dz = extent(components(p.xᵤᵥ,3))
+    dθ = extent(atan.(components(p.xᵤᵥ,2)/q,components(p.xᵤᵥ,1)))
     # evaluate kelvin along the contour
-    x,w = gausslegendre(ceil(Int,dα/abs(ξ[3]-z)))
-    θ = @. θᵢ+0.5dα/R*x
-    Gₖ = kelvin.((Ref(ξ) .- S.(θ,z))/ℓ;ltol)/ℓ
-    # integrate over panel
-    ϕₖ = 0.5p.dA*w'Gₖ
+    x,w = gausslegendre(ceil(Int,p.dA/dz/abs(ξ[3]-z)))
+    θ = @. θᵢ+0.5dθ*x
+    ϕₖ = 0.5p.dA*w'*kelvin.((Ref(ξ) .- S.(θ,z))/ℓ;ltol)/ℓ
     # Add WL contribution if needed
-    onwaterline(p) && (ϕₖ -= ℓ*0.5dα*w'*(Gₖ .* cos.(θ) .^2))
+    onwaterline(p) && (ϕₖ *= 1-ℓ/dz*p.n[1]^2)
     # Add source & sink contribution
     ϕₖ+∫G(ξ,p)-∫G(ξ,reflect(p,3))
 end
@@ -78,10 +77,3 @@ begin
     x,z,q = WL(cylinder;ϕ=∫kelvin_cylinder₂,ℓ)
     plot!(x,z,label="N-point Gauss")
 end
-
-Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
-dat = map(0.2:0.05:1) do Fn
-    (Fn=Fn,Cw=Cw(cylinder,ϕ=∫kelvin_cylinder₂,ℓ=Fn^2*2R)/4R^2)
-end |> Table
-dat = dat |> Table
-plot(dat.Fn,dat.Cw)

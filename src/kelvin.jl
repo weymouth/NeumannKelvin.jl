@@ -118,7 +118,7 @@ function wavelike(x,y,z,ltol=-5log(10))
     S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
     rngs = finite_ranges(S,t->g(x,y,t),-0.5ltol,R) # finite phase ranges
     4complex_path(t->g(x,y,t)-im*z*(1+t^2),  # complex phase
-                  t->dg(x,y,t)-2im*z*t,rngs,exp(ltol)) # it's derivative
+                  t->dg(x,y,t)-2im*z*t,rngs) # it's derivative
 end
 g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative

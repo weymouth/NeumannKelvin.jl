@@ -58,27 +58,25 @@ value(t::Tuple) = value.(t)
     finite_ranges(S,g,Δg,R;atol=0.1Δg)
 
 Return pairs of flagged ranges `(a₁,f₁),(a₂,f₂)` covering the points `a∈S∈[-R,R]`
-such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are disjoint and limited to `±R`. "Unbounded" flag 
+such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are disjoint and limited to `±R`. "Unbounded" flag
 `fᵢ=false` if `aᵢ=±R`.
 """
 function finite_ranges(S,g,Δg,R;atol=0.1Δg)
-    function fz(a,b)
+    function fz(a,b,check=true)
         !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(1,b)),Order1();atol),true
-        abs(g(a)-g(b))≤Δg+atol && return b,false
+        check && abs(g(a)-g(b))≤Δg+atol && return b,false
         @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol),true
     end
 
-    # Sort the stationary points and return special cases
-    S = filter(s->-R<s<R,TupleTools.sort(S)); N = length(S)
-    N == 0 && return ((-R,false),(R,false)) |> value
-    fst,lst = fz(first(S),-R),fz(last(S),R)
-    N == 1 && return (fst,lst) |> value
+    # Sort the stationary point values (no Duals) and handle empty case
+    R = value(R); S = filter(s->-R<s<R,TupleTools.sort(value(S)))
+    length(S) == 0 && return ((-R,false),(R,false))
 
-    # Ensure ranges are disjoint and concantenate
-    mids = mapreduce(TupleTools.vcat,zip(Base.front(S),Base.tail(S))) do (a,b)
-        mid = (a+b)/2               # mid-point
-        p,q = fz(a,mid),fz(b,mid)   # looking from left & right
-        (p[2] && q[2]) ? (p,q) : () # return if disjoint
+    # Construct and concat disjoint range pairs
+    mids = mapreduce(TupleTools.vcat,zip(Base.front(S),Base.tail(S)),init=()) do (a,b)
+        abs(g(a)-g(b)) ≤ 2Δg && return () # skip if insufficient gap
+        p,q = fz(a,b,false),fz(b,a,false) # look from left & right
+        p[1] < q[1] ? (p,q) : ()          # return if disjoint
     end
-    TupleTools.vcat((fst,),mids,(lst,)) |> value # ranges can't be Duals
+    TupleTools.vcat((fz(first(S),-R),),mids,(fz(last(S),R),))
 end

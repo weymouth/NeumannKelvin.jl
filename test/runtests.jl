@@ -7,18 +7,18 @@ using QuadGK
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
 
-    (((a₁,f₁),(a₂,f₂)),)=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
+    (a₁,f₁),(a₂,f₂)=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
     @test [a₁,a₂]≈[-2,2] atol=0.3
     @test all([f₁,f₂])
 
-    (((a₁,f₁),(a₂,f₂)),)=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
+    (a₁,f₁),(a₂,f₂)=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
     @test [a₁,a₂]≈[-2,2] && !any([f₁,f₂])
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
     dg(x) = 2x+im*x/50
     f(x) = imag(exp(im*g(x)))
-    ρ = √(3π); rng = (-ρ,ρ); rngs = (((-ρ,true),(ρ,true)),)
+    ρ = √(3π); rng = (-ρ,ρ); rngs = (-ρ,true),(ρ,true)
 
     I,e,c=quadgk_count(f,ρ,Inf)
     # @show I,e,c # (-0.14690637593307346, 2.133881538591021e-9, 8265) # hard

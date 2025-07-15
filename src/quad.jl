@@ -25,9 +25,9 @@ function complex_path(g,dg,rngs;atol=1e-3,γ=one,
     f = t->((u,v)=reim(g(t)); @fastmath γ(t)*exp(-v)*sin(u)))
 
     # Sum the flagged endpoints and interval contributions
-    sum(rngs) do ((t₁,∞₁),(t₂,∞₂))
+    sum(Iterators.partition(rngs,2)) do ((t₁,∞₁),(t₂,∞₂))
         ∫f = f==zero ? f(t₁) : quadgk(f,t₁,t₂;atol)[1]
-        (∞₁ ? -nsp(t₁,g,dg) : zero(t₁)) + ∫f + (∞₂ ? nsp(t₂,g,dg) : zero(t₂))
+        (∞₁ ? -nsp(t₁,g,dg,γ) : zero(t₁)) + ∫f + (∞₂ ? nsp(t₂,g,dg,γ) : zero(t₂))
     end
 end
 
@@ -51,14 +51,15 @@ slowly varying compared to `g` over `h`.
     end;s
 end
 
+using TupleTools
 import ForwardDiff: value
 value(t::Tuple) = value.(t)
 """
     finite_ranges(S,g,Δg,R;atol=0.1Δg)
 
-Return a set of flagged ranges `(a₁,f₁),(a₂,f₂)` around each point `a∈S∈[-R,R]`
-such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are limited to `±R` and don't overlap and
-the flag `fᵢ=true` if `aᵢ` is off those limits.
+Return pairs of flagged ranges `(a₁,f₁),(a₂,f₂)` covering the points `a∈S∈[-R,R]`
+such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are disjoint and limited to `±R`. "Unbounded" flag 
+`fᵢ=false` if `aᵢ=±R`.
 """
 function finite_ranges(S,g,Δg,R;atol=0.1Δg)
     function fz(a,b)
@@ -66,15 +67,18 @@ function finite_ranges(S,g,Δg,R;atol=0.1Δg)
         abs(g(a)-g(b))≤Δg+atol && return b,false
         @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol),true
     end
-    if length(S) == 0
-        (((-R,false),(R,false)),)
-    elseif length(S) == 1
-        a = first(S)
-        ((fz(a,-R),fz(a,R)),)
-    else
-        a,b = extrema(S)
-        l,r = fz(a,-R),fz(b,R)
-        p,q = fz(a,a/2+b/2),fz(b,a/2+b/2)
-        (p[2] && q[2]) ? ((l,p),(q,r)) : ((l,r),)
-    end |> value # ranges can't be Duals
+
+    # Sort the stationary points and return special cases
+    S = filter(s->-R<s<R,TupleTools.sort(S)); N = length(S)
+    N == 0 && return ((-R,false),(R,false)) |> value
+    fst,lst = fz(first(S),-R),fz(last(S),R)
+    N == 1 && return (fst,lst) |> value
+
+    # Ensure ranges are disjoint and concantenate
+    mids = mapreduce(TupleTools.vcat,zip(Base.front(S),Base.tail(S))) do (a,b)
+        mid = (a+b)/2               # mid-point
+        p,q = fz(a,mid),fz(b,mid)   # looking from left & right
+        (p[2] && q[2]) ? (p,q) : () # return if disjoint
+    end
+    TupleTools.vcat((fst,),mids,(lst,)) |> value # ranges can't be Duals
 end

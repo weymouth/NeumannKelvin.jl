@@ -112,13 +112,13 @@ end
 Ngk(X::SVector{3}) = Ngk(X...)
 
 # Wave-like disturbance
-function wavelike(x,y,z,ltol=-5log(10))
+function wavelike(x,y,z,ltol=-5log(10),atol=exp(ltol))
     (x≥0 || z≤ltol) && return 0.
-    R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
-    S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
+    R = √(ltol/z-1)            # radius s.t. log₁₀(f(z,R))=ltol
+    S = stationary_points(x,y) # g'=0 points
     rngs = finite_ranges(S,t->g(x,y,t),-0.5ltol,R) # finite phase ranges
-    4complex_path(t->g(x,y,t)-im*z*(1+t^2),  # complex phase
-                  t->dg(x,y,t)-2im*z*t,rngs) # it's derivative
+    4complex_path(t->g(x,y,t)-im*z*(1+t^2),        # complex phase
+                  t->dg(x,y,t)-2im*z*t,rngs;atol)  # it's derivative
 end
 g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative

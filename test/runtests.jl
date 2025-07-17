@@ -1,24 +1,26 @@
 using NeumannKelvin
 using Test
 
-using QuadGK
+using QuadGK,IntervalSets
 @testset "quad.jl" begin
     xgl2,wgl2 = (-1/√3,1/√3),(1,1)
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
 
-    (a₁,f₁),(a₂,f₂)=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
-    @test [a₁,a₂]≈[-2,2] atol=0.3
-    @test all([f₁,f₂])
+    rngs = NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
+    @test length(rngs) == 1
+    r = first(rngs)
+    @test [endpoints(r)...]≈[-2,2] atol=0.3
+    @test !any(closedendpoints(r))
 
-    (a₁,f₁),(a₂,f₂)=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
-    @test [a₁,a₂]≈[-2,2] && !any([f₁,f₂])
+    r=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)[1]
+    @test [endpoints(r)...]≈[-2,2] && all(closedendpoints(r))
 
     # Highly oscillatory integral set-up
     g(x) = x^2+im*x^2/100
     dg(x) = 2x+im*x/50
     f(x) = imag(exp(im*g(x)))
-    ρ = √(3π); rng = (-ρ,ρ); rngs = (-ρ,true),(ρ,true)
+    ρ = √(3π); rngs = (OpenInterval(-ρ,ρ),)
 
     I,e,c=quadgk_count(f,ρ,Inf)
     # @show I,e,c # (-0.14690637593307346, 2.133881538591021e-9, 8265) # hard

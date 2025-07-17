@@ -15,7 +15,7 @@ for h = logrange(1,1e-5,6)
     @show h,I,e
 end
 
-using TupleTools,QuadGK,NeumannKelvin
+using NeumannKelvin,TupleTools,QuadGK,IntervalSets
 using NeumannKelvin: stationary_points,finite_ranges,filter,complex_path,g,dg,⎷
 """
     ∫₂wavelike(x, z, a, b)
@@ -43,20 +43,21 @@ function ∫₂wavelike(x,z,a,b,ltol=-5log(10),atol=10exp(ltol))
     function I(y)
         S = stationary_points(x,y)
         rngs = finite_ranges(S,t->g(x,y,t),-0.5ltol,R)
-        I_c = sum(r->diff(I_reg.(first.(r))),pairs(rngs))
-        @show I_c
-        rngs = TupleTools.sort(TupleTools.vcat(rngs,((-0.,false),),((0.,false),)),by=first)
+        rngs = filter(r -> 0∉r,rngs)
+        # I_c = sum(r->diff(I_reg.(first.(r))),pairs(rngs))
+        # @show I_c
+        # rngs = TupleTools.sort(TupleTools.vcat(rngs,((-0.,false),),((0.,false),)),by=first)
         @show rngs
         @fastmath @inline f(t)=-cos(g(x,y,t))/k(t)*exp(z*(1+t^2))+f_reg(t)
         4complex_path(t->g(x,y,t)-im*z*(1+t^2),
                       t->dg(x,y,t)-2im*z*t,
-                      rngs;γ=t->-im/k(t),f,atol)-4I_c
+                      rngs;γ=t->-im/k(t),f,atol)
     end
-    Δ,m = (b-a),(a+b)/2
-    @fastmath @inline Δf(t) = 4Δ*sinc(Δ*k(t)/2π)*sin(g(x,m,t))*exp(z*(1+t^2))
-    ΔI,n,c = quadgk_count(Δf,-Inf,Inf;atol)
-    @show ΔI,n,c
-    diff(I,(a,b))
+    # Δ,m = (b-a),(a+b)/2
+    # @fastmath @inline Δf(t) = 4Δ*sinc(Δ*k(t)/2π)*sin(g(x,m,t))*exp(z*(1+t^2))
+    # ΔI,n,c = quadgk_count(Δf,-Inf,Inf;atol)
+    # @show ΔI,n,c
+    I(a),I(b)
 end
 k(t) = t*⎷(1+t^2)
 

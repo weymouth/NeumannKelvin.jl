@@ -46,7 +46,6 @@ to the corners, and the vectors are colored 3D arrows.
 viz(args...; kwargs...) = @warn "Pass a Table() of panels and load Plots or GLMakie (terminal/VSCode) or WGLMakie (browser/Pluto) for viz functionality."
 components(data,i) = getindex.(data, i)
 components(data::AbstractArray{S}) where {S<:SVector{n}} where n = components.(Ref(data),1:n)
-Base.pairs(t::NTuple{N}) where N = ntuple(i->(t[2i-1],t[2i]),N÷2)
 Base.diff(t::NTuple{2}) = t[2]-t[1]
 Base.diff(f::Function,t::NTuple{2}) = diff(f.(t))
 extent(a) = (p = extrema(a); p[2]-p[1])

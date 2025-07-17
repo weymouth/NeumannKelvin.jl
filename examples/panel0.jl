@@ -37,29 +37,36 @@ where `Δ,m = (b-a),(a+b)/2`. Therefore, we use `I_a,I_b` for `finite_ranges` no
 """
 function ∫₂wavelike(x,z,a,b,ltol=-5log(10),atol=10exp(ltol))
     (x≥0 || z≤ltol) && return 0.
+    # Get ranges for f_a, and f_b
     R = min(exp(-0.5ltol),√(ltol/z-1))
-    f_reg(t) = cos(x)*exp(z)/t           # singular part
-    I_reg(t) = cos(x)*exp(z)*log(abs(t)) # indefinite integral
-    function I(y)
+    A,B = map((a,b)) do y
         S = stationary_points(x,y)
-        rngs = finite_ranges(S,t->g(x,y,t),-0.5ltol,R)
-        rngs = filter(r -> 0∉r,rngs)
-        # I_c = sum(r->diff(I_reg.(first.(r))),pairs(rngs))
-        # @show I_c
-        # rngs = TupleTools.sort(TupleTools.vcat(rngs,((-0.,false),),((0.,false),)),by=first)
-        @show rngs
-        @fastmath @inline f(t)=-cos(g(x,y,t))/k(t)*exp(z*(1+t^2))+f_reg(t)
-        4complex_path(t->g(x,y,t)-im*z*(1+t^2),
-                      t->dg(x,y,t)-2im*z*t,
-                      rngs;γ=t->-im/k(t),f,atol)
+        finite_ranges(S,t->g(x,y,t),-0.5ltol,R)
     end
-    # Δ,m = (b-a),(a+b)/2
-    # @fastmath @inline Δf(t) = 4Δ*sinc(Δ*k(t)/2π)*sin(g(x,m,t))*exp(z*(1+t^2))
-    # ΔI,n,c = quadgk_count(Δf,-Inf,Inf;atol)
-    # @show ΔI,n,c
-    I(a),I(b)
+
+    # Intersection is done with f_m
+    Δ, m, M = (b-a), (a+b)/2, A ∩ B
+    @fastmath @inline f_m(t) = 4Δ*sinc(Δ*k(t)/2π)*sin(g(x,m,t))*exp(z*(1+t^2))
+    I,e,c = quadgk_count(f_m,-Inf,Inf;atol)
+    @show I,e,c
+    I_m = sum(M) do rng
+        @show rng
+        I,e,c = quadgk_count(f_m,endpoints(rng)...;atol)
+        @show I,e,c
+        I
+    end
+    
+    # Differences are done with complex_path
+    diff(((a,A),(b,B))) do (y,rngs)
+        @show rngs
+        @show rngs\M
+        @fastmath @inline f(t)=-cos(g(x,y,t))/k(t)*exp(z*(1+t^2))
+        4complex_path(t->g(x,y,t)-im*z*(1+t^2),t->dg(x,y,t)-2im*z*t,
+                      rngs\M;γ=t->-im/k(t),f,atol)
+    end+I_m
 end
 k(t) = t*⎷(1+t^2)
+vcat_nonempty(args...) = TupleTools.vcat(filter(!isempty, args)...)
 
 # check(x,z,ϵ) = isapprox(∫₂wavelike(x,z,-ϵ,ϵ),2ϵ*NeumannKelvin.wavelike(x,0.,z),atol=ϵ^2)
 check(x,z,ϵ) = ∫₂wavelike(x,z,-ϵ,ϵ),2ϵ*NeumannKelvin.wavelike(x,0.,z)

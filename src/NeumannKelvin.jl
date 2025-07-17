@@ -47,7 +47,7 @@ viz(args...; kwargs...) = @warn "Pass a Table() of panels and load Plots or GLMa
 components(data,i) = getindex.(data, i)
 components(data::AbstractArray{S}) where {S<:SVector{n}} where n = components.(Ref(data),1:n)
 Base.diff(t::NTuple{2}) = t[2]-t[1]
-Base.diff(f::Function,t::NTuple{2}) = diff(f.(t))
+Base.diff(f::Function,t::Tuple) = diff(f.(t))
 extent(a) = (p = extrema(a); p[2]-p[1])
 export viz,components,extent
 

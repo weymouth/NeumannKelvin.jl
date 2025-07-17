@@ -27,10 +27,10 @@ function complex_path(g,dg,rngs;atol=1e-3,γ=one,
 
     # Sum the flagged endpoints and interval contributions
     sum(rngs,init=zero(f(0.))) do rng
+        @show rng
         (t₁,t₂) = endpoints(rng); (∞₁,∞₂) = map(!,closedendpoints(rng))
-        # @show t₁,t₂,∞₁,∞₂
         ∫f,c,n = quadgk_count(f,t₁,t₂;atol)
-        # @show ∫f,c,n
+        @show ∫f,c,n
         (∞₁ ? -nsp(t₁,g,dg,γ) : zero(t₁)) + ∫f + (∞₂ ? nsp(t₂,g,dg,γ) : zero(t₂))
     end
 end
@@ -97,3 +97,7 @@ end
 ⇔(a, b) = a ≤ b ? a..b : b..a
 disjoint(a,b) = isempty(intersect(a,b))
 openB(flag) = flag ? :open : :closed
+Base.:\(a::Interval, b::Interval) = mapreduce(bᶜ-> a ∩ bᶜ, TupleTools.vcat, -b)
+Base.:-(a::Interval) = ((-Inf .. a.left),(a.right .. Inf))
+Base.:∩(A::Tuple,B::Tuple) = filter(!isempty,Tuple(a ∩ b for a in A, b in B))
+Base.:\(A::Tuple,B::Tuple) = filter(!isempty,mapreduce(a -> foldl(\, B; init = a), TupleTools.vcat, A))

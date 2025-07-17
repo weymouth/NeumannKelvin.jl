@@ -25,8 +25,9 @@ function complex_path(g,dg,rngs;atol=1e-3,γ=one,
     f = t->((u,v)=reim(g(t)); @fastmath γ(t)*exp(-v)*sin(u)))
 
     # Sum the flagged endpoints and interval contributions
-    sum(Iterators.partition(rngs,2),init=zero(f(0.))) do ((t₁,∞₁),(t₂,∞₂))
-        ∫f = f==zero ? f(t₁) : quadgk(f,t₁,t₂;atol)[1]
+    sum(pairs(rngs),init=zero(f(0.))) do ((t₁,∞₁),(t₂,∞₂))
+        ∫f,c,n = quadgk_count(f,t₁,t₂;atol)
+        @show ∫f,c,n
         (∞₁ ? -nsp(t₁,g,dg,γ) : zero(t₁)) + ∫f + (∞₂ ? nsp(t₂,g,dg,γ) : zero(t₂))
     end
 end

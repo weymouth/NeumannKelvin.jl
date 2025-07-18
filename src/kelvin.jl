@@ -119,13 +119,14 @@ function wavelike(x,y,z,ltol=-5log(10),atol=exp(ltol))
     rngs = Δg_ranges(x,y,Δg,R)    # finite phase ranges
     ∫Wᵢ(x,y,z,rngs;f,atol)        # integrate
 end
-Δg_ranges(x,y,Δg,R) = finite_ranges(stationary_points(x,y),t->g(x,y,t),Δg,R)
+Δg_ranges(x,y,Δg,R;kwargs...) = finite_ranges(stationary_points(x,y),t->g(x,y,t),Δg,R;kwargs...)
 ∫Wᵢ(x,y,z,rngs;kwargs...) = 4∫path(
     t-> g(x,y,t)-im*z*(1+t^2), # complex-phase
     t-> dg(x,y,t)-2im*z*t,     # it's derivative
     rngs;kwargs...)
-g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
-dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative
+g(x,y,t) = (x+y*t)*kₓ(t)           # phase function
+dg(x,y,t) = (x*t+y*(2t^2+1))/kₓ(t) # it's derivative
+kₓ(t) = ⎷(1+t^2)                   # wave number in x
 ⎷(z::Complex) = π/2≤angle(z)≤π ? -√z : √z # move √ branch-cut
 ⎷(x) = √x
 

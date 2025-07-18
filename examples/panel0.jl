@@ -16,7 +16,7 @@ for h = logrange(1,1e-5,6)
 end
 
 using NeumannKelvin,TupleTools,QuadGK,IntervalSets
-using NeumannKelvin: stationary_points,finite_ranges,filter,complex_path,g,dg,⎷
+using NeumannKelvin: Δg_ranges,g,∫Wᵢ,⎷
 """
     ∫₂wavelike(x, z, a, b)
 
@@ -38,20 +38,18 @@ where `Δ,m = (b-a),(a+b)/2`, while `f_a,f_b` are evalauted over `A-M,B-M`.
 function ∫₂wavelike(x,z,a,b,ltol=-5log(10),atol=10exp(ltol))
     (x≥0 || z≤ltol) && return 0.
     # Get ranges for f_a, f_b
-    R = min(exp(-0.5ltol),√(ltol/z-1))
-    get_rngs(y) = finite_ranges(stationary_points(x,y),t->g(x,y,t),-ltol,R)
-    A,B = get_rngs.((a,b))
+    Δg,R = -ltol,min(exp(-0.5ltol),√(ltol/z-1)) # phase width & range limit
+    A,B = Δg_ranges.(x,(a,b),Δg,R)              # finite phase ranges
 
     # Range intersections ∩: use f_m & quadgk
     Δ, m, M = (b-a), (a+b)/2, A ∩ B
-    @fastmath @inline f_m(t) = Δ*sinc(Δ*k(t)/2π)*sin(g(x,m,t))*exp(z*(1+t^2))
+    @fastmath f_m(t) = Δ*sinc(Δ*k(t)/2π)*sin(g(x,m,t))*exp(z*(1+t^2))
     I_m = 4sum(r->quadgk(f_m,endpoints(r)...;atol)[1], M)
     
-    # Range differences \: use f_a,,f_b & complex_path
+    # Range differences \: use f_a, f_b & ∫Wᵢ
     I_m + diff(((a,A),(b,B))) do (y,rngs)
-        @fastmath @inline f(t)=-cos(g(x,y,t))/k(t)*exp(z*(1+t^2))
-        4complex_path(t->g(x,y,t)-im*z*(1+t^2),t->dg(x,y,t)-2im*z*t,
-                      rngs\M;γ=t->-im/k(t),f,atol) # rngs = rngs \ M !!
+        @fastmath f(t)=-cos(g(x,y,t))/k(t)*exp(z*(1+t^2))
+        ∫Wᵢ(x,y,z,rngs\M;γ=t->-im/k(t),f,atol)
     end
 end
 k(t) = t*⎷(1+t^2)

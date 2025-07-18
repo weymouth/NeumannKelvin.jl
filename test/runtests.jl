@@ -28,7 +28,7 @@ using QuadGK,IntervalSets
 
     I,e,c=quadgk_count(f,-Inf,Inf)
     # @show I,e,c # (1.247000964522693, 1.824659458372201e-8, 15195)
-    @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
+    @test NeumannKelvin.∫path(g,dg,rngs) ≈ I atol=1e-5
 end
 
 @testset "panels.jl" begin

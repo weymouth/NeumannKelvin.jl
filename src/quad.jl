@@ -14,7 +14,7 @@ end
 quadgl(f,a,b;x=SA[-1/√3,1/√3],w=SA[1,1]) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
-    complex_path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))
+    ∫path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))
 
 Evaluate the integral `∫f(t)dt` for `t ∈ rngs` using a mixed real/complex path. 
 `rngs` is a collection of real-line intervals, and are integrated using QuadGK.
@@ -22,9 +22,7 @@ An open boundary i.e. `rng = [t₁,t₂)` encodes that the interval should _also
 be integrated from the boundary point to ±∞ in the complex-plane using `nsp`. 
 i.e. `rng=(-2,1]` is evalauted with `-nsp(-2,g,dg,γ)+quadgk(f,-2,1)`.
 """
-function complex_path(g,dg,rngs;atol=1e-3,γ=one,
-    f = t->((u,v)=reim(g(t)); @fastmath γ(t)*exp(-v)*sin(u)),s₀=zero(f(1.)))
-
+function ∫path(g,dg,rngs;atol=1e-3,γ=one,f=t->imag(γ(t)*exp(im*g(t))),s₀=zero(f(1.)))
     # Sum the interval contributions
     @inline when(flag, term) = flag ? term : s₀
     sum(rngs,init=s₀) do rng

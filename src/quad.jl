@@ -16,15 +16,15 @@ quadgl(f,a,b;x=SA[-1/√3,1/√3],w=SA[1,1]) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-
 """
     ∫path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))
 
-Evaluate the integral `∫f(t)dt` for `t ∈ rngs` using a mixed real/complex path. 
+Evaluate the integral `∫f(t)dt` for `t ∈ rngs` using a mixed real/complex path.
 `rngs` is a collection of real-line intervals, and are integrated using QuadGK.
-An open boundary i.e. `rng = [t₁,t₂)` encodes that the interval should _also_ 
-be integrated from the boundary point to ±∞ in the complex-plane using `nsp`. 
+An open boundary i.e. `rng = [t₁,t₂)` encodes that the interval should _also_
+be integrated from the boundary point to ±∞ in the complex-plane using `nsp`.
 i.e. `rng=(-2,1]` is evalauted with `-nsp(-2,g,dg,γ)+quadgk(f,-2,1)`.
 """
 function ∫path(g,dg,rngs;atol=1e-3,γ=one,f=t->imag(γ(t)*exp(im*g(t))),s₀=zero(f(1.)))
-    # Sum the interval contributions
     @inline when(flag, term) = flag ? term : s₀
+    # Sum the interval contributions
     sum(rngs,init=s₀) do rng
         (t₁,t₂) = endpoints(rng); (∞₁,∞₂) = map(!,closedendpoints(rng))
         when(∞₁,-nsp(t₁,g,dg,γ)) + when(t₁<t₂,quadgk(f,t₁,t₂;atol)[1]) + when(∞₂,nsp(t₂,g,dg,γ))
@@ -38,7 +38,7 @@ using Roots
 Integrate the contributions of `imag(∫γ(h)exp(im*g(h))dh)` from
 `h = [h₀,±∞]` using numerical stationary phase. The complex path
 satisfies `g(h)=g(h₀)+im*p` where `g` is the complex phase and `p`
-are Gauss-Laguerre integration points, and is found using the 
+are Gauss-Laguerre integration points, and is found using the
 phase derivative `dg=g′(h)` and Newton's method. The amplitude `γ`
 must be positive and slowly varying compared to `g` over `h`.
 """

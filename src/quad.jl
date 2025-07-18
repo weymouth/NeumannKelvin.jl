@@ -16,7 +16,7 @@ quadgl(f,a,b;x=SA[-1/√3,1/√3],w=SA[1,1]) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-
 """
     complex_path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))
 
-Evaluate the integral `∫f(t)dt` for `t ∈ rngs` using a mixed real-complex path. 
+Evaluate the integral `∫f(t)dt` for `t ∈ rngs` using a mixed real/complex path. 
 `rngs` is a collection of real-line intervals, and are integrated using QuadGK.
 An open boundary i.e. `rng = [t₁,t₂)` encodes that the interval should _also_ 
 be integrated from the boundary point to ±∞ in the complex-plane using `nsp`. 
@@ -25,12 +25,12 @@ i.e. `rng=(-2,1]` is evalauted with `-nsp(-2,g,dg,γ)+quadgk(f,-2,1)`.
 function complex_path(g,dg,rngs;atol=1e-3,γ=one,
     f = t->((u,v)=reim(g(t)); @fastmath γ(t)*exp(-v)*sin(u)))
 
-    # Sum the flagged endpoints and interval contributions
+    # Sum the interval contributions
     sum(rngs,init=zero(f(0.))) do rng
-        @show rng
+        # @show rng
         (t₁,t₂) = endpoints(rng); (∞₁,∞₂) = map(!,closedendpoints(rng))
         ∫f,c,n = quadgk_count(f,t₁,t₂;atol)
-        @show ∫f,c,n
+        # @show ∫f,c,n
         (∞₁ ? -nsp(t₁,g,dg,γ) : zero(t₁)) + ∫f + (∞₂ ? nsp(t₂,g,dg,γ) : zero(t₂))
     end
 end
@@ -41,19 +41,18 @@ using Roots
 
 Integrate the contributions of `imag(∫γ(h)exp(im*g(h))dh)` from
 `h = [h₀,±∞]` using numerical stationary phase. The complex path
-satisfies `ϵ(h)=g(h)-g(h₀)-im*p=0` where `g` is the complex phase
-and `p` are Gauss-Laguerre integration points, and is found using
-the phase derivative `dg=g′(h)` and Newton's method. The amplitude
-`γ` must be positive and slowly varying compared to `g` over `h`.
+satisfies `g(h)=g(h₀)+im*p` where `g` is the complex phase and `p`
+are Gauss-Laguerre integration points, and is found using the 
+phase derivative `dg=g′(h)` and Newton's method. The amplitude `γ`
+must be positive and slowly varying compared to `g` over `h`.
 """
 @fastmath function nsp(h₀,g,dg,γ=one;xlag=xlag,wlag=wlag,atol=1e-3)
     # Sum over complex Gauss-Laguerre points
-    g₀,h = promote(g(h₀),h₀)
-    s = zero(typeof(imag(g₀)))
+    g₀,h,s = promote(g(h₀),h₀,0.)
     for (p,w) in zip(xlag,wlag)
         h = find_zero((h->g(h)-g₀-im*p,dg),h,Roots.Newton();atol)
-        s += w*imag(γ(h)*exp(im*g₀)*im/dg(h))
-    end;s
+        s += w*γ(h)*im/dg(h)
+    end; imag(exp(im*g₀)*s)
 end
 
 using TupleTools,IntervalSets
@@ -66,38 +65,30 @@ The closed intervals `Δx=[x₁,x₂]` are defined such that `|g(xᵢ)-g(x)|≈�
 The boundaries of Δx are opened to indicate the range continues to ±∞ if they don't touch ±R.
 """
 function finite_ranges(S,g,Δg,R;atol=0.1Δg)
-    function Δx(a,b,check=true)
-        !isfinite(b) && return a ⇔ @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(1,b)),Order1();atol)
-        check && abs(g(a)-g(b))≤Δg+atol && return a ⇔ b
-        a ⇔ @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol)
+    function xᵢ(a,b,check=true)
+        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(1,b)),Order1();atol)
+        check && abs(g(a)-g(b))≤Δg+atol && return b
+        @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol)
     end
 
-    # Sort the stationary point values and handle empty case
+    # Sort the stationary points and handle empty case
     S = filter(s->-R<s<R,TupleTools.sort(S))
-    length(S) == 0 && return (-value(R)..value(R),)
+    length(S) == 0 && return (-value(R)..value(R),) # no Duals
 
-    # Construct finite ranges around each stationary point
-    rngs = mapreduce(TupleTools.vcat,zip(Base.front(S),Base.tail(S)),init=()) do (a,b)
-        abs(g(a)-g(b)) ≤ 2Δg && return (a..b,) # whole interval
-        Δx(a,b,false),Δx(b,a,false) # subintervals from left & right
+    # Construct disjoint range enpoints between stationary point pairs
+    ends = mapreduce(TupleTools.vcat,zip(Base.front(S),Base.tail(S)),init=()) do (a,b)
+        abs(g(a)-g(b)) ≤ 2Δg && return () # skip if insufficient gap
+        p,q = xᵢ(a,b,false),xᵢ(b,a,false) # look from left & right
+        p < q ? (p,q) : ()                # return if disjoint
     end
 
-    # Add end ranges and merge into disjoint intervals
-    rngs = foldl((rngs...,Δx(last(S),R)),init=(Δx(first(S),-R),)) do acc, next
-        r = last(acc)
-        disjoint(r, next) ? (acc..., next) : (Base.front(acc)..., r ∪ next)
-    end
-
-    # Open each interval boundary unless it's touching ±R
-    map(rngs) do p
-        a,b = endpoints(p)
-        Interval{openB(a>-R),openB(b<R)}(value(a),value(b))
+    # Add first/last endpoint and create open/closed intervals
+    map(Iterators.partition((xᵢ(first(S),-R),ends...,xᵢ(last(S),R)),2)) do (a,b)
+        Interval{openif(a>-R),openif(b<R)}(value(a),value(b)) # no Duals
     end
 end
-⇔(a, b) = a ≤ b ? a..b : b..a
-disjoint(a,b) = isempty(intersect(a,b))
-openB(flag) = flag ? :open : :closed
+openif(flag) = flag ? :open : :closed
 Base.:\(a::Interval, b::Interval) = mapreduce(bᶜ-> a ∩ bᶜ, TupleTools.vcat, -b)
 Base.:-(a::Interval) = ((-Inf .. a.left),(a.right .. Inf))
 Base.:∩(A::Tuple,B::Tuple) = filter(!isempty,Tuple(a ∩ b for a in A, b in B))
-Base.:\(A::Tuple,B::Tuple) = filter(!isempty,mapreduce(a -> foldl(\, B; init = a), TupleTools.vcat, A))
+Base.:\(A::Tuple,B::Tuple) = mapreduce(a -> foldl(\, B; init = a), TupleTools.vcat, A)

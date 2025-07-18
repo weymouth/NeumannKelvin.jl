@@ -87,5 +87,6 @@ mappairs(f,t...) = ntuple(i->f(t[2i-1],t[2i]),length(t)÷2)
 openif(flag) = flag ? :open : :closed
 Base.:\(a::Interval, b::Interval) = filter(r->r.left≤r.right,mapreduce(bᶜ-> a ∩ bᶜ, TupleTools.vcat, -b))
 Base.:-(a::Interval) = ((-Inf .. a.left),(a.right .. Inf))
+Base.:\(A::Tuple,b::Interval) = mapreduce(a -> a\b, TupleTools.vcat, A)
 Base.:∩(A::Tuple,B::Tuple) = filter(!isempty,Tuple(a ∩ b for a in A, b in B))
 Base.:\(A::Tuple,B::Tuple) = mapreduce(a -> foldl(\, B; init = a), TupleTools.vcat, A)

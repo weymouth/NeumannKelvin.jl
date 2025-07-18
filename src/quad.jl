@@ -23,15 +23,13 @@ be integrated from the boundary point to ±∞ in the complex-plane using `nsp`.
 i.e. `rng=(-2,1]` is evalauted with `-nsp(-2,g,dg,γ)+quadgk(f,-2,1)`.
 """
 function complex_path(g,dg,rngs;atol=1e-3,γ=one,
-    f = t->((u,v)=reim(g(t)); @fastmath γ(t)*exp(-v)*sin(u)))
+    f = t->((u,v)=reim(g(t)); @fastmath γ(t)*exp(-v)*sin(u)),s₀=zero(f(1.)))
 
     # Sum the interval contributions
-    sum(rngs,init=zero(f(0.))) do rng
-        # @show rng
+    @inline when(flag, term) = flag ? term : s₀
+    sum(rngs,init=s₀) do rng
         (t₁,t₂) = endpoints(rng); (∞₁,∞₂) = map(!,closedendpoints(rng))
-        ∫f,c,n = quadgk_count(f,t₁,t₂;atol)
-        # @show ∫f,c,n
-        (∞₁ ? -nsp(t₁,g,dg,γ) : zero(t₁)) + ∫f + (∞₂ ? nsp(t₂,g,dg,γ) : zero(t₂))
+        when(∞₁,-nsp(t₁,g,dg,γ)) + when(t₁<t₂,quadgk(f,t₁,t₂;atol)[1]) + when(∞₂,nsp(t₂,g,dg,γ))
     end
 end
 
@@ -83,12 +81,13 @@ function finite_ranges(S,g,Δg,R;atol=0.1Δg)
     end
 
     # Add first/last endpoint and create open/closed intervals
-    map(Iterators.partition((xᵢ(first(S),-R),ends...,xᵢ(last(S),R)),2)) do (a,b)
+    mappairs(xᵢ(first(S),-R),ends...,xᵢ(last(S),R)) do a,b
         Interval{openif(a>-R),openif(b<R)}(value(a),value(b)) # no Duals
     end
 end
+mappairs(f,t...) = ntuple(i->f(t[2i-1],t[2i]),length(t)÷2)
 openif(flag) = flag ? :open : :closed
-Base.:\(a::Interval, b::Interval) = mapreduce(bᶜ-> a ∩ bᶜ, TupleTools.vcat, -b)
+Base.:\(a::Interval, b::Interval) = filter(r->r.left≤r.right,mapreduce(bᶜ-> a ∩ bᶜ, TupleTools.vcat, -b))
 Base.:-(a::Interval) = ((-Inf .. a.left),(a.right .. Inf))
 Base.:∩(A::Tuple,B::Tuple) = filter(!isempty,Tuple(a ∩ b for a in A, b in B))
 Base.:\(A::Tuple,B::Tuple) = mapreduce(a -> foldl(\, B; init = a), TupleTools.vcat, A)

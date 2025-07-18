@@ -48,7 +48,7 @@ components(data,i) = getindex.(data, i)
 components(data::AbstractArray{S}) where {S<:SVector{n}} where n = components.(Ref(data),1:n)
 Base.diff(t::NTuple{2}) = t[2]-t[1]
 Base.diff(f::Function,t::Tuple) = diff(f.(t))
-extent(a) = (p = extrema(a); p[2]-p[1])
+extent(a) = diff(extrema(a))
 export viz,components,extent
 
 end

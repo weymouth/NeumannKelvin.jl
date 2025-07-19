@@ -16,7 +16,7 @@ for h = logrange(1,1e-4,5)
 end
 
 using NeumannKelvin,TupleTools,QuadGK,IntervalSets
-using NeumannKelvin: Δg_ranges,g,kₓ,∫Wᵢ,⎷
+using NeumannKelvin: Δg_ranges,g,kₓ,∫Wᵢ
 """
     ∫₂wavelike(x, z, a, b)
 
@@ -44,7 +44,7 @@ function ∫₂wavelike(x,z,a,b,ltol=-5log(10),atol=10exp(ltol))
     # Range intersections ∩: use f_m & quadgk
     Δ, m, M = (b-a), (a+b)/2, A ∩ B
     @fastmath f_m(t) = Δ*sinc(Δ*t*kₓ(t)/2π)*sin(g(x,m,t))*exp(z*(1+t^2))
-    I_m = 4sum(r->quadgk(f_m,endpoints(r)...;atol)[1], M)
+    I_m = 4sum(rng->quadgk(f_m,endpoints(rng)...;atol)[1], M)
 
     # Range differences \: use f_a, f_b & ∫Wᵢ
     I_m + diff(((a,A),(b,B))) do (y,rngs)
@@ -70,22 +70,21 @@ function ∫wavelike(z,a,b,c,d,ltol=-5log(10),atol=10exp(ltol))
     b = min(-0.,b)               # Heaviside limit
 
     # Get ranges
-    x,y = SA[a,b],SA[c,d]                       # corners
-    Δg,R = -ltol,min(exp(-0.5ltol),√(ltol/z-1)) # phase width & range limit
-    rngs = Δg_ranges.(x,y',Δg,R)                # finite phase ranges
+    x,y = SA[a,b],SA[c,d]                   # corners
+    Δg,R = -0.5ltol,min(1/atol,√(ltol/z-1)) # phase width & range limit
+    rngs = Δg_ranges.(x,y',Δg,R)            # finite phase ranges
 
     # Range intersections ∩: use f_m & quadgk
     Δx, Δy, mx, my, M = b-a, d-c, (a+b)/2, (c+d)/2, reduce(∩,rngs)
     @fastmath f_m(t) = Δx*Δy*sinc(Δx*kₓ(t)/2π)*sinc(Δy*t*kₓ(t)/2π)*sin(g(mx,my,t))*exp(z*(1+t^2))
-    I_m = 4sum(r->quadgk(f_m,endpoints(r)...;atol)[1],M)
+    I_m = 4sum(rng->quadgk(f_m,endpoints(rng)...;atol)[1],M)
 
     # Range differences \: use ±γ*fᵢ & ∫Wᵢ
-    I_m - sum(enumerate(x)) do (i,x)
-            sum(enumerate(y)) do (j,y)
-                s = (-1)^(i+j)
-                @fastmath f(t) = s*sin(g(x,y,t))/t/(1+t^2)*exp(z*(1+t^2))
-                ∫Wᵢ(x,y,z,rngs[i,j]\M; γ=t->s/t/(1+t^2),f,atol)
-    end;end
+    I_m - sum(Iterators.product(enumerate(x), enumerate(y))) do ((i,xᵢ), (j,yⱼ))
+        s = (-1)^(i+j)
+        @fastmath f(t) = s/t/(1+t^2)*sin(g(xᵢ,yⱼ,t))*exp(z*(1+t^2))
+        ∫Wᵢ(xᵢ,yⱼ,z,rngs[i,j]\M; γ=t->s/t/(1+t^2),f,atol)
+    end
 end
 plot(range(-30,-0,1000),x->∫wavelike(-0.,x,x+1,-0.5,0.5),label="∫∫Gda",xlabel="xg/U²")
 plot(range(-30,-0,1000),x->derivative(z->∫wavelike(z,x,x+1,-0.5,0.5),-0.),label="∫∫dG/dz da",xlabel="xg/U²")
@@ -93,6 +92,6 @@ plot(range(-30,-0,1000),x->derivative(x->∫wavelike(-0.,x,x+1,-0.5,0.5),x),labe
 
 ϕₖ(z,h) = ∫wavelike(z,-0.5h,0.5h,-0.5h,0.5h)
 w₀(h) = derivative(z->ϕₖ(z,h),-0.)
-for h = logrange(1,1e-3,4)
+for h = logrange(1,1e-4,5)
     @show h,w₀(h)/h
 end

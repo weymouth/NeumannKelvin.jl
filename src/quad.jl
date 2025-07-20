@@ -60,9 +60,9 @@ Return open/closed intervals around a set of stationary points `S` based on a ph
 The closed intervals `Δx=[x₁,x₂]` are defined such that `|g(xᵢ)-g(x)|≈Δg` for `x∈S∈-R..R`. Joint intervals are merged.
 The boundaries of Δx are opened to indicate the range continues to ±∞ if they don't touch ±R.
 """
-function finite_ranges(S,g,Δg,R;atol=0.1Δg)
+function finite_ranges(S,g,Δg,R;atol=0.1Δg,Δx=1)
     function xᵢ(a,b,check=true)
-        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(1,b)),Order1();atol)
+        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(value.((Δx,b))...)),Order1();atol)
         check && abs(g(a)-g(b))≤Δg+atol && return b
         @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol)
     end

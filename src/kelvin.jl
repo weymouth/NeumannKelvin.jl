@@ -2,9 +2,9 @@
     ∫kelvin(ξ,p;ℓ,d²=4,contour=false,filter=contour)
 
 Integrated disturbance of traveling submerged panel `p` on point `ξ` with Froude length `ℓ ≡ U²/g`.
-Uses `∫G` for the source and reflected sink potentials and `kelvin` for the free-surface potential. 
+Uses `∫G` for the source and reflected sink potentials and `kelvin` for the free-surface potential.
 A 2x2 quadrature is used when `|x-p.x|² , (z-p.z)²/ℓ² ≤ d²p.dA`, otherwise it uses the midpoint.
-If `contour=true` and `p` touches the `z=0` plane, the contribution from the waterline contour 
+If `contour=true` and `p` touches the `z=0` plane, the contribution from the waterline contour
 `ϕ₀=ℓ∫Gₙₖn₁dy` is included. See Noblesse 1983 and Barr & Price 1988.
 If `filter=true`, the `z_max` argument to `kelvin` is used to filter waves too small for the panel.
 """
@@ -119,7 +119,8 @@ function wavelike(x,y,z,ltol=-5log(10),atol=exp(ltol))
     rngs = Δg_ranges(x,y,Δg,R)    # finite phase ranges
     ∫Wᵢ(x,y,z,rngs;f,atol)        # integrate
 end
-Δg_ranges(x,y,Δg,R;kwargs...) = finite_ranges(stationary_points(x,y),t->g(x,y,t),Δg,R;kwargs...)
+Δg_ranges(x,y,Δg,R;kwargs...) = finite_ranges(stationary_points(x,y),t->g(x,y,t),Δg,R;Δx=step(x,y,Δg),kwargs...)
+step(x,y,Δg) = abs(y)≤√eps() ? max(-Δg/x,√(-2Δg/x),1) : max(1,Δg/3√abs(y))
 ∫Wᵢ(x,y,z,rngs;kwargs...) = 4∫path(
     t-> g(x,y,t)-im*z*(1+t^2), # complex-phase
     t-> dg(x,y,t)-2im*z*t,     # it's derivative

@@ -70,28 +70,42 @@ function ∫wavelike(z,a,b,c,d,ltol=-5log(10),atol=10exp(ltol))
     b = min(-0.,b)               # Heaviside limit
 
     # Get ranges
-    x,y = SA[a,b],SA[c,d]                   # corners
-    Δg,R = -0.5ltol,min(1/atol,√(ltol/z-1)) # phase width & range limit
-    rngs = Δg_ranges.(x,y',Δg,R)            # finite phase ranges
+    x,y = SA[a,b],SA[c,d]        # corners
+    Δg,R = -0.5ltol,√(ltol/z-1)  # phase width & range limit
+    rngs = Δg_ranges.(x,y',Δg,R) # finite phase ranges
+    M = reduce(∩,rngs)           # intersection
+    isempty(M) && throw(ArgumentError("Empty intersection: reduce panel size"))
 
-    # Range intersections ∩: use f_m & quadgk
-    Δx, Δy, mx, my, M = b-a, d-c, (a+b)/2, (c+d)/2, reduce(∩,rngs)
-    @fastmath f_m(t) = Δx*Δy*sinc(Δx*kₓ(t)/2π)*sinc(Δy*t*kₓ(t)/2π)*sin(g(mx,my,t))*exp(z*(1+t^2))
-    I_m = 4sum(rng->quadgk(f_m,endpoints(rng)...;atol)[1],M)
+    # Range intersections: use f_m & quadgk
+    Δx, Δy, mx, my = b-a, d-c, (a+b)/2, (c+d)/2
+    @fastmath f_m(t) = sinc(Δx*kₓ(t)/2π)*sinc(Δy*t*kₓ(t)/2π)*sin(g(mx,my,t))*exp(z*(1+t^2))
+    all(0 .∉ M) && return Δx*Δy*∫Wᵢ(mx,my,z,M;f=f_m,atol) # can't use γ!
+    I_m = 4Δx*Δy*sum(rng->quadgk(f_m,endpoints(rng)...;atol)[1],M)
 
-    # Range differences \: use ±γ*fᵢ & ∫Wᵢ
-    I_m - sum(Iterators.product(enumerate(x), enumerate(y))) do ((i,xᵢ), (j,yⱼ))
-        s = (-1)^(i+j)
-        @fastmath f(t) = s/t/(1+t^2)*sin(g(xᵢ,yⱼ,t))*exp(z*(1+t^2))
-        ∫Wᵢ(xᵢ,yⱼ,z,rngs[i,j]\M; γ=t->s/t/(1+t^2),f,atol)
+    # Range differences: use ±γ*fᵢ & ∫Wᵢ
+    I_m - Δx*Δy*sum(Iterators.product(enumerate(x), enumerate(y))) do ((i,xᵢ), (j,yⱼ))
+        @fastmath γ(t) = (-1)^(i+j)/(t*(1+t^2)*Δx*Δy)
+        @fastmath f(t) = γ(t)*sin(g(xᵢ,yⱼ,t))*exp(z*(1+t^2))
+        ∫Wᵢ(xᵢ,yⱼ,z,rngs[i,j]\M; γ,f,atol)
     end
 end
+ϕₖ(z,h) = ∫wavelike(z,-0.5h,0.5h,-0.5h,0.5h,-10log(10))
+ϕₖ(-0.,1e-3)*1e6,-π/2
+w₀(h) = derivative(z->ϕₖ(z,h),-0.)
+w₀(1e-3)*1e3,-2
+
+using HCubature
+hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-0.05,-0.05],SA[0.05,0.05])
+∫wavelike(-1,-0.05,0.05,-0.05,0.05)
+hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-33√8,-33],SA[-33√8+1,-33+1])
+∫wavelike(-1,-33√8,-33√8+1,-33,-33+1)
+
+w₀(h) = derivative(z->ϕₖ(z,h),-0.)
+for h = logrange(1,1e-4,9)
+    @show h,w₀(h)/h
+end
+
+using Plots
 plot(range(-30,-0,1000),x->∫wavelike(-0.,x,x+1,-0.5,0.5),label="∫∫Gda",xlabel="xg/U²")
 plot(range(-30,-0,1000),x->derivative(z->∫wavelike(z,x,x+1,-0.5,0.5),-0.),label="∫∫dG/dz da",xlabel="xg/U²")
 plot(range(-30,-0,1000),x->derivative(x->∫wavelike(-0.,x,x+1,-0.5,0.5),x),label="∫∫dG/dx da",xlabel="xg/U²")
-
-ϕₖ(z,h) = ∫wavelike(z,-0.5h,0.5h,-0.5h,0.5h)
-w₀(h) = derivative(z->ϕₖ(z,h),-0.)
-for h = logrange(1,1e-4,5)
-    @show h,w₀(h)/h
-end

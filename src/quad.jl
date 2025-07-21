@@ -23,11 +23,10 @@ be integrated from the boundary point to ±∞ in the complex-plane using `nsp`.
 i.e. `rng=(-2,1]` is evalauted with `-nsp(-2,g,dg,γ)+quadgk(f,-2,1)`.
 """
 function ∫path(g,dg,rngs;atol=1e-3,γ=one,f=t->imag(γ(t)*exp(im*g(t))),s₀=zero(f(1.)))
-    @inline when(flag, term) = flag ? term : s₀
     # Sum the interval contributions
     sum(rngs,init=s₀) do rng
         (t₁,t₂) = endpoints(rng); (∞₁,∞₂) = map(!,closedendpoints(rng))
-        when(∞₁,-nsp(t₁,g,dg,γ)) + when(t₁<t₂,quadgk(f,t₁,t₂;atol)[1]) + when(∞₂,nsp(t₂,g,dg,γ))
+        (∞₁ ? -nsp(t₁,g,dg,γ) : s₀) + (t₁<t₂ ? quadgk(f,t₁,t₂;atol)[1] : s₀) + (∞₂ ? nsp(t₂,g,dg,γ) : s₀)
     end
 end
 
@@ -44,7 +43,7 @@ must be positive and slowly varying compared to `g` over `h`.
 """
 @fastmath function nsp(h₀,g,dg,γ=one;xlag=xlag,wlag=wlag,atol=1e-3)
     # Sum over complex Gauss-Laguerre points
-    g₀,h,s = promote(g(h₀),h₀,0.)
+    g₀,h,s = promote(g(h₀),h₀,0im)
     for (p,w) in zip(xlag,wlag)
         h = find_zero((h->g(h)-g₀-im*p,dg),h,Roots.Newton();atol)
         s += w*γ(h)*im/dg(h)

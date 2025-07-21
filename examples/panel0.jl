@@ -1,19 +1,9 @@
-using NeumannKelvin
-using HCubature
-phi(z,h) = 4hcubature(xy->-1/norm(SA[xy...,-z]),SA[0.,0.],SA[0.5h,0.5h])[1]
-w(h) = derivative(z->phi(z,h),h^2)
-w(0.01)
-using Richardson
-I,e = extrapolate(w,1.0)
-abs(I-2π)≤√e
-
+using NeumannKelvin,HCubature
 using NeumannKelvin: nearfield
-ϕₙ(z,h) = 2hcubature(xy->nearfield(SA[xy...,-z]...),SA[-0.5h,0.],SA[0.5h,0.5h])[1]
-for h = logrange(1,1e-4,5)
-    w(z) = derivative(z->ϕₙ(z,h),z)/h
-    I,e = extrapolate(w,h)
-    @show h,I,e
-end
+ϕₙ(z,h) = 2hcubature(xy->nearfield(SA[xy...,z]...),SA[-0.5h,0.],SA[0.5h,0.5h])[1]
+ϕₙ(-0.,1e-2)*1e4,-2
+derivative(z->ϕₙ(z,1e-2),-0.)*1e2
+4hcubature(xy->2/(norm(xy)+abs(xy[1])),SA[0.,0.],SA[0.5,0.5])[1]
 
 using NeumannKelvin,TupleTools,QuadGK,IntervalSets
 using NeumannKelvin: Δg_ranges,g,kₓ,∫Wᵢ
@@ -97,13 +87,12 @@ w₀(1e-3)*1e3,-2
 using HCubature
 hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-0.05,-0.05],SA[0.05,0.05])
 ∫wavelike(-1,-0.05,0.05,-0.05,0.05)
+hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-3√8,-3],SA[-3√8+1,-3+1])
+∫wavelike(-1,-3√8,-3√8+1,-3,-3+1)
+hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-33√8,-17],SA[-33√8+1,-17+1])
+∫wavelike(-1,-33√8,-33√8+1,-17,-17+1) # two M intervals
 hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-33√8,-33],SA[-33√8+1,-33+1])
-∫wavelike(-1,-33√8,-33√8+1,-33,-33+1)
-
-w₀(h) = derivative(z->ϕₖ(z,h),-0.)
-for h = logrange(1,1e-4,9)
-    @show h,w₀(h)/h
-end
+∫wavelike(-1,-33√8,-33√8+1,-33,-33+1) # uses fallback
 
 using Plots
 plot(range(-30,-0,1000),x->∫wavelike(-0.,x,x+1,-0.5,0.5),label="∫∫Gda",xlabel="xg/U²")

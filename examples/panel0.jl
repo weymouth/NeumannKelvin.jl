@@ -39,22 +39,21 @@ plot(range(-30,-0,10000),x->derivative(z->∫₂wavelike(x,z,-0.5,0.5),-0.),labe
 """
     ∫wavelike(z, a, b, c, d; α=0)
 
-Compute the integral `I = 4∫∫∫Im(exp(i*g(x,y,t))) dxdydt` where `t∈[-∞,∞], x∈[a,b], y∈[c,s]`
-and `g(x,y,t)=(x+y*t)√(1+t²)-i*z*(1+t²)`. A regularization term `exp(-α²*t²*(1+t²))` can be 
-used to damp out the transverse waves proportional to their wavenumber squared.
+Compute the integral `I = 4H(-x)∫∫∫Im(exp(i*g(x,y,t))) dxdydt` where `t∈[-∞,∞], x∈[a,b], y∈[c,d]`
+`g(x,y,t)=(x+y*t)*√(1+t²)-i*z*(1+t²)` and `H` is the Heaviside function. A regularization term 
+`exp(-α²*t²*(1+t²))` can be used to damp out the transverse waves proportional to their wavenumber squared.
 
 ## Implementation Details
 The x and y-integrals are evaluated analytically to give:
 
     I = ∑ⱼₖ 4∫Im(fⱼₖ(t)) dt = ∑ⱼₖ 4∫Im(γ(t)*exp(i*g(xⱼ,yₖ,t)))
 
-where `γ(t) = ±1/(t*(1+t²))`. Each integral has a set integration interval `rngsⱼₖ` and `nsp` 
-is used to integrate to ±∞ away from these. To avoid catastrophic cancellation over the interval
-intersections `M = ⋂ⱼₖ rngsⱼₖ` (especially near t=0), the combined integrand is used over M:
+where `γ(t) = ±1/(t*(1+t²))`. Each corner `(xⱼ<0, yₖ)` defines a range `rngsⱼₖ` over which the phase is finite. 
+A combined integrand is used over the intersection `M = ⋂ⱼₖ rngsⱼₖ` to avoid cancellation (especially at `t=0`)
 
-    I = 4∫f_m dt = 4ΔxΔy∫sinc(Δx√(1+t²)/2π)sinc(Δy*t√(1+t²)/2π)*Im(exp(i*g(mx,my,t))) dt
+    I = 4∫f_m dt = 4ΔxΔy∫sinc(Δx*√(1+t²)/2π)sinc(Δy*t*√(1+t²)/2π)*Im(exp(i*g(mx,my,t))) dt
 
-where `Δᵢ,mᵢ` are the difference and mean of the x,y corners, while `fⱼₖ` is used over `rngsⱼₖ-M`.
+where `Δᵢ,mᵢ` are the difference and mean of the corner values. Then `∫Wᵢ(fⱼₖ)` is used over `rngsⱼₖ \\ M`.
 """
 function ∫wavelike(z,a,b,c,d;ltol=-5log(10),atol=10exp(ltol),α=0)
     (a≥0 || z≤ltol) && return 0. # Panel downstream or too deep
@@ -100,3 +99,46 @@ end;plot!(ylims=(-15,5))
 plot(ylabel="∫∫dG/dz da",xlabel="xg/U²");for α in (0.025,0.05,0.1,0.2)
     plot!(range(-20,0,1000),y->derivative(z ->∫wavelike(z,-10√8,-10√8+1,y-0.5,y+0.5;α),-0.),label=α)
 end;plot!(ylims=(-10,5))
+
+using NeumannKelvin: quadgl,nearfield
+using FastGaussQuadrature,ForwardDiff
+xgl,wgl=SVector{10}.(gausslegendre(10))
+function ∫surf(ξ,p;ℓ=1,ltol=-5log(10),α=0.05)
+    (b,a),(d,c),_ = extrema.(components(p.xᵤᵥ/ℓ))
+    ξ = ξ/ℓ
+    ϕₙ = quadgl(α->nearfield((ξ-α)...),x=p.x₄/ℓ,w=p.w₄)
+    # ϕₙ = hcubature(α->nearfield((ξ-SA[α[1],α[2],-0.])...),SA[b,d],SA[a,c],atol=1e-4)[1]
+    ϕₖ = ∫wavelike(min(ξ[3],-0.),ξ[1]-a,ξ[1]-b,ξ[2]-c,ξ[2]-d;ltol,α)
+    (ϕₙ+ϕₖ)/ℓ
+end
+
+Δg,wg = -0.9:0.2:1, fill(0.2,10)
+p = measure_panel((u,v)->SA[u,-v,0],0.,0.,5,5)
+unwrap(a) = map(i->a[i],[1,2,4,3])
+xp,yp,_ = unwrap.(components(p.xᵤᵥ))
+w(x,y) = derivative(z->∫surf(SA[x,y,z],p),-0.)
+ζ(x,y) = derivative(x->∫surf(SA[x,y,-0.],p),x)
+
+using Plots
+x,y = -25:0.2:5,-10:0.1:10
+contourf(x,y,w,aspectratio=:equal,widen=false,
+    levels=-29:2:29,clims=(-29,29),
+    xlabel="xg/U²",ylabel="yg/U²",
+    colorbar_title = "vertical velocity w/q",color = :seismic
+);plot!(Shape(xp,yp),c=:grey,alpha=0.5,label="panel")
+savefig("examples\\surf_panelζ.png")
+
+contourf(x,y,ζ,aspectratio=:equal,widen=false,
+    levels=-27:2:27,clims=(-27,27),
+    xlabel="xg/U²",ylabel="yg/U²",
+    colorbar_title = "free surface height ζg/qU",color = :seismic,
+);plot!(Shape(xp,yp),c=:grey,alpha=0.5,label="panel")
+savefig("examples\\surf_panelζ.png")
+
+# Almost!?!
+dx = 0.1; x = (-0.5+0.5dx):dx:0.5
+p = measure_panel.((u,v)->SA[u,-v,0],x,x',dx,dx) |>Table
+A = influence(p,ϕ=∫surf)
+heatmap(A,aspectratio=:equal,yflip=true)
+q = A\ones(100)
+heatmap(reshape(q,(10,10)),aspectratio=:equal)

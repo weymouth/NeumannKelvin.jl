@@ -119,8 +119,14 @@ function wavelike(x,y,z,ltol=-5log(10),atol=exp(ltol))
     rngs = Δg_ranges(x,y,Δg,R)    # finite phase ranges
     ∫Wᵢ(x,y,z,rngs;f,atol)        # integrate
 end
-Δg_ranges(x,y,Δg,R;kwargs...) = finite_ranges(stationary_points(x,y),t->g(x,y,t),Δg,R;Δx=step(x,y,Δg),kwargs...)
-step(x,y,Δg) = abs(y)≤√eps() ? max(-Δg/x,√(-2Δg/x),1) : max(1,Δg/3√abs(y))
+using ForwardDiff: value
+function Δg_ranges(x,y,Δg,R;addzero=false,kwargs...)
+    x,y,Δg,R = value.((x,y,Δg,R)) # ranges shouldn't be Duals
+    S = stationary_points(x,y)    # Get stationary points
+    addzero && (S=(S...,0.))      # Append t=0 if needed
+    Δt = max(1., abs(y)≤√eps() ? max(-Δg/x,√(-2Δg/x)) : Δg/3√abs(y))
+    finite_ranges(S,t->g(x,y,t),Δg,R;Δx=Δt,kwargs...)
+end
 ∫Wᵢ(x,y,z,rngs;kwargs...) = 4∫path(
     t-> g(x,y,t)-im*z*(1+t^2), # complex-phase
     t-> dg(x,y,t)-2im*z*t,     # it's derivative

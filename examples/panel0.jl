@@ -7,7 +7,6 @@ derivative(z->ϕₙ(z,1e-2),-0.)*1e2
 
 using NeumannKelvin,TupleTools,QuadGK,IntervalSets
 using NeumannKelvin: Δg_ranges,g,kₓ,∫Wᵢ
-
 function ∫₂wavelike(x,z,a,b,ltol=-5log(10),atol=10exp(ltol))
     (x≥0 || z≤ltol) && return 0.
     # Get ranges for f_a, f_b
@@ -38,17 +37,18 @@ using Plots
 plot(range(-30,-0,1000),x->∫₂wavelike(x,-0.,-0.5,0.5),label="∫Gdy",xlabel="xg/U²")
 plot(range(-30,-0,10000),x->derivative(z->∫₂wavelike(x,z,-0.5,0.5),-0.),label="∫dG/dz dy",xlabel="xg/U²")
 """
-    ∫wavelike(z, a, b, c, d)
+    ∫wavelike(z, a, b, c, d; α=0)
 
 Compute the integral `I = 4∫∫∫Im(exp(i*g(x,y,t))) dxdydt` where `t∈[-∞,∞], x∈[a,b], y∈[c,s]`
-and `g(x,y,t)=(x+y*t)√(1+t²)-i*z*(1+t²)`.
+and `g(x,y,t)=(x+y*t)√(1+t²)-i*z*(1+t²)`. A regularization term `exp(-α²*t²*(1+t²))` can be 
+used to damp out the transverse waves proportional to their wavenumber squared.
 
 ## Implementation Details
-The x&y-integrals are evaluated analytically to give:
+The x and y-integrals are evaluated analytically to give:
 
     I = ∑ⱼₖ 4∫Im(fⱼₖ(t)) dt = ∑ⱼₖ 4∫Im(γ(t)*exp(i*g(xⱼ,yₖ,t)))
 
-where `γ(t) = ±1/(t*(1+t²))`. Each integral has a set integration intervals `rngsⱼₖ` and `nsp` 
+where `γ(t) = ±1/(t*(1+t²))`. Each integral has a set integration interval `rngsⱼₖ` and `nsp` 
 is used to integrate to ±∞ away from these. To avoid catastrophic cancellation over the interval
 intersections `M = ⋂ⱼₖ rngsⱼₖ` (especially near t=0), the combined integrand is used over M:
 
@@ -63,19 +63,18 @@ function ∫wavelike(z,a,b,c,d;ltol=-5log(10),atol=10exp(ltol),α=0)
     # Get ranges
     x,y = SA[a,b],SA[c,d]        # corners
     Δg,R = -0.5ltol,√(ltol/z-1)  # phase width & range limit
-    rngs = Δg_ranges.(x,y',Δg,R) # finite phase ranges
+    rngs = Δg_ranges.(x,y',Δg,R,addzero=true) # finite phase ranges
     M = reduce(∩,rngs)           # intersection
     isempty(M) && throw(ArgumentError("∫wavelike: Empty intersection - reduce panel size"))
 
     # Range intersections: use f_m & quadgk
     Δx, Δy, mx, my = b-a, d-c, (a+b)/2, (c+d)/2
     @fastmath f_m(t) = sinc(Δx*kₓ(t)/2π)*sinc(Δy*t*kₓ(t)/2π)*sin(g(mx,my,t))*exp(z*(1+t^2)-g(0.,α,t)^2)
-    all(0 .∉ M) && return Δx*Δy*∫Wᵢ(mx,my,z,M;f=f_m,atol) # can't use γ!
     I_m = 4Δx*Δy*sum(rng->quadgk(f_m,endpoints(rng)...;atol)[1],M)
 
     # Range differences: use ±γ*f & ∫Wᵢ
     I_m - Δx*Δy*sum(Iterators.product(enumerate(x), enumerate(y))) do ((i,xᵢ), (j,yⱼ))
-        @fastmath γ(t) = (-1)^(i+j)/(t*(1+t^2)*Δx*Δy)*exp(-g(0.,α,t)^2)
+        @fastmath γ(t) = (-1)^(i+j)/(t*(1+t^2)*Δx*Δy)*exp(-α^2*t't*(1+t't))
         @fastmath f(t) = γ(t)*sin(g(xᵢ,yⱼ,t))*exp(z*(1+t^2))
         ∫Wᵢ(xᵢ,yⱼ,z,rngs[i,j]\M; γ,f,atol)
     end
@@ -92,23 +91,12 @@ hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-3√8,-3],SA[-3√8+1,
 ∫wavelike(-1,-3√8,-3√8+1,-3,-3+1)
 hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-33√8,-17],SA[-33√8+1,-17+1])
 ∫wavelike(-1,-33√8,-33√8+1,-17,-17+1) # two M intervals
-hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],-1.),SA[-33√8,-33],SA[-33√8+1,-33+1])
-∫wavelike(-1,-33√8,-33√8+1,-33,-33+1) # uses fallback
 
 using Plots
-plot(range(-30,-0,1000),x->∫wavelike(-0.,x,x+1,-0.5,0.5),label="∫∫Gda",xlabel="xg/U²")
-plot(range(-30,-0,1000),x->derivative(x->∫wavelike(-0.,x,x+1,-0.5,0.5),x),label="∫∫dG/dx da",xlabel="xg/U²")
-plot(range(-30,-0,1000),x->derivative(z->∫wavelike(z,x,x+1,-0.5,0.5),-0.),label="∫∫dG/dz da",xlabel="xg/U²")
-plot!(range(-30,-0,1000),x->derivative(z->∫wavelike(z,x,x+1,-0.5,0.5,α=0.1),-0.),label="∫∫dG/dz da",xlabel="xg/U²")
+plot(ylabel="∫∫dG/dz da",xlabel="yg/U²");for α in (0.025,0.05,0.1,0.2)
+    plot!(range(-10,0,1000),y->derivative(z ->∫wavelike(z,-5√8,-5√8+1,y-0.5,y+0.5;α),-0.),label=α)
+end;plot!(ylims=(-15,5))
 
-plot(ylabel="∫∫dG/dz da",xlabel="xg/U²");for α in (0,0.025,0.05,0.1)
-    plot!(range(-6,6,1000),y->derivative(z ->∫wavelike(z,-5√8,-5√8+1,y-0.5,y+0.5;α),-0.),label=α)
-end;plot!()
-plot(ylabel="∫∫dG/dz da",xlabel="xg/U²");for α in (0,0.025,0.05,0.1)
-    plot!(range(-12,12,1000),y->derivative(z ->∫wavelike(z,-10√8,-10√8+1,y-0.5,y+0.5;α),-0.),label=α)
-end;plot!()
-
-contour(-30:0.5:-0,-15:0.25:15,(x,y)->derivative(z->NeumannKelvin.wavelike(x,y,z),-0.),label="dG/dz",xlabel="xg/U²",levels=-9:2:9,clims=(-10,10))
-contour(-30:0.25:-0,-15:0.125:15,(x,y)->derivative(z ->∫wavelike(z,x-0.5,x+0.5,y-0.5,y+0.5),-0.),label="∫∫dG/dz da",xlabel="xg/U²",levels=-9:2:9,clims=(-10,10))
-contour(-30:0.25:-0,-15:0.125:15,(x,y)->derivative(z ->∫wavelike(z,x-0.5,x+0.5,y-0.5,y+0.5,α=0.1),-0.),label="∫∫dG/dz da",xlabel="xg/U²",levels=-9:2:9,clims=(-10,10))
-contour(-30:0.25:-0,-15:0.125:15,(x,y)->derivative(z ->25∫wavelike(z,x-0.1,x+0.1,y-0.1,y+0.1,α=0.1),-0.),label="∫∫dG/dz da",xlabel="xg/U²",levels=-9:2:9,clims=(-10,10))
+plot(ylabel="∫∫dG/dz da",xlabel="xg/U²");for α in (0.025,0.05,0.1,0.2)
+    plot!(range(-20,0,1000),y->derivative(z ->∫wavelike(z,-10√8,-10√8+1,y-0.5,y+0.5;α),-0.),label=α)
+end;plot!(ylims=(-10,5))

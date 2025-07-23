@@ -39,7 +39,7 @@ Integrate the contributions of `imag(∫γ(h)exp(im*g(h))dh)` from
 satisfies `g(h)=g(h₀)+im*p` where `g` is the complex phase and `p`
 are Gauss-Laguerre integration points, and is found using the
 phase derivative `dg=g′(h)` and Newton's method. The amplitude `γ`
-must be positive and slowly varying compared to `g` over `h`.
+must not cross zero and vary slowly compared to `g` over `h`.
 """
 @fastmath function nsp(h₀,g,dg,γ=one;xlag=xlag,wlag=wlag,atol=1e-3)
     # Sum over complex Gauss-Laguerre points
@@ -51,7 +51,6 @@ must be positive and slowly varying compared to `g` over `h`.
 end
 
 using TupleTools,IntervalSets
-import ForwardDiff: value
 """
     finite_ranges(S,g,Δg,R;atol=0.1Δg)
 
@@ -61,14 +60,14 @@ The boundaries of Δx are opened to indicate the range continues to ±∞ if the
 """
 function finite_ranges(S,g,Δg,R;atol=0.1Δg,Δx=1)
     function xᵢ(a,b,check=true)
-        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(value.((Δx,b))...)),Order1();atol)
+        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(Δx,b)),Order1();atol)
         check && abs(g(a)-g(b))≤Δg+atol && return b
         @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol)
     end
 
     # Sort the stationary points and handle empty case
     S = filter(s->-R<s<R,TupleTools.sort(S))
-    length(S) == 0 && return (-value(R)..value(R),) # no Duals
+    length(S) == 0 && return (-R..R,) # no Duals
 
     # Construct disjoint range enpoints between stationary point pairs
     ends = mapreduce(TupleTools.vcat,zip(Base.front(S),Base.tail(S)),init=()) do (a,b)
@@ -79,7 +78,7 @@ function finite_ranges(S,g,Δg,R;atol=0.1Δg,Δx=1)
 
     # Add first/last endpoint and create open/closed intervals
     mappairs(xᵢ(first(S),-R),ends...,xᵢ(last(S),R)) do a,b
-        Interval{openif(a>-R),openif(b<R)}(value(a),value(b)) # no Duals
+        Interval{openif(a>-R),openif(b<R)}(a,b) # no Duals
     end
 end
 mappairs(f,t...) = ntuple(i->f(t[2i-1],t[2i]),length(t)÷2)

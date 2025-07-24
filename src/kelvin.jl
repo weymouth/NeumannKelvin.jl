@@ -28,14 +28,14 @@ end
 Green Function `G(ξ)` for a traveling source at reflected position `α` with Froude length `ℓ ≡ U²/g`
 excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;ℓ=1,z_max=-0.,ltol=-5log(10))
+function kelvin(ξ,α;ℓ=1,z_max=-0.,kwargs...)
     # Check inputs
     α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
     # nearfield, and wavelike disturbance
     x,y,z = (ξ-α)/ℓ; z = min(z,z_max/ℓ)
-    return (nearfield(x,y,z)+wavelike(x,y,z,ltol))/ℓ
+    return (nearfield(x,y,z)+wavelike(x,y,z;kwargs...))/ℓ
 end
 """
     reflect(x::SVector,axis::Int,project::SVector)
@@ -112,12 +112,13 @@ end
 Ngk(X::SVector{3}) = Ngk(X...)
 
 # Wave-like disturbance
-function wavelike(x,y,z,ltol=-5log(10),atol=exp(ltol))
+function wavelike(x,y,z;α=0,ltol=-5log(10),atol=exp(ltol))
     (x≥0 || z≤ltol) && return 0.
-    @fastmath f(t) = sin(g(x,y,t))*exp(z*(1+t^2))
+    α == 0 ? (γ=one) : (@fastmath γ(t)=exp(-α^2*t't*(1+t't)))
+    @fastmath f(t) = γ(t)*sin(g(x,y,t))*exp(z*(1+t^2))
     Δg,R = -0.5ltol,√(ltol/z-1)   # phase width & range limit
     rngs = Δg_ranges(x,y,Δg,R)    # finite phase ranges
-    ∫Wᵢ(x,y,z,rngs;f,atol)        # integrate
+    ∫Wᵢ(x,y,z,rngs;γ,f,atol)      # integrate
 end
 using ForwardDiff: value
 function Δg_ranges(x,y,Δg,R;addzero=false,kwargs...)

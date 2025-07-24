@@ -61,10 +61,9 @@ function ∫wavelike(z,a,b,c,d;ltol=-5log(10),atol=10exp(ltol),α=0)
 
     # Get ranges
     x,y = SA[a,b],SA[c,d]        # corners
-    Δg,R = -0.5ltol,√(ltol/z-1)  # phase width & range limit
+    Δg,R = -0.5ltol,min(√(√-ltol/α),√(ltol/z-1)) # phase width & range limit
     rngs = Δg_ranges.(x,y',Δg,R,addzero=true) # finite phase ranges
     M = reduce(∩,rngs)           # intersection
-    isempty(M) && throw(ArgumentError("∫wavelike: Empty intersection - reduce panel size"))
 
     # Range intersections: use f_m & quadgk
     Δx, Δy, mx, my = b-a, d-c, (a+b)/2, (c+d)/2

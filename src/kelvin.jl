@@ -123,6 +123,7 @@ end
 using ForwardDiff: value
 function Δg_ranges(x,y,Δg,R;addzero=false,kwargs...)
     x,y,Δg,R = value.((x,y,Δg,R)) # ranges shouldn't be Duals
+    x==y==0 && return (-R..R,)    # constant phase
     S = stationary_points(x,y)    # Get stationary points
     addzero && (S=(S...,0.))      # Append t=0 if needed
     Δt = max(1., abs(y)≤√eps() ? max(-Δg/x,√(-2Δg/x)) : Δg/3√abs(y))

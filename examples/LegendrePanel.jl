@@ -3,10 +3,10 @@ using NeumannKelvin: g,kₓ,Δg_ranges,∫Wᵢ
 function ∫Pwave(a::SVector{2},b::SVector{2},c::SMatrix{M,N};z=-0.,ltol=-5log(10),atol=10exp(ltol)) where {M,N}
     (a₁,a₂),(b₁,b₂) = a,b
     a₁≥0 && return 0.    # Whole interval down-stream
-    if b₁≥0              # Split into new interval x=[a₁,-eps()]
+    if b₁≥0              # Split into new interval x=[a₁,-0.]
         ξ₊ = (b₁+a₁)/(a₁-b₁) # locate split in panel coords ξ=[-1,1]
         c = project(c,ξ₊)    # project coefficients onto new interval
-        b₁ = -eps(); b = SA[b₁,b₂] # new corner point
+        b₁ = -0.; b = SA[b₁,b₂] # new corner point
     end
  
     x,y = SA[a₁,b₁],SA[a₂,b₂]
@@ -52,7 +52,27 @@ end
 ∫Pwave(a,b,SA[0 0 0;-2/3 0 2/3];z)
 
 using Plots
-plot(range(-100,-90,1000),x->derivative(y->∫wavelike(-0.,x-1,x+1,y-1,y+1),0.01))
+plot();for x in (0.,-0.5,-1.,-2.)
+    plot!(range(-2,2,1000),y->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1;;];z),-0.),label=x)
+end;plot!()
+plot();for x in (0.,-0.5,-1.,-2.)
+    plot!(range(-2,2,1000),y->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[-1 0 1];z),-0.),label=x)
+end;plot!()
+
+plot();for x in (0.,-0.5,-1.,-2.)
+    plot!(range(-2,2,1000),y->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1;;]),y),label=x)
+end;plot!()
+plot();for x in (0.,-0.5,-1.,-2.)
+    plot!(range(-2,2,1000),y->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[-1 0 1]),y),label=x)
+end;plot!()
+
+plot();for y in (0.,-0.5,-0.99,-1.01)
+    plot!(range(-2,2,1000),x->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1;;];z),-0.),label=y)
+end;plot!()
+plot();for y in (0.,-0.5,-0.99,-1.01)
+    plot!(range(-2,2,1000),x->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[-2/3 0 2/3];z),-0.),label=y)
+end;plot!()
+
 plot(range(-100,-90,1000),x->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[0 1]'),0.01))
 plot(range(-100,-90,1000),x->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[-2/3 0 2/3]),0.01))
 plot(range(-100,-90,1000),x->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[0 0 0;-2/3 0 2/3]),0.01))

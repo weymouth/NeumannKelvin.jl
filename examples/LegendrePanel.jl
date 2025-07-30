@@ -95,3 +95,32 @@ end;plot!(ylims=(25,42.5))
 plot();for x = -logrange(16,128,4)
     plot!(range(0,0.01,1000),y->√-x*Pmag(SA[x,y*x,-0.]),label=x)
 end;plot!(ylims=(25,42.5))
+
+a = 2.5
+panel = Shape([-a,-a,a,a],[-a,a,a,-a])
+w(x,y,c=SA[1 0 -1]) = derivative(z->∫Pwave(SA[x-a,y-a],SA[x+a,y+a],c;z),-0.)
+ζ(x,y,c=SA[1 0 -1]) = derivative(x->∫Pwave(SA[x-a,y-a],SA[x+a,y+a],c),x)
+x,y = -25:0.2:5,-10:0.1:10
+wxy = w.(x,y')
+ζxy = ζ.(x,y')
+contourf(x,y,wxy',aspectratio=:equal,widen=false,
+    levels=-29:2:29,clims=(-29,29),
+    xlabel="xg/U²",ylabel="yg/U²",
+    colorbar_title = "vertical velocity w/q",color = :seismic
+);plot!(panel,c=:grey,alpha=0.5,label="panel")
+savefig("examples\\surf_panelw.png")
+
+contourf(x,y,ζxy',aspectratio=:equal,widen=false,
+    levels=-23:2:23,clims=(-23,23),
+    xlabel="xg/U²",ylabel="yg/U²",
+    colorbar_title = "free surface height ζg/qU",color = :seismic,
+);plot!(panel,c=:grey,alpha=0.5,label="panel")
+savefig("examples\\surf_panelζ.png")
+
+# c_ellip = SA[1861 0 -1211 0 -443 0 -207]/1861
+contourf(x,y,(x,y)->w(x,y,SA[1;;]),aspectratio=:equal,widen=false,
+    levels=-29:2:29,clims=(-29,29),
+    xlabel="xg/U²",ylabel="yg/U²",
+    colorbar_title = "vertical velocity w/q",color = :seismic
+);plot!(panel,c=:grey,alpha=0.5,label="panel")
+savefig("examples\\surf_panelw_c0.png")

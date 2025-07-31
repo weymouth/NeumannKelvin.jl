@@ -3,10 +3,10 @@ using NeumannKelvin: g,kₓ,Δg_ranges,∫Wᵢ
 function ∫Pwave(a::SVector{2},b::SVector{2},c::SMatrix{M,N};z=-0.,ltol=-5log(10),atol=10exp(ltol)) where {M,N}
     (a₁,a₂),(b₁,b₂) = a,b
     a₁≥0 && return 0.    # Whole interval down-stream
-    if b₁≥0              # Split into new interval x=[a₁,-0.]
+    if b₁≥0              # Split into new interval x=[a₁,-0]
         ξ₊ = (b₁+a₁)/(a₁-b₁) # locate split in panel coords ξ=[-1,1]
         c = project(c,ξ₊)    # project coefficients onto new interval
-        b₁ = -0.; b = SA[b₁,b₂] # new corner point
+        b₁,b = -0,SA[-0,b₂]  # new corner point
     end
  
     x,y = SA[a₁,b₁],SA[a₂,b₂]
@@ -37,8 +37,8 @@ P′(m,j,s) = j>m ? 0 : s^(m+j)*binomial(m+j,m)*binomial(m,j)*factorial(j)÷2^j
 using SpecialFunctions: sphericalbesselj
 jₘ(m,x) = m==0 ? sinc(x/π) : sign(x)^m*sphericalbesselj(m,abs(x))
 
-@time ∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;],ltol=-10log(10))*1e6,-pi/2
-@time derivative(z->∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;];z,ltol=-10log(10)),-0.)*1e3,-2
+∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;],ltol=-10log(10))*1e6,-pi/2
+derivative(z->∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;];z,ltol=-10log(10)),-0.)*1e3,-2
 
 using HCubature
 a,b,z = SA[-1.,-1.],SA[1.,1.],-1.
@@ -98,7 +98,14 @@ end;plot!(ylims=(25,42.5))
 
 a = 2.5
 panel = Shape([-a,-a,a,a],[-a,a,a,-a])
-w(x,y,c=SA[1 0 -1]) = derivative(z->∫Pwave(SA[x-a,y-a],SA[x+a,y+a],c;z),-0.)
+w(x,y,c=SA[1 0 -1]) = derivative(z->∫Pwave(SA[x-a,y-a],SA[x+a,y+a],c;z,ltol=-10log(10)),-0.)
+
+begin
+    plot(range(-5,5,1000),y->w(0.,y,SA[1;;]))
+    plot!(range(-5,5,1000),y->w(0.,y))
+    plot!(range(-5,5,1000),y->w(0.,y,SA[1 0 -1/2 0 -1/3 0 -1/6]))
+end
+
 ζ(x,y,c=SA[1 0 -1]) = derivative(x->∫Pwave(SA[x-a,y-a],SA[x+a,y+a],c),x)
 x,y = -25:0.2:5,-10:0.1:10
 wxy = w.(x,y')

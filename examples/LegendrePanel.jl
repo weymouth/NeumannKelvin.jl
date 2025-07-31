@@ -10,7 +10,7 @@ function ∫Pwave(a::SVector{2},b::SVector{2},c::SMatrix{M,N};z=-0.,ltol=-5log(1
     end
  
     x,y = SA[a₁,b₁],SA[a₂,b₂]
-    rngs = Δg_ranges.(x,y',-0.5ltol,Inf,addzero=true) # finite phase ranges
+    rngs = Δg_ranges.(x,y',-ltol,Inf,addzero=true) # finite phase ranges
     rngs₀ = reduce(∩,rngs)           # intersection
 
     Δx,x₀ = b-a,(a+b)/2
@@ -52,6 +52,30 @@ end
 ∫Pwave(a,b,SA[0 0 0;-2/3 0 2/3];z)
 
 using Plots
+w(x,y,c) = derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],c;z,ltol=-10log(10)),-0.)
+function cmat(vec::SVector{N,T}) where {N,T}
+    c = zeros(T,2N+1)
+    c[1] = -sum(vec)
+    foreach(i->c[2i+1]=vec[i],1:N)
+    SMatrix{1,2N+1}(c)
+end 
+LegendreInfluence(N,ys) = ForwardDiff.jacobian(ones(SVector{N})) do vec
+    map(y->w(0,y,cmat(vec)),ys)
+end
+using LinearAlgebra
+N=8; sN=N+3
+ys = gausslegendre(2sN-1)[1][1:sN]; ws = @. -sqrt(1-ys^2)
+A = LegendreInfluence(N,ys)
+# plot(y,y->w(0,y,cmat(ones(SVector{N}))))
+# scatter!(gausslegendre(2sN-1)[1][1:sN],A*ones(SVector{N}))
+vec = (A'*A+2Diagonal(collect(3:2:2N+1).^4))\(A'*ws) |> SVector{N}
+vec *= dot(A*vec, ws) / dot(A*vec, A*vec)
+plot(y,y->w(0,y,cmat(vec)),label="downwash with $N DOF")
+scatter!(ys,ws,label="target downwash")
+source(x) = [1]'*cmat(vec)*[Pl(x,l) for l in 0:2N]
+plot(range(-1,1,100),source,label="Source with $N DOF")
+plot!(range(-1,1,100),x->source(0)*sqrt(1-x^2),label="elliptical")
+
 plot();for x in (0.,-0.5,-1.,-2.)
     plot!(range(-2,2,1000),y->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1;;];z),-0.),label=x)
 end;plot!()

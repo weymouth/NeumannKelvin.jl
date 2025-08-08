@@ -1,6 +1,6 @@
 using NeumannKelvin,QuadGK,IntervalSets
 using NeumannKelvin: g,kₓ,Δg_ranges,∫Wᵢ
-function ∫Pwave(a::SVector{2},b::SVector{2},c::SMatrix{M,N};z=-0.,ltol=-5log(10),atol=10exp(ltol)) where {M,N}
+function ∫Pwave(a::SVector{2},b::SVector{2},c::SMatrix{M,N};z=-0.,α=0,atol=1e-4,ltol=log(atol/10)) where {M,N}
     (a₁,a₂),(b₁,b₂) = a,b
     a₁≥0 && return 0.    # Whole interval down-stream
     if b₁≥0              # Split into new interval x=[a₁,-0]
@@ -16,13 +16,13 @@ function ∫Pwave(a::SVector{2},b::SVector{2},c::SMatrix{M,N};z=-0.,ltol=-5log(1
     Δx,x₀ = b-a,(a+b)/2
     jm(t) = SVector{M}([im^m*jₘ(m,Δx[1]*kₓ(t)/2) for m in 0:M-1])
     jn(t) = SVector{N}([im^n*jₘ(n,Δx[2]*t*kₓ(t)/2) for n in 0:N-1])
-    f₀(t) = imag(transpose(jm(t))*c*jn(t)*exp(im*g(x₀...,t)+z*(1+t^2)))
+    f₀(t) = imag(transpose(jm(t))*c*jn(t)*exp(im*g(x₀...,t)+(z-α^2*t^2)*(1+t^2)))
     I₀ = 4prod(Δx)*sum(rng->quadgk(f₀,endpoints(rng)...;atol)[1],rngs₀)
 
     Am(s,t) = s*SVector{M}([sum((-1)^j*P′(m,j,s)/(im*Δx[1]*kₓ(t)/2)^(j+1) for j in 0:M-1) for m in 0:M-1])
     An(s,t) = s*SVector{N}([sum((-1)^l*P′(n,l,s)/(im*Δx[2]*t*kₓ(t)/2)^(l+1) for l in 0:N-1) for n in 0:N-1])
     I₀ + prod(Δx)*sum(Iterators.product(1:2,1:2)) do (k₁,k₂)
-        γ(t) = transpose(Am((-1)^k₁,t))*c*An((-1)^k₂,t)/4
+        γ(t) = transpose(Am((-1)^k₁,t))*c*An((-1)^k₂,t)/4*exp(-α^2*t't*(1+t't))
         ∫Wᵢ(x[k₁],y[k₂],z,rngs[k₁,k₂]\rngs₀;γ,atol)
     end
 end
@@ -37,44 +37,88 @@ P′(m,j,s) = j>m ? 0 : s^(m+j)*binomial(m+j,m)*binomial(m,j)*factorial(j)÷2^j
 using SpecialFunctions: sphericalbesselj
 jₘ(m,x) = m==0 ? sinc(x/π) : sign(x)^m*sphericalbesselj(m,abs(x))
 
-∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;],ltol=-10log(10))*1e6,-pi/2
-derivative(z->∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;];z,ltol=-10log(10)),-0.)*1e3,-2
+∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;],atol=1e-8)*1e6,-pi/2
+derivative(z->∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;];z,atol=1e-8),-0.)*1e3,-2
 
-using HCubature
-a,b,z = SA[-1.,-1.],SA[1.,1.],-1.
-dx,x₀ = b-a,(a+b)/2
-hcubature(xy->NeumannKelvin.wavelike(xy[1],xy[2],z),a,b)
-∫Pwave(a,b,SA[1.;;];z)
-hcubature(a,b) do xy
-    x,y= (xy-x₀) ./ 0.5dx # shift to [-1,1]
-    x*(y^2-1)*NeumannKelvin.wavelike(xy[1],xy[2],z)
-end
-∫Pwave(a,b,SA[0 0 0;-2/3 0 2/3];z)
-
-using Plots
-w(x,y,c) = derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],c;z,ltol=-10log(10)),-0.)
+using NeumannKelvin,HCubature
+using NeumannKelvin:nearfield
 function cmat(vec::SVector{N,T}) where {N,T}
     c = zeros(T,2N+1)
     c[1] = -sum(vec)
     foreach(i->c[2i+1]=vec[i],1:N)
     SMatrix{1,2N+1}(c)
 end 
-LegendreInfluence(N,ys) = ForwardDiff.jacobian(ones(SVector{N})) do vec
-    map(y->w(0,y,cmat(vec)),ys)
+source(x,y,c::SMatrix{M,N}) where{M,N} = [Pl(x,l) for l in 0:M-1]'*c*[Pl(y,l) for l in 0:N-1]
+ϕ(y,j) = Pl(y,2j)-1
+function ∫Pnear(xyz,c=SA[1;;];atol=1e-4)
+    x,y,z = xyz
+    if -1<x<1 && -1<y<1 
+        # c = ((-1,-1),(1,-1),(1,1),(-1,1))
+        # sum(1:4) do i
+        #     (x1,y1),(x2,y2) = c[i],c[i%4+1]
+        #     dx1,dx2,dy1,dy2 = x1-x, x2-x, y1-y, y2-y
+        #     J = abs(dx1*dy2-dx2*dy1)
+        #     hcubature(SA[0.,0.],SA[1.,1.];atol) do (s,t)
+        #         u,v = s*t,s*(1-t)
+        #         s*J*nearfield(u*dx1+v*dx2,u*dy1+v*dy2,z)
+        #     end |>first
+        sum(Iterators.product((-1,1),(-1,1))) do (sx,sy)
+            wx,wy = x-sx,y-sy; J = abs(wx*wy)
+            hcubature(SA[0.,0.],SA[1.,1.];atol) do (u,v)
+                x′,y′ = x-wx*u,y-wy*v
+                J*source(x′,y′,c)*nearfield(x-x′,y-y′,z)
+            end |> first
+        end
+    else
+        hcubature(SA[-1.,-1.],SA[1.,1.];atol) do (x′,y′)
+            source(x′,y′,c)*nearfield(x-x′,y-y′,z)
+        end |> first
+    end
 end
+∫Pnear(SA[0,-1-1e-3,-0.])
+∫Pnear(SA[0,-1+1e-3,-0.])
+derivative(z->∫Pnear(SA[0,0,z]),0.)
+derivative(z->∫Pwave(SA[-1,-1],SA[1,1],SA[1;;];z),0.)
+using Plots
+plot(range(-2,0,1000),y->derivative(z->∫Pnear(SA[0,y,z]),-0.))
+plot(range(-2,0,1000),y->derivative(z->∫Pnear(SA[-0.99,y,z]),-0.))
+
+wₖ(x,y,c;kwargs...) = derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],c;z,kwargs...),-0.)
+wₙ(x,y,c;atol=1e-4,kwargs...) = derivative(z->∫Pnear(SA[x,y,z],c;atol),-0.)
+w(x,y,c;kwargs...) = wₖ(x,y,c;kwargs...)+wₙ(x,y,c;kwargs...)
+
+using ForwardDiff:jacobian
+LegendreInfluence(N,ys;w=w,kwargs...) = jacobian(vec->map(y->w(0,y,cmat(vec);kwargs...),ys),ones(SVector{N}))
 using LinearAlgebra
 N=8; sN=N+3
 ys = gausslegendre(2sN-1)[1][1:sN]; ws = @. -sqrt(1-ys^2)
-A = LegendreInfluence(N,ys)
-# plot(y,y->w(0,y,cmat(ones(SVector{N}))))
-# scatter!(gausslegendre(2sN-1)[1][1:sN],A*ones(SVector{N}))
-vec = (A'*A+2Diagonal(collect(3:2:2N+1).^4))\(A'*ws) |> SVector{N}
-vec *= dot(A*vec, ws) / dot(A*vec, A*vec)
-plot(y,y->w(0,y,cmat(vec)),label="downwash with $N DOF")
-scatter!(ys,ws,label="target downwash")
-source(x) = [1]'*cmat(vec)*[Pl(x,l) for l in 0:2N]
-plot(range(-1,1,100),source,label="Source with $N DOF")
-plot!(range(-1,1,100),x->source(0)*sqrt(1-x^2),label="elliptical")
+using JLD2
+# Aₙ = LegendreInfluence(N,ys,w=wₙ) # expensive
+# save_object("Aₙ.jld2",Aₙ) # so store it
+Aₙ = load_object("Aₙ.jld2")
+Uₙ,Sₙ,Vₙ = svd(Aₙ)
+Aₖ = LegendreInfluence(N,ys,w=wₖ,atol=1e-12,α=1e-1)
+Uₖ,Sₖ,Vₖ = svd(Aₖ)
+A = Aₖ+Aₙ
+U,S,V = svd(A)
+
+cmap = cgrad(:roma, 8, categorical = true);
+plot();for i in 1:8
+    qᵢ(y) = sum(V[j,i]*ϕ(y,j) for j in 1:8)
+    plot!(range(-1,1,300),qᵢ,label="mode $i",c=cmap[i])
+end;plot!()
+plot();for i in 1:8
+    wᵢ = A*V[:,i]
+    plot!(ys,wᵢ,label="mode $i",c=cmap[i])
+end;plot!()
+# # plot(y,y->w(0,y,cmat(ones(SVector{N}))))
+# # scatter!(gausslegendre(2sN-1)[1][1:sN],A*ones(SVector{N}))
+# vec = (A'*A+2Diagonal(collect(3:2:2N+1).^4))\(A'*ws) |> SVector{N}
+# vec *= dot(A*vec, ws) / dot(A*vec, A*vec)
+# plot(y,y->w(0,y,cmat(vec)),label="downwash with $N DOF")
+# scatter!(ys,ws,label="target downwash")
+# plot(range(-1,1,100),source,label="Source with $N DOF")
+# plot!(range(-1,1,100),x->source(0)*sqrt(1-x^2),label="elliptical")
 
 plot();for x in (0.,-0.5,-1.,-2.)
     plot!(range(-2,2,1000),y->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1;;];z),-0.),label=x)

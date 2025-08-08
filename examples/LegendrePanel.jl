@@ -28,7 +28,6 @@ function ∫Pwave(a::SVector{2},b::SVector{2},c::SMatrix{M,N};z=-0.,α=0,atol=1e
 end
 using LegendrePolynomials,StaticArrays
 using FastGaussQuadrature
-using NeumannKelvin
 project(c::SMatrix{M,N},x0::Real) where {M,N} = SMatrix{M,M}([Tx0(m-1,j-1,x0) for m in 1:M, j in 1:M])*c
 gl_cache = [gausslegendre(n) for n in 1:15]
 NeumannKelvin.quadgl(f;order=length(gl_cache)) = sum(w*f(x) for (x,w) in zip(gl_cache[order]...))
@@ -43,13 +42,12 @@ derivative(z->∫Pwave(SA[-5e-4,-5e-4],SA[5e-4,5e-4],SA[1.;;];z,atol=1e-8),-0.)*
 using NeumannKelvin,HCubature
 using NeumannKelvin:nearfield
 function cmat(vec::SVector{N,T}) where {N,T}
-    c = zeros(T,2N+1)
-    c[1] = -sum(vec)
-    foreach(i->c[2i+1]=vec[i],1:N)
-    SMatrix{1,2N+1}(c)
+    c = zeros(T,2N-1)
+    foreach(i->c[2i-1]=vec[i],1:N)
+    SMatrix{1,2N-1}(c)
 end 
 source(x,y,c::SMatrix{M,N}) where{M,N} = [Pl(x,l) for l in 0:M-1]'*c*[Pl(y,l) for l in 0:N-1]
-ϕ(y,j) = Pl(y,2j)-1
+ϕ(y,j) = Pl(y,2j-2)
 function ∫Pnear(xyz,c=SA[1;;];atol=1e-4)
     x,y,z = xyz
     if -1<x<1 && -1<y<1 
@@ -78,10 +76,6 @@ end
 ∫Pnear(SA[0,-1-1e-3,-0.])
 ∫Pnear(SA[0,-1+1e-3,-0.])
 derivative(z->∫Pnear(SA[0,0,z]),0.)
-derivative(z->∫Pwave(SA[-1,-1],SA[1,1],SA[1;;];z),0.)
-using Plots
-plot(range(-2,0,1000),y->derivative(z->∫Pnear(SA[0,y,z]),-0.))
-plot(range(-2,0,1000),y->derivative(z->∫Pnear(SA[-0.99,y,z]),-0.))
 
 wₖ(x,y,c;kwargs...) = derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],c;z,kwargs...),-0.)
 wₙ(x,y,c;atol=1e-4,kwargs...) = derivative(z->∫Pnear(SA[x,y,z],c;atol),-0.)
@@ -90,112 +84,31 @@ w(x,y,c;kwargs...) = wₖ(x,y,c;kwargs...)+wₙ(x,y,c;kwargs...)
 using ForwardDiff:jacobian
 LegendreInfluence(N,ys;w=w,kwargs...) = jacobian(vec->map(y->w(0,y,cmat(vec);kwargs...),ys),ones(SVector{N}))
 using LinearAlgebra
-N=8; sN=N+3
-ys = gausslegendre(2sN-1)[1][1:sN]; ws = @. -sqrt(1-ys^2)
+N=9; sN=9N
+ys = gausslegendre(2sN-1)[1][1:sN]
 using JLD2
-# Aₙ = LegendreInfluence(N,ys,w=wₙ) # expensive
+# Aₙ = LegendreInfluence(N,ys,w=wₙ,atol=1e-6) # expensive
 # save_object("Aₙ.jld2",Aₙ) # so store it
 Aₙ = load_object("Aₙ.jld2")
 Uₙ,Sₙ,Vₙ = svd(Aₙ)
-Aₖ = LegendreInfluence(N,ys,w=wₖ,atol=1e-12,α=1e-1)
+Aₖ = LegendreInfluence(N,ys;w=wₖ,atol=1e-12,α=√(6log(10))/17π)
 Uₖ,Sₖ,Vₖ = svd(Aₖ)
 A = Aₖ+Aₙ
 U,S,V = svd(A)
 
-cmap = cgrad(:roma, 8, categorical = true);
-plot();for i in 1:8
-    qᵢ(y) = sum(V[j,i]*ϕ(y,j) for j in 1:8)
+using Plots
+cmap = cgrad(:roma, N, categorical=true);
+plot();for i in 1:N
+    qᵢ(y) = sum(V[j,i]*ϕ(y,j) for j in 1:N)/√S[i]
     plot!(range(-1,1,300),qᵢ,label="mode $i",c=cmap[i])
-end;plot!()
-plot();for i in 1:8
-    wᵢ = A*V[:,i]
+end;plot!(xlabel="panel width y",ylabel="normalized source mode qᵢ",ylims=(-0.5,0.5))
+plot();for i in 1:N
+    wᵢ = U[:,i]*√S[i]
     plot!(ys,wᵢ,label="mode $i",c=cmap[i])
-end;plot!()
-# # plot(y,y->w(0,y,cmat(ones(SVector{N}))))
-# # scatter!(gausslegendre(2sN-1)[1][1:sN],A*ones(SVector{N}))
-# vec = (A'*A+2Diagonal(collect(3:2:2N+1).^4))\(A'*ws) |> SVector{N}
-# vec *= dot(A*vec, ws) / dot(A*vec, A*vec)
-# plot(y,y->w(0,y,cmat(vec)),label="downwash with $N DOF")
-# scatter!(ys,ws,label="target downwash")
-# plot(range(-1,1,100),source,label="Source with $N DOF")
-# plot!(range(-1,1,100),x->source(0)*sqrt(1-x^2),label="elliptical")
+end;plot!(xlabel="panel width y",ylabel="normalized velocity mode wᵢ")
 
-plot();for x in (0.,-0.5,-1.,-2.)
-    plot!(range(-2,2,1000),y->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1;;];z),-0.),label=x)
-end;plot!()
-plot();for x in (0.,-0.5,-1.,-2.)
-    plot!(range(-2,2,1000),y->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[-1 0 1];z),-0.),label=x)
-end;plot!()
-
-plot();for x in (0.,-0.5,-1.,-2.)
-    plot!(range(-2,2,1000),y->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1;;]),y),label=x)
-end;plot!()
-plot();for x in (0.,-0.5,-1.,-2.)
-    plot!(range(-2,2,1000),y->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[-1 0 1]),y),label=x)
-end;plot!()
-
-plot();for y in (0.,-0.5,-0.99,-1.01)
-    plot!(range(-2,2,1000),x->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1;;];z),-0.),label=y)
-end;plot!()
-plot();for y in (0.,-0.5,-0.99,-1.01)
-    plot!(range(-2,2,1000),x->derivative(z->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[-2/3 0 2/3];z),-0.),label=y)
-end;plot!()
-
-plot(range(-100,-90,1000),x->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[0 1]'),0.01))
-plot(range(-100,-90,1000),x->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[-2/3 0 2/3]),0.01))
-plot(range(-100,-90,1000),x->derivative(y->∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[0 0 0;-2/3 0 2/3]),0.01))
-
-smag(xyz)=norm(gradient(xyz->(NeumannKelvin.wavelike(xyz...)),xyz))
-wmag(xyz)=norm(gradient(xyz->((x,y,z)=xyz;∫wavelike(z,x-1,x+1,y-1,y+1)),xyz))
-Pmag(xyz)=norm(gradient(xyz->((x,y,z)=xyz;∫Pwave(SA[x-1,y-1],SA[x+1,y+1],SA[1 0 -1];z)),xyz))
-plot();for x = -logrange(16,128,4)
-    plot!(range(0,1/2,1000),y->√-x*smag(SA[x,y*x,-0.]),label=x)
-end;plot!(ylims=(0,150))
-plot();for x = -logrange(16,128,4)
-    plot!(range(0,1/2,1000),y->√-x*wmag(SA[x,y*x,-0.]),label=x)
-end;plot!(ylims=(0,150))
-plot();for x = -logrange(16,128,4)
-    plot!(range(0,1/2,1000),y->√-x*Pmag(SA[x,y*x,-0.]),label=x)
-end;plot!(ylims=(0,150))
-plot();for x = -logrange(16,128,4)
-    plot!(range(0,0.001,1000),y->√-x*wmag(SA[x,y*x,-0.]),label=x)
-end;plot!(ylims=(25,42.5))
-plot();for x = -logrange(16,128,4)
-    plot!(range(0,0.01,1000),y->√-x*Pmag(SA[x,y*x,-0.]),label=x)
-end;plot!(ylims=(25,42.5))
-
-a = 2.5
-panel = Shape([-a,-a,a,a],[-a,a,a,-a])
-w(x,y,c=SA[1 0 -1]) = derivative(z->∫Pwave(SA[x-a,y-a],SA[x+a,y+a],c;z,ltol=-10log(10)),-0.)
-
-begin
-    plot(range(-5,5,1000),y->w(0.,y,SA[1;;]))
-    plot!(range(-5,5,1000),y->w(0.,y))
-    plot!(range(-5,5,1000),y->w(0.,y,SA[1 0 -1/2 0 -1/3 0 -1/6]))
-end
-
-ζ(x,y,c=SA[1 0 -1]) = derivative(x->∫Pwave(SA[x-a,y-a],SA[x+a,y+a],c),x)
-x,y = -25:0.2:5,-10:0.1:10
-wxy = w.(x,y')
-ζxy = ζ.(x,y')
-contourf(x,y,wxy',aspectratio=:equal,widen=false,
-    levels=-29:2:29,clims=(-29,29),
-    xlabel="xg/U²",ylabel="yg/U²",
-    colorbar_title = "vertical velocity w/q",color = :seismic
-);plot!(panel,c=:grey,alpha=0.5,label="panel")
-savefig("examples\\surf_panelw.png")
-
-contourf(x,y,ζxy',aspectratio=:equal,widen=false,
-    levels=-23:2:23,clims=(-23,23),
-    xlabel="xg/U²",ylabel="yg/U²",
-    colorbar_title = "free surface height ζg/qU",color = :seismic,
-);plot!(panel,c=:grey,alpha=0.5,label="panel")
-savefig("examples\\surf_panelζ.png")
-
-# c_ellip = SA[1861 0 -1211 0 -443 0 -207]/1861
-contourf(x,y,(x,y)->w(x,y,SA[1;;]),aspectratio=:equal,widen=false,
-    levels=-29:2:29,clims=(-29,29),
-    xlabel="xg/U²",ylabel="yg/U²",
-    colorbar_title = "vertical velocity w/q",color = :seismic
-);plot!(panel,c=:grey,alpha=0.5,label="panel")
-savefig("examples\\surf_panelw_c0.png")
+ws = @. ys^2-1
+cs = U'ws
+plot(ys,ws,label="target");plot!(ys,U*cs,label="projection");plot!(ys,ws .- U*cs,label="error")
+vs = V*(cs./S) |> SVector{N}
+plot(ys,y->source(0,y,cmat(vs)))

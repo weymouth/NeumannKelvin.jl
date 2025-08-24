@@ -2,9 +2,9 @@
     ∫kelvin(ξ,p;ℓ,d²=4,contour=false,filter=contour)
 
 Integrated disturbance of traveling submerged panel `p` on point `ξ` with Froude length `ℓ ≡ U²/g`.
-Uses `∫G` for the source and reflected sink potentials and `kelvin` for the free-surface potential. 
+Uses `∫G` for the source and reflected sink potentials and `kelvin` for the free-surface potential.
 A 2x2 quadrature is used when `|x-p.x|² , (z-p.z)²/ℓ² ≤ d²p.dA`, otherwise it uses the midpoint.
-If `contour=true` and `p` touches the `z=0` plane, the contribution from the waterline contour 
+If `contour=true` and `p` touches the `z=0` plane, the contribution from the waterline contour
 `ϕ₀=ℓ∫Gₙₖn₁dy` is included. See Noblesse 1983 and Barr & Price 1988.
 If `filter=true`, the `z_max` argument to `kelvin` is used to filter waves too small for the panel.
 """
@@ -28,14 +28,14 @@ end
 Green Function `G(ξ)` for a traveling source at reflected position `α` with Froude length `ℓ ≡ U²/g`
 excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;ℓ=1,z_max=-0.,ltol=-5log(10))
+function kelvin(ξ,α;ℓ=1,z_max=-0.,kwargs...)
     # Check inputs
     α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
     ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
 
     # nearfield, and wavelike disturbance
     x,y,z = (ξ-α)/ℓ; z = min(z,z_max/ℓ)
-    return (nearfield(x,y,z)+wavelike(x,y,z,ltol))/ℓ
+    return (nearfield(x,y,z)+wavelike(x,y,z;kwargs...))/ℓ
 end
 """
     reflect(x::SVector,axis::Int,project::SVector)
@@ -74,7 +74,7 @@ reflect(p,arg) = map(q->reflect(q,arg),p)                 # map over everything 
 onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987
-function nearfield(x::T,y::T,z::T)::T where T
+function nearfield(x,y,z)
     if Threads.atomic_xchg!(isfirstcall, false)
         @warn "Creating Chebychev polynomials takes a moment"
         global c1,c2,c3,c4 = makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R)
@@ -112,16 +112,30 @@ end
 Ngk(X::SVector{3}) = Ngk(X...)
 
 # Wave-like disturbance
-function wavelike(x,y,z,ltol=-5log(10))
+function wavelike(x,y,z;α=0,ltol=-5log(10),atol=exp(ltol))
     (x≥0 || z≤ltol) && return 0.
-    R = √(ltol/z-1)           # radius s.t. log₁₀(f(z,R))=ltol
-    S = filter(a->-R<a<R,stationary_points(x,y)) # g'=0 points
-    rngs = finite_ranges(S,t->g(x,y,t),-0.5ltol,R) # finite phase ranges
-    4complex_path(t->g(x,y,t)-im*z*(1+t^2),  # complex phase
-                  t->dg(x,y,t)-2im*z*t,rngs,exp(ltol)) # it's derivative
+    α == 0 ? (γ=one) : (@fastmath γ(t)=exp(-α^2*t't*(1+t't)))
+    @fastmath f(t) = γ(t)*sin(g(x,y,t))*exp(z*(1+t^2))
+    Δg,R = -0.5ltol,√(ltol/z-1)   # phase width & range limit
+    rngs = Δg_ranges(x,y,Δg,R)    # finite phase ranges
+    ∫Wᵢ(x,y,z,rngs;γ,f,atol)      # integrate
 end
-g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
-dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative
+using ForwardDiff: value
+function Δg_ranges(x,y,Δg,R;addzero=false,kwargs...)
+    x,y,Δg,R = value.((x,y,Δg,R)) # ranges shouldn't be Duals
+    x==y==0 && return (-R..R,)    # constant phase
+    S = stationary_points(x,y)    # Get stationary points
+    addzero && (S=(S...,0.))      # Append t=0 if needed
+    Δt = max(1., abs(y)≤√eps() ? max(-Δg/x,√(-2Δg/x)) : Δg/3√abs(y))
+    finite_ranges(S,t->g(x,y,t),Δg,R;Δx=Δt,kwargs...)
+end
+∫Wᵢ(x,y,z,rngs;kwargs...) = 4∫path(
+    t-> g(x,y,t)-im*z*(1+t^2), # complex-phase
+    t-> dg(x,y,t)-2im*z*t,     # it's derivative
+    rngs;kwargs...)
+g(x,y,t) = (x+y*t)*kₓ(t)           # phase function
+dg(x,y,t) = (x*t+y*(2t^2+1))/kₓ(t) # it's derivative
+kₓ(t) = ⎷(1+t^2)                   # wave number in x
 ⎷(z::Complex) = π/2≤angle(z)≤π ? -√z : √z # move √ branch-cut
 ⎷(x) = √x
 

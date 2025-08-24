@@ -9,6 +9,7 @@ Base.adjoint(t::Table) = permutedims(t)
 
 # Quadrature functions & utilities
 include("quad.jl")
+export quadgl
 
 # Panel set-up
 include("panels.jl")
@@ -46,7 +47,9 @@ to the corners, and the vectors are colored 3D arrows.
 viz(args...; kwargs...) = @warn "Pass a Table() of panels and load Plots or GLMakie (terminal/VSCode) or WGLMakie (browser/Pluto) for viz functionality."
 components(data,i) = getindex.(data, i)
 components(data::AbstractArray{S}) where {S<:SVector{n}} where n = components.(Ref(data),1:n)
-extent(a) = (p = extrema(a); p[2]-p[1])
+Base.diff(t::NTuple{2}) = t[2]-t[1]
+Base.diff(f::Function,t::Tuple) = diff(f.(t))
+extent(a) = diff(extrema(a))
 export viz,components,extent
 
 end

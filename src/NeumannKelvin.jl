@@ -9,6 +9,7 @@ Base.adjoint(t::Table) = permutedims(t)
 
 # Quadrature functions & utilities
 include("quad.jl")
+export quadgl
 
 # Panel set-up
 include("panels.jl")

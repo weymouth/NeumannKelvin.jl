@@ -6,12 +6,13 @@ const xlag,wlag = gausslaguerre(4)
 Approximate ∫f(x)dx from x=[a,b] using the Gauss-Legendre weights and points `w,x`.
 """
 function quadgl(f;x,w)
-    I = 0.
-    @simd for i in eachindex(x,w)
-        I += w[i]*f(x[i])
+    I = @inbounds w[1]*f(x[1])
+    @simd for i in 2:length(x)
+        I += @inbounds w[i]*f(x[i])
     end; I
 end
 quadgl(f,a,b;x=SA[-1/√3,1/√3],w=SA[1,1]) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
+quadgl(f,a,b,args...;kwargs...) = quadgl(f,a,b;kwargs...)+quadgl(f,b,args...;kwargs...)
 
 """
     ∫path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))

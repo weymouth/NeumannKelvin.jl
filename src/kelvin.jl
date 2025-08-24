@@ -74,7 +74,7 @@ reflect(p,arg) = map(q->reflect(q,arg),p)                 # map over everything 
 onwaterline(p) = any(components(p.xᵤᵥ,3) .> -eps())
 
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987
-function nearfield(x::T,y::T,z::T)::T where T
+function nearfield(x,y,z)
     if Threads.atomic_xchg!(isfirstcall, false)
         @warn "Creating Chebychev polynomials takes a moment"
         global c1,c2,c3,c4 = makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R)

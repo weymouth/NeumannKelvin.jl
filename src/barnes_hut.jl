@@ -41,16 +41,15 @@ function accumulate!(node_values, leaf_values, bvh)
     end
     node_values
 end
+accumulate(leaf_values::T,bvh) where T = accumulate!(T(undef,length(bvh.nodes)), leaf_values, bvh)
 
 # Test it
 leafm = Float32.(1:length(bounding_spheres))
-nodem = zeros(Float32,length(bvh.nodes))
-accumulate!(nodem,leafm,bvh)
+nodem = accumulate(leafm,bvh)
 using StaticArrays
 leafx = [SA[bb.x...] for bb in bounding_spheres]
 leafmx = leafm .* leafx
-nodemx = zeros(SVector{3,Float32},length(bvh.nodes))
-accumulate!(nodemx,leafmx,bvh)
+nodemx = accumulate(leafmx,bvh)
 nodex = nodemx ./ nodem
 
 # Relative squared-distance from bounding volumes
@@ -65,13 +64,13 @@ reldist(x,bb::ImplicitBVH.BoundingVolume) = reldist(x,bb.volume)
 
 using ImplicitBVH: memory_index
 function evaluate(fnc,x,bvh,node_values,leaf_values;d²=1,stack=Vector{Int}(undef,bvh.tree.levels))
-    tree = bvh.tree; real_internal_nodes = tree.real_nodes-tree.real_leaves
+    tree = bvh.tree; length_nodes = length(bvh.nodes)
     top = 1; stack[top] = 1
     val = zero(fnc(x,node_values[1]))
     while top>0
         i = stack[top]; top-=1
         j = memory_index(tree,i)
-        if j ≤ real_internal_nodes
+        if j ≤ length_nodes
             if reldist(x,bvh.nodes[j])>d²
                 val += fnc(x,node_values[j])
             else
@@ -79,7 +78,7 @@ function evaluate(fnc,x,bvh,node_values,leaf_values;d²=1,stack=Vector{Int}(unde
                 !unsafe_isvirtual(tree,2i+1) && (stack[top+=1] = 2i+1)
             end
         else
-            val += fnc(x,leaf_values[bvh.leaves[j-real_internal_nodes].index])
+            val += fnc(x,leaf_values[bvh.leaves[j-length_nodes].index])
         end
     end
     val

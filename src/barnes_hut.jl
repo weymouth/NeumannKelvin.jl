@@ -76,18 +76,30 @@ end
 cen = SA[0,0,1]
 S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
 # panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
-panels = panelize(S,0,π,0,2π,hᵤ=2.)
-using GLMakie
-viz(panels)
-
+panels = panelize(S,0,π,0,2π,hᵤ=0.12)
 bvh = bvh_panels(panels)
 nodes = fill_nodes(panels,bvh)
 @assert nodes.dA[1]≈sum(panels.dA)
 @assert nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
 
 using ForwardDiff
-θ = π/5; ρ = SA[cos(θ),sin(θ)*cos(θ),sin(θ)*sin(θ)]
-map(1:6) do r
-    # r,ForwardDiff.gradient(x->evaluate(∫G,x,bvh,nodes,panels),r*ρ) ./ ForwardDiff.gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),r*ρ) .- 1
-    r,evaluate(∫G,r*ρ+cen,bvh,nodes,panels)/sum(∫G(r*ρ+cen,panel,d²=Inf) for panel in panels)-1
+ρ = panels.x[length(panels)÷3]-cen
+for r in 1:6
+    x = r*ρ+cen
+    error = evaluate(∫G,x,bvh,nodes,panels)/sum(∫G(x,p,d²=Inf) for p in panels)-1
+    derror = ForwardDiff.gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ./ ForwardDiff.gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),x) .- 1
+    @show r,error,derror
+end
+
+using BenchmarkTools
+for h in 0.5 .^ (1:6)
+    panels = panelize(S,0,π,0,2π,hᵤ=h,N_max=Inf)
+    bvh = bvh_panels(panels)
+    nodes = fill_nodes(panels,bvh)
+    @show h,length(panels)
+    for r in (1,6)
+        @show r
+        @btime sum(panel->∫G($r*ρ+cen,panel,d²=Inf),panels)
+        @btime bhut = evaluate(∫G,$r*ρ+cen,bvh,nodes,panels)
+    end
 end

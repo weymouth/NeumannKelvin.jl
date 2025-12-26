@@ -1,23 +1,5 @@
+# Accumulate leaf values onto nodes
 using ImplicitBVH
-using ImplicitBVH: BBox, BSphere
-
-# Generate some simple bounding spheres
-bounding_spheres = [
-    BSphere{Float32}([1., 0., 0.], 1.),
-    BSphere{Float32}([2., 0., 0.], 1.),
-    BSphere{Float32}([3., 0., 0.], 1.),
-    BSphere{Float32}([1., 1., 1.], 1.),
-    BSphere{Float32}([2., 1., 1.], 1.),
-    BSphere{Float32}([3., 1., 1.], 1.),
-    BSphere{Float32}([1., 1., 2.], 1.),
-    BSphere{Float32}([2., 1., 2.], 1.),
-    BSphere{Float32}([3., 1., 2.], 1.),
-]
-
-# Build BVH
-bvh = BVH(bounding_spheres)
-
-# Accumulate leaf values onto node values
 using ImplicitBVH: level_indices,pow2,unsafe_isvirtual
 function accumulate!(node_values, leaf_values, bvh)
     tree = bvh.tree; levels = tree.levels
@@ -43,16 +25,8 @@ function accumulate!(node_values, leaf_values, bvh)
 end
 accumulate(leaf_values::T,bvh) where T = accumulate!(T(undef,length(bvh.nodes)), leaf_values, bvh)
 
-# Test it
-leafm = Float32.(1:length(bounding_spheres))
-nodem = accumulate(leafm,bvh)
-using StaticArrays
-leafx = [SA[bb.x...] for bb in bounding_spheres]
-leafmx = leafm .* leafx
-nodemx = accumulate(leafmx,bvh)
-nodex = nodemx ./ nodem
-
 # Relative squared-distance from bounding volumes
+using ImplicitBVH: BBox, BSphere, BoundingVolume
 reldist(x,bb::BSphere) = max(sum(abs2,x .- bb.x)/bb.r^2-1,0)
 function reldist(x,bb::BBox)
     c = (bb.up .+ bb.lo) ./ 2
@@ -60,13 +34,14 @@ function reldist(x,bb::BBox)
     q = abs.(x .- c) .- r
     sum(abs2,max.(q,0))/sum(abs2,r)
 end
-reldist(x,bb::ImplicitBVH.BoundingVolume) = reldist(x,bb.volume)
+reldist(x,bb::BoundingVolume) = reldist(x,bb.volume)
 
+# Barnes-Hut kernel evaluation
 using ImplicitBVH: memory_index
-function evaluate(fnc,x,bvh,node_values,leaf_values;d²=1,stack=Vector{Int}(undef,bvh.tree.levels))
+function evaluate(fnc,x,bvh,node_values,leaf_values;d²=4,stack=Vector{Int}(undef,bvh.tree.levels))
     tree = bvh.tree; length_nodes = length(bvh.nodes)
     top = 1; stack[top] = 1
-    val = zero(fnc(x,node_values[1]))
+    val = zero(fnc(x,leaf_values[1]))
     while top>0
         i = stack[top]; top-=1
         j = memory_index(tree,i)
@@ -84,14 +59,29 @@ function evaluate(fnc,x,bvh,node_values,leaf_values;d²=1,stack=Vector{Int}(unde
     val
 end
 
-using TypedTables
-nodeT = Table(m=nodem,x=nodex)
-leafT = Table(m=leafm,x=leafx)
-fnc(x,data) = data.m/sum(abs2,x-data.x)
+# BEM-specific stuff!!
+using NeumannKelvin
+function bb_panel(panel)
+    ext = extrema.(components(panel.xᵤᵥ))
+    BBox(first.(ext),last.(ext))
+end
+bvh_panels(panels) = BVH(bb_panel.(panels))
+function fill_nodes(panels,bvh)
+    dA = accumulate(panels.dA,bvh)
+    x = accumulate(panels.dA .* panels.x, bvh) ./ dA
+    n = NeumannKelvin.normalize.(accumulate(panels.dA .* panels.n, bvh))
+    Table(;x,dA,n)
+end
 
-x = zero(SVector{3,Float32})
-evaluate(fnc,x,bvh,nodeT,leafT)
+# Test it
+S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
+panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
+bvh = bvh_panels(panels)
+nodes = fill_nodes(panels,bvh)
 
 using ForwardDiff
-dx = ForwardDiff.Dual.(x,ones(SVector{3,Float32}))
-evaluate(fnc,dx,bvh,nodeT,leafT)
+θ = π/5; ρ = SA[cos(θ),sin(θ)*cos(θ),sin(θ)*sin(θ)]
+map(1:6) do r
+    dx = ForwardDiff.Dual.(r*ρ,ones(typeof(ρ)))
+    r,evaluate(∫G,dx,bvh,nodes,panels)/sum(∫G(dx,p,d²=0) for p in panels)-1
+end

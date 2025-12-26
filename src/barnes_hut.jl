@@ -12,10 +12,9 @@ function accumulate!(node_values, leaf_values, bvh)
     end
 
     # node levels
-    level_offset = cumsum(bvh.skips)
     for level in levels-2:-1:1
-        parent = level_offset[level]; child = level_offset[level+1]
-        for i in pow2(level-1):pow2(level) - 1 - @inbounds bvh.skips[level]
+        parent,child = @inbounds bvh.skips[level:level+1]
+        for i in pow2(level-1):pow2(level) - 1 - (child-parent)
             @inbounds node_values[i-parent] = node_values[2i-child]
             unsafe_isvirtual(tree,2i+1) && continue
             @inbounds node_values[i-parent] += node_values[2i+1-child]
@@ -74,14 +73,21 @@ function fill_nodes(panels,bvh)
 end
 
 # Test it
-S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
+cen = SA[0,0,1]
+S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
+# panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
+panels = panelize(S,0,π,0,2π,hᵤ=2.)
+using GLMakie
+viz(panels)
+
 bvh = bvh_panels(panels)
 nodes = fill_nodes(panels,bvh)
+@assert nodes.dA[1]≈sum(panels.dA)
+@assert nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
 
 using ForwardDiff
 θ = π/5; ρ = SA[cos(θ),sin(θ)*cos(θ),sin(θ)*sin(θ)]
 map(1:6) do r
-    dx = ForwardDiff.Dual.(r*ρ,ones(typeof(ρ)))
-    r,evaluate(∫G,dx,bvh,nodes,panels)/sum(∫G(dx,p,d²=0) for p in panels)-1
+    # r,ForwardDiff.gradient(x->evaluate(∫G,x,bvh,nodes,panels),r*ρ) ./ ForwardDiff.gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),r*ρ) .- 1
+    r,evaluate(∫G,r*ρ+cen,bvh,nodes,panels)/sum(∫G(r*ρ+cen,panel,d²=Inf) for panel in panels)-1
 end

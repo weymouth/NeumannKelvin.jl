@@ -22,7 +22,7 @@ function accumulate!(node_values, leaf_values, bvh)
     end
     node_values
 end
-accumulate(leaf_values::T,bvh) where T = accumulate!(T(undef,length(bvh.nodes)), leaf_values, bvh)
+accumulate(leaf_values,bvh) = accumulate!(similar(leaf_values,length(bvh.nodes)), leaf_values, bvh)
 
 # Relative squared-distance from bounding volumes
 using ImplicitBVH: BBox, BSphere, BoundingVolume
@@ -92,6 +92,13 @@ for r in 1:6
 end
 
 using BenchmarkTools
+stack = Vector{Int}(undef,bvh.tree.levels)
+x = panels.x[1]
+d = ForwardDiff.Dual.(panels.x[1],panels.n[1])
+p = panels[1]
+@btime evaluate(∫G,$x,$bvh,$nodes,$panels,stack=$stack)
+@btime evaluate(∫G,$d,$bvh,$nodes,$panels,stack=$stack)
+
 for h in 0.5 .^ (1:6)
     panels = panelize(S,0,π,0,2π,hᵤ=h,N_max=Inf)
     bvh = bvh_panels(panels)

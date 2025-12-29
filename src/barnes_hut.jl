@@ -131,9 +131,12 @@ using Barnes-Hut and multi-threading to reduce cost from O(N²) to O(N log N / t
 
 See also: [`BarnesHut`](@ref) [`BarnesHutSolve!`](@ref)
 """
-steady_force(BH;U=SVector(-1,0,0)) = AK.sum(BH.panels) do pᵢ
-    cₚ = 1-sum(abs2,U+∇Φ(pᵢ.x[i],BH))/sum(abs2,U)
-    cₚ*pᵢ.n*pᵢ.dA
+function steady_force(BH;U=SVector(-1,0,0))
+    panels = BH.panels; init=neutral=zero(eltype(panels.n))
+    AK.mapreduce(+,panels,AK.get_backend(panels.q);init,neutral) do pᵢ
+        cₚ = 1-sum(abs2,U+∇Φ(pᵢ.x,BH))/sum(abs2,U)
+        cₚ*pᵢ.n*pᵢ.dA
+    end
 end
 @inline Φ(x,(;panels,nodes,bvh,ϕ,kwargs)::BarnesHut) = evaluate((x,p)->p.q*ϕ(x,p,kwargs...),x,bvh,nodes,panels)
 

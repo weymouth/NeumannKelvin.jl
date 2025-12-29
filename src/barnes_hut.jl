@@ -99,29 +99,26 @@ d = ForwardDiff.Dual.(panels.x[1],panels.n[1])
 @btime evaluate(∫G,$d,$bvh,$nodes,$panels,stack=$stack)
 @btime gradient(x->evaluate(∫G,x,$bvh,$nodes,$panels,stack=$stack),$x)
 
-struct BarnesHut{TP,TN,TB,TS}
+struct BarnesHut{TP,TN,TB,F,KW}
     panels::TP
     nodes::TN
     bvh::TB
-    stack::TS
-    # ϕ::Function
-    # kwargs::Base.Pairs{Symbol, Union{}, Tuple{}, @NamedTuple{}}
+    ϕ::F
+    kwargs::KW
 end
-function BarnesHut(panels)
+function BarnesHut(panels;ϕ=∫G,kwargs...)
     bvh = bvh_panels(panels)
     nodes = fill_nodes(panels,bvh)
-    stack = Vector{Int}(undef,bvh.tree.levels)
-    BarnesHut(Table(panels,q=similar(panels.dA)),Table(nodes,q=similar(nodes.dA)),bvh,stack)
+    BarnesHut(Table(panels,q=similar(panels.dA)),Table(nodes,q=similar(nodes.dA)),bvh,ϕ,kwargs)
 end
 function set_q!(BH,q)
     BH.panels.q .= q
     accumulate!(BH.nodes.q,BH.panels.dA .* q,BH.bvh)
     BH.nodes.q ./= BH.nodes.dA; BH
 end
-function uₙ!(b,(;panels,nodes,bvh,stack);d²=4)
-    for i in eachindex(b,panels)
-        b[i] = derivative(t->evaluate((x,p)->p.q*∫G(x,p),panels.x[i]+t*panels.n[i],bvh,nodes,panels;stack,d²),0.)
-    end
+import AcceleratedKernels as AK
+@inline uₙ!(b,(;panels,nodes,bvh,ϕ,kwargs);d²=4) = AK.foreachindex(b) do i
+    b[i] = derivative(t->evaluate((x,p)->p.q*ϕ(x,p;kwargs...),panels.x[i]+t*panels.n[i],bvh,nodes,panels;d²),0.)
 end
 
 using Krylov,LinearOperators
@@ -135,7 +132,7 @@ function BarnesHutSolve!(BH,b=components(BH.panels.n,1);atol=1e-3,d²=4,verbose=
     verbose && println(stats)
     set_q!(BH,q)
 end
-BarnesHutSolve(panels,b=components(panels.n,1);atol=1e-3,d²=4) = BarnesHutSolve!(BarnesHut(panels),b;atol,d²)
+BarnesHutSolve(panels,b=components(panels.n,1);ϕ=∫G,atol=1e-3,d²=4,kwargs...) = BarnesHutSolve!(BarnesHut(panels;ϕ,kwargs...),b;atol,d²)
 
 panels = panelize(S,0,π,0,2π,hᵤ=1/16,N_max=Inf)
 @time BH = BarnesHutSolve(panels);
@@ -143,3 +140,17 @@ panels = panelize(S,0,π,0,2π,hᵤ=1/16,N_max=Inf)
 @btime BarnesHutSolve!($BH,verbose=false);
 @time q = ∂ₙϕ.(panels,panels')\components(panels.n,1);
 norm(BH.panels.q-q)/norm(q)
+
+using NeumannKelvin:Φ,∇Φ
+@inline NeumannKelvin.Φ(x,(;panels,nodes,bvh,ϕ,kwargs)::BarnesHut) = evaluate((x,p)->p.q*ϕ(x,p,kwargs...),x,bvh,nodes,panels)
+cₚ!(b,BH;U=SVector(-1,0,0)) = AK.foreachindex(b) do i
+    b[i] = 1-sum(abs2,U+∇Φ(BH.panels.x[i],BH))/sum(abs2,U)
+end
+cₚ(BH;U=SVector(-1,0,0)) = (b=similar(BH.panels.q);cₚ!(b,BH;U);b)
+steady_force(BH;U=SVector(-1,0,0)) = AK.sum(BH.panels) do pᵢ
+    cₚ = 1-sum(abs2,U+∇Φ(pᵢ.x[i],BH))/sum(abs2,U)
+    cₚ*pᵢ.n*pᵢ.dA
+end
+
+b=cₚ(BH); extrema(b) ./ (-1.25,1.0) .-1
+@btime cₚ!(b,BH)

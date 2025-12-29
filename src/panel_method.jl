@@ -48,8 +48,8 @@ Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')ds' = ∑ᵢqᵢϕ(x,pᵢ)` of `panels` w
 Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
 """
 Φ(x,q,panels;ϕ=∫G,kwargs...) = ThreadsX.sum(qᵢ*ϕ(x,pᵢ;kwargs...) for (qᵢ,pᵢ) in zip(q,panels))
-∇Φ(x,q,panels;kwargs...) = gradient(x->Φ(x,q,panels;kwargs...),x)
-ζ(x,y,q,panels;kwargs...) = derivative(x->Φ(SVector(x,y,0),q,panels;kwargs...),x)
+∇Φ(x,args...;kwargs...) = gradient(x->Φ(x,args...;kwargs...),x)
+ζ(x,y,args...;kwargs...) = derivative(x->Φ(SVector(x,y,0),args...;kwargs...),x)
 
 """
     steady_force(q,panels,U=SVector(-1,0,0);kwargs...)

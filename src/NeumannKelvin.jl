@@ -19,6 +19,9 @@ using ThreadsX # multi-threaded map,sum, & foreach
 include("panel_method.jl")
 export ∫G,∂ₙϕ,influence,ζ,steady_force,added_mass
 
+include("barnes_hut.jl")
+export BarnesHut,BarnesHutSolve,BarnesHutSolve!,cₚ,cₚ!
+
 # Kelvin Green function definitions
 include("kelvin.jl")
 export ∫kelvin,reflect,onwaterline

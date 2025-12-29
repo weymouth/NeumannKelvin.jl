@@ -119,6 +119,36 @@ using LinearAlgebra,BenchmarkTools
     @test influence(panels[1:1],ϕ=∫G₁₂₃)\b[1:1] ≈ q[1:1] # ×1 coeff(!) => 8 calls
 end
 
+using NeumannKelvin:bvh_panels,fill_nodes,evaluate
+@testset "barnes_hut.jl" begin
+    cen = SA[0,0,1]
+    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
+    panels = panelize(S,0,π,0,2π,hᵤ=0.12)
+    bvh = bvh_panels(panels)
+    nodes = fill_nodes(panels,bvh)
+    @test nodes.dA[1]≈sum(panels.dA)
+    @test nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
+
+    ρ = panels.x[length(panels)÷3]-cen
+    for r in 1:6
+        x = r*ρ+cen
+        @test evaluate(∫G,x,bvh,nodes,panels) ≈ sum(∫G(x,p,d²=Inf) for p in panels) rtol=0.01
+        @test gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ≈ gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),x) rtol=0.04
+    end
+
+    stack = Vector{Int}(undef,bvh.tree.levels)
+    x = panels.x[1]
+    b = @benchmark evaluate(∫G,$x,$bvh,$nodes,$panels,stack=$stack); @test minimum(b).allocs==0
+    b = @benchmark gradient(x->evaluate(∫G,x,$bvh,$nodes,$panels,stack=$stack),$x); @test minimum(b).allocs==0
+
+    BH = BarnesHutSolve(panels)
+    q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
+    @test norm(BH.panels.q-q)/norm(q)<0.0032
+
+    c_p = cₚ(BH)
+    @test collect(extrema(c_p)) ≈ [-1.25,1.0] rtol=0.01
+end
+
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]
 @inline bruteN(x,y,z) = -2*(1-z/(hypot(x,y,z)+abs(x)))+NeumannKelvin.Ngk(x,y,z)
 using SpecialFunctions

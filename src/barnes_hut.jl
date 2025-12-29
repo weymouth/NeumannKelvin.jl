@@ -1,3 +1,142 @@
+"""
+    BarnesHut(panels::Table;ϕ,kwargs...) -> BarnesHut
+
+Creates a BarnesHut tree structure from a set of `panels` that enables O(log N)
+evaluation of the panel influence instead of O(N). For N ≥ 300, this is a huge speed-up.
+
+**Note** the panel geometry, the tree, the potental `ϕ` and the strength `q` are all
+bundled into the structure for efficient evaluation later.
+
+# Fields
+- `panels::Table`: Panel geometry with strength `q` (initialized to zero)
+- `nodes::Table`: Aggregated node values in the BVH tree
+- `bvh::BVH`: Bounding volume hierarchy of the panels and nodes
+
+# Example
+```julia
+using NeumannKelvin
+S(θ,φ) = SA[sin(θ)*cos(φ), sin(θ)*sin(φ), cos(θ)]
+panels = panelize(S, 0, π, 0, 2π, hᵤ=1/16, N_max=3214) # quite a few panels
+BH = BarnesHut(panels)
+```
+
+See also: [`BarnesHutSolve!`](@ref)
+"""
+struct BarnesHut{TP,TN,TB,F,KW}
+    panels::TP
+    nodes::TN
+    bvh::TB
+    ϕ::F
+    kwargs::KW
+end
+function BarnesHut(panels;ϕ=∫G,kwargs...)
+    bvh = bvh_panels(panels)
+    nodes = fill_nodes(panels,bvh)
+    q = similar(panels.dA); q .= 0
+    BarnesHut(Table(panels;q),Table(nodes,q=similar(nodes.dA)),bvh,ϕ,kwargs)
+end
+
+# Pretty printing
+function Base.show(io::IO, ::MIME"text/plain", BH::BarnesHut)
+    show(io,BH);println()
+    bbox = BH.bvh.nodes[1]
+    println(io, "  bounds: $(bbox.lo) to $(bbox.up)")
+    println(io, "  total area: ", BH.nodes[1].dA)
+    println(io, "  strength extrema: $(extrema(BH.panels.q))")
+end
+# Compact version for collections
+function Base.show(io::IO, BH::BarnesHut)
+    print(io, "BarnesHut($(length(BH.panels)) panels, $(BH.bvh.tree.levels) levels)")
+end
+
+"""
+    BarnesHutSolve(panels::Table,b;...) = BarnesHutSolve!(BarnesHut(panels;...),b;...)
+
+See: [`BarnesHut`](@ref), [`BarnesHutSolve!`](@ref)
+"""
+BarnesHutSolve(panels,b=components(panels.n,1);ϕ=∫G,atol=1e-3,d²=4,kwargs...) = BarnesHutSolve!(BarnesHut(panels;ϕ,kwargs...),b;atol,d²)
+using Krylov,LinearOperators
+"""
+    BarnesHutSolve!(BH::BarnesHut, b=components(BH.panels.n,1);
+                    atol=1e-3, d²=4, verbose=true) -> BarnesHut
+
+Solve the BEM linear system using Barnes-Hut acceleration and GMRES iteration.
+
+Solves for panel strengths `q` such that the normal velocity boundary condition
+is satisfied: `Σⱼ ∂ₙϕ(xᵢ,xⱼ)qⱼ = bᵢ`. The Barnes-Hut approximation uses distance
+threshold `d²` to decide when to use aggregated node values vs individual panels.
+
+# Arguments
+- `BH::BarnesHut`: Pre-constructed Barnes-Hut solver (modified in-place)
+- `b`: Right-hand side vector (default: `p.n[1]`, corresponding to `U=[-1,0,0]`)
+- `atol=1e-3`: Absolute tolerance for GMRES convergence
+- `d²=4`: Barnes-Hut distance threshold (r²/R² > d² uses approximation)
+- `verbose=true`: Print GMRES convergence statistics
+
+# Returns
+Modified `BH` with updated panel strengths in `BH.panels.q`
+
+# Performance
+- **Complexity**: O(N log N) per GMRES iteration vs O(N²) for direct
+- **Typical**: 3-5 GMRES iterations for well-conditioned problems
+- **Accuracy**: ~0.2% error vs direct solve with d²=4
+
+# Example
+```julia
+BH = BarnesHut(panels)  # crazy fast initialization
+BarnesHutSolve!(BH)     # fast solve
+c_p = cₚ(BH)            # very fast measure
+```
+
+See also: [`BarnesHut`](@ref)
+"""
+function BarnesHutSolve!(BH,b=components(BH.panels.n,1);atol=1e-3,d²=4,verbose=true)
+    # Make LinearOperator
+    mult!(b,q) = (set_q!(BH,q); uₙ!(b,BH;d²))
+    A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
+
+    # Solve with GMRES and return updated BarnesHutBEM
+    q, stats = gmres(A, b; atol)
+    verbose && println(stats)
+    set_q!(BH,q)
+end
+@inline function set_q!(BH,q)
+    BH.panels.q .= q
+    accumulate!(BH.nodes.q,BH.panels.dA .* q,BH.bvh)
+    BH.nodes.q ./= BH.nodes.dA; BH
+end
+import AcceleratedKernels as AK
+@inline uₙ!(b,(;panels,nodes,bvh,ϕ,kwargs);d²=4) = AK.foreachindex(b) do i
+    b[i] = derivative(t->evaluate((x,p)->p.q*ϕ(x,p;kwargs...),panels.x[i]+t*panels.n[i],bvh,nodes,panels;d²),0.)
+end
+
+"""
+    cₚ!(b,BH::BarnesHut;U=SVector(-1,0,0))
+    cₚ(BH::BarnesHut;U=SVector(-1,0,0)) -> b
+
+Measure the pressure coefficient on each panel induced by a solved panel tree
+using Barnes-Hut and multi-threading to reduce cost from O(N²) to O(N log N / threads).
+
+See also: [`BarnesHut`](@ref) [`BarnesHutSolve!`](@ref)
+"""
+cₚ!(b,BH;U=SVector(-1,0,0)) = AK.foreachindex(b) do i
+    b[i] = 1-sum(abs2,U+∇Φ(BH.panels.x[i],BH))/sum(abs2,U)
+end
+cₚ(BH;U=SVector(-1,0,0)) = (b=similar(BH.panels.q);cₚ!(b,BH;U);b)
+"""
+    steady_force(BH::BarnesHut;U=SVector(-1,0,0))
+
+Measure the integrated steady force induced by a solved panel tree
+using Barnes-Hut and multi-threading to reduce cost from O(N²) to O(N log N / threads).
+
+See also: [`BarnesHut`](@ref) [`BarnesHutSolve!`](@ref)
+"""
+steady_force(BH;U=SVector(-1,0,0)) = AK.sum(BH.panels) do pᵢ
+    cₚ = 1-sum(abs2,U+∇Φ(pᵢ.x[i],BH))/sum(abs2,U)
+    cₚ*pᵢ.n*pᵢ.dA
+end
+@inline Φ(x,(;panels,nodes,bvh,ϕ,kwargs)::BarnesHut) = evaluate((x,p)->p.q*ϕ(x,p,kwargs...),x,bvh,nodes,panels)
+
 # Accumulate leaf values onto nodes
 using ImplicitBVH
 using ImplicitBVH: level_indices,pow2,unsafe_isvirtual
@@ -58,8 +197,7 @@ function evaluate(fnc,x,bvh,node_values,leaf_values;d²=4,stack=Vector{Int}(unde
     val
 end
 
-# BEM-specific stuff!!
-using NeumannKelvin
+# panel bounding-box and node info
 function bb_panel(panel)
     ext = extrema.(components(panel.xᵤᵥ))
     BBox(first.(ext),last.(ext))
@@ -71,86 +209,3 @@ function fill_nodes(panels,bvh)
     n = NeumannKelvin.normalize.(accumulate(panels.dA .* panels.n, bvh))
     Table(;x,dA,n)
 end
-
-# Test it
-cen = SA[0,0,1]
-S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
-# panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
-panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-bvh = bvh_panels(panels)
-nodes = fill_nodes(panels,bvh)
-@assert nodes.dA[1]≈sum(panels.dA)
-@assert nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
-
-using ForwardDiff
-ρ = panels.x[length(panels)÷3]-cen
-for r in 1:6
-    x = r*ρ+cen
-    error = evaluate(∫G,x,bvh,nodes,panels)/sum(∫G(x,p,d²=Inf) for p in panels)-1
-    derror = gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ./ gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),x) .- 1
-    @show r,error,derror
-end
-
-using BenchmarkTools
-stack = Vector{Int}(undef,bvh.tree.levels)
-x = panels.x[1]
-d = ForwardDiff.Dual.(panels.x[1],panels.n[1])
-@btime evaluate(∫G,$x,$bvh,$nodes,$panels,stack=$stack)
-@btime evaluate(∫G,$d,$bvh,$nodes,$panels,stack=$stack)
-@btime gradient(x->evaluate(∫G,x,$bvh,$nodes,$panels,stack=$stack),$x)
-
-struct BarnesHut{TP,TN,TB,F,KW}
-    panels::TP
-    nodes::TN
-    bvh::TB
-    ϕ::F
-    kwargs::KW
-end
-function BarnesHut(panels;ϕ=∫G,kwargs...)
-    bvh = bvh_panels(panels)
-    nodes = fill_nodes(panels,bvh)
-    BarnesHut(Table(panels,q=similar(panels.dA)),Table(nodes,q=similar(nodes.dA)),bvh,ϕ,kwargs)
-end
-function set_q!(BH,q)
-    BH.panels.q .= q
-    accumulate!(BH.nodes.q,BH.panels.dA .* q,BH.bvh)
-    BH.nodes.q ./= BH.nodes.dA; BH
-end
-import AcceleratedKernels as AK
-@inline uₙ!(b,(;panels,nodes,bvh,ϕ,kwargs);d²=4) = AK.foreachindex(b) do i
-    b[i] = derivative(t->evaluate((x,p)->p.q*ϕ(x,p;kwargs...),panels.x[i]+t*panels.n[i],bvh,nodes,panels;d²),0.)
-end
-
-using Krylov,LinearOperators
-function BarnesHutSolve!(BH,b=components(BH.panels.n,1);atol=1e-3,d²=4,verbose=true)
-    # Make LinearOperator
-    mult!(b,q) = (set_q!(BH,q); uₙ!(b,BH;d²))
-    A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
-
-    # Solve with GMRES and return updated BarnesHutBEM
-    q, stats = gmres(A, b; atol)
-    verbose && println(stats)
-    set_q!(BH,q)
-end
-BarnesHutSolve(panels,b=components(panels.n,1);ϕ=∫G,atol=1e-3,d²=4,kwargs...) = BarnesHutSolve!(BarnesHut(panels;ϕ,kwargs...),b;atol,d²)
-
-panels = panelize(S,0,π,0,2π,hᵤ=1/16,N_max=Inf)
-@time BH = BarnesHutSolve(panels);
-@btime BarnesHut($panels);
-@btime BarnesHutSolve!($BH,verbose=false);
-@time q = ∂ₙϕ.(panels,panels')\components(panels.n,1);
-norm(BH.panels.q-q)/norm(q)
-
-using NeumannKelvin:Φ,∇Φ
-@inline NeumannKelvin.Φ(x,(;panels,nodes,bvh,ϕ,kwargs)::BarnesHut) = evaluate((x,p)->p.q*ϕ(x,p,kwargs...),x,bvh,nodes,panels)
-cₚ!(b,BH;U=SVector(-1,0,0)) = AK.foreachindex(b) do i
-    b[i] = 1-sum(abs2,U+∇Φ(BH.panels.x[i],BH))/sum(abs2,U)
-end
-cₚ(BH;U=SVector(-1,0,0)) = (b=similar(BH.panels.q);cₚ!(b,BH;U);b)
-steady_force(BH;U=SVector(-1,0,0)) = AK.sum(BH.panels) do pᵢ
-    cₚ = 1-sum(abs2,U+∇Φ(pᵢ.x[i],BH))/sum(abs2,U)
-    cₚ*pᵢ.n*pᵢ.dA
-end
-
-b=cₚ(BH); extrema(b) ./ (-1.25,1.0) .-1
-@btime cₚ!(b,BH)

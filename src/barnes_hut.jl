@@ -87,7 +87,7 @@ using ForwardDiff
 for r in 1:6
     x = r*ρ+cen
     error = evaluate(∫G,x,bvh,nodes,panels)/sum(∫G(x,p,d²=Inf) for p in panels)-1
-    derror = ForwardDiff.gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ./ ForwardDiff.gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),x) .- 1
+    derror = gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ./ gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),x) .- 1
     @show r,error,derror
 end
 
@@ -95,18 +95,51 @@ using BenchmarkTools
 stack = Vector{Int}(undef,bvh.tree.levels)
 x = panels.x[1]
 d = ForwardDiff.Dual.(panels.x[1],panels.n[1])
-p = panels[1]
 @btime evaluate(∫G,$x,$bvh,$nodes,$panels,stack=$stack)
 @btime evaluate(∫G,$d,$bvh,$nodes,$panels,stack=$stack)
+@btime gradient(x->evaluate(∫G,x,$bvh,$nodes,$panels,stack=$stack),$x)
 
-for h in 0.5 .^ (1:6)
-    panels = panelize(S,0,π,0,2π,hᵤ=h,N_max=Inf)
+struct BarnesHut{TP,TN,TB,TS}
+    panels::TP
+    nodes::TN
+    bvh::TB
+    stack::TS
+    # ϕ::Function
+    # kwargs::Base.Pairs{Symbol, Union{}, Tuple{}, @NamedTuple{}}
+end
+function BarnesHut(panels)
     bvh = bvh_panels(panels)
     nodes = fill_nodes(panels,bvh)
-    @show h,length(panels)
-    for r in (1,6)
-        @show r
-        @btime sum(panel->∫G($r*ρ+cen,panel,d²=Inf),panels)
-        @btime bhut = evaluate(∫G,$r*ρ+cen,bvh,nodes,panels)
+    stack = Vector{Int}(undef,bvh.tree.levels)
+    BarnesHut(Table(panels,q=similar(panels.dA)),Table(nodes,q=similar(nodes.dA)),bvh,stack)
+end
+function set_q!(BH,q)
+    BH.panels.q .= q
+    accumulate!(BH.nodes.q,BH.panels.dA .* q,BH.bvh)
+    BH.nodes.q ./= BH.nodes.dA; BH
+end
+function uₙ!(b,(;panels,nodes,bvh,stack);d²=4)
+    for i in eachindex(b,panels)
+        b[i] = derivative(t->evaluate((x,p)->p.q*∫G(x,p),panels.x[i]+t*panels.n[i],bvh,nodes,panels;stack,d²),0.)
     end
 end
+
+using Krylov,LinearOperators
+function BarnesHutSolve!(BH,b=components(BH.panels.n,1);atol=1e-3,d²=4,verbose=true)
+    # Make LinearOperator
+    mult!(b,q) = (set_q!(BH,q); uₙ!(b,BH;d²))
+    A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
+
+    # Solve with GMRES and return updated BarnesHutBEM
+    q, stats = gmres(A, b; atol)
+    verbose && println(stats)
+    set_q!(BH,q)
+end
+BarnesHutSolve(panels,b=components(panels.n,1);atol=1e-3,d²=4) = BarnesHutSolve!(BarnesHut(panels),b;atol,d²)
+
+panels = panelize(S,0,π,0,2π,hᵤ=1/16,N_max=Inf)
+@time BH = BarnesHutSolve(panels);
+@btime BarnesHut($panels);
+@btime BarnesHutSolve!($BH,verbose=false);
+@time q = ∂ₙϕ.(panels,panels')\components(panels.n,1);
+norm(BH.panels.q-q)/norm(q)

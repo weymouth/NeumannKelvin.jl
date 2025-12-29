@@ -83,13 +83,19 @@ end
     @test_throws ArgumentError panelize((u,v)->[u,u,v])
 end
 
-using LinearAlgebra
+using LinearAlgebra,BenchmarkTools
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
     @test size(panels) == (8,)
     @test panels.dA ≈ fill(π/2,8) rtol=1e-6   # cubature gives perfect areas
     @test panels.n ⋅ panels.x ≈ 4√3 rtol=1e-6 # ...and centroids
+
+    # Check that ∫G is non-allocating, including duals
+    p = panels[1]
+    b = @benchmark ∫G($p.x,$p); @test minimum(b).allocs==0
+    b = @benchmark gradient(x->∫G(x,$p),$p.x); @test minimum(b).allocs==0
+    b = @benchmark ∂ₙϕ($p,$p); @test minimum(b).allocs==0
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
     @test A ≈ influence(panels)
@@ -109,7 +115,7 @@ using LinearAlgebra
     @test influence(panels[1:4],ϕ=∫G₃)\b[1:4] ≈ q[1:4]   # ×4² coeffs => 32 ∫G calls
     ∫G₂₃ = reflect(∫G₃,2)                                # 2² calls
     @test influence(panels[1:2],ϕ=∫G₂₃)\b[1:2] ≈ q[1:2]  # ×2² coeffs => 16 calls
-    ∫G₁₂₃ = reflect(∫G₂₃,1,op=-) # sign flip             # 2³ calls 
+    ∫G₁₂₃ = reflect(∫G₂₃,1,op=-) # sign flip             # 2³ calls
     @test influence(panels[1:1],ϕ=∫G₁₂₃)\b[1:1] ≈ q[1:1] # ×1 coeff(!) => 8 calls
 end
 

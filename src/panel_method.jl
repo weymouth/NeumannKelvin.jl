@@ -13,9 +13,11 @@ Approximate integral `∫ₚ G(x,x')da'` over source panel `p`.
 A 2x2 quadrature is used when `|x-p.x|²≤d²p.dA`, otherwise it uses the midpoint.
 """
 ∫G(x,p;d²=4,kwargs...) = _∫G(x,p;d²)
-function ∫G(d::AbstractVector{<:Dual{Tag}},p;d²=4,kwargs...) where Tag
-    value(d) ≠ p.x && return _∫G(d,p;d²) # use auto-diff
-    Dual{Tag}(0.,2π*sum(i->partials(d[i])*p.n[i],eachindex(d))) # enforce ∇∫G(x,x)=2πn̂
+function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p;d²=4,kwargs...) where {Tag,T,N}
+    val = _∫G(d,p;d²) # use auto-diff
+    value(d) ≠ p.x && return val
+    ∂ = ntuple(i->2π*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
+    Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=2πn̂ contribution
 end
 _∫G(ξ,p;d²) = (!hasproperty(p,:x₄) || sum(abs2,ξ-p.x)>d²*p.dA) ? p.dA*source(ξ,p.x) : quadgl(x->source(ξ,x),x=p.x₄,w=p.w₄)
 

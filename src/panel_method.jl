@@ -28,51 +28,112 @@ Normal velocity influence of panel `pⱼ` on `pᵢ`.
 """
 ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = derivative(t->ϕ(pᵢ.x+t*pᵢ.n,pⱼ;kwargs...),0.)
 
+abstract type AbstractPanelSystem end
 """
-   influence(panels;kwargs...) = ∂ₙϕ.(panels,panels';kwargs...) = A
+    PanelSystem(panels, q=zeros; ϕ=∫G, kwargs...)
 
-Normal velocity influence matrix.
-Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
+Represents a panel **system**, i.e., a set of `panels` with strengths `q` used to
+statisfy the boundary conditions for the given Green's function `ϕ(x,p;kwargs...)`.
+
+# Usage
+```julia
+# You can solve the system first directly...
+kwargs = (ϕ=∫G,d²=Inf)              # set the potential and keyword arguments
+A = ∂ₙϕ.(panels,panels';kwargs...)  # create the influence matrix (N² elements!)
+b = components(panels.n,1)          # and right-hand vector
+q = A\\b                             # direct solve for the strength
+
+# .. and then bundle everything together to measure.
+sys1 = PanelSystem(panels, q; kwargs...)
+extrema(panel_cp(sys1))      # for example, the extreme values of cₚ
+
+# Or you can bundle first and use an indirect solver
+sys2 = PanelSystem(panels; kwargs...)
+GMRESsolve!(sys2,atol=1e-6)  # approximate solve (but still O(N²) operations!)
+extrema(panel_cp(sys2))      # should match with tol ~ 1e-6
+```
 """
-influence(panels;kwargs...) = influence!(Array{Float64}(undef,length(panels),length(panels)),panels;kwargs...)
-function influence!(A,panels;kwargs...)
-    isfirstcall[] && ∂ₙϕ(panels[1],panels[end];kwargs...) # initialize once
-    ThreadsX.foreach(CartesianIndices(A)) do I
-        A[I] = ∂ₙϕ(panels[I[1]],panels[I[2]];kwargs...)   # multi-thread fill
-    end; A
+struct PanelSystem{T,F,K} <: AbstractPanelSystem
+    panels::T # includes strengths!
+    ϕ::F
+    kwargs::K
 end
-"""
-    Φ(x,q,panels;ϕ=∫G,kwargs...)
+PanelSystem(panels,q;ϕ=∫G,kwargs...) = PanelSystem(Table(panels;q),ϕ,kwargs)
+PanelSystem(panels;ϕ=∫G,kwargs...) = (q=similar(panels.dA); q.=0; PanelSystem(panels,q;ϕ,kwargs))
 
-Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')ds' = ∑ᵢqᵢϕ(x,pᵢ)` of `panels` with strengths `q`.
-Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
-"""
-Φ(x,q,panels;ϕ=∫G,kwargs...) = ThreadsX.sum(qᵢ*ϕ(x,pᵢ;kwargs...) for (qᵢ,pᵢ) in zip(q,panels))
-∇Φ(x,args...;kwargs...) = gradient(x->Φ(x,args...;kwargs...),x)
-ζ(x,y,args...;kwargs...) = derivative(x->Φ(SVector(x,y,0),args...;kwargs...),x)
-
-"""
-    steady_force(q,panels,U=SVector(-1,0,0);kwargs...)
-
-Integrated pressure force coefficient Cₚ =∫ₛ cₚ n da of `panels` with strengths `q`.
-where cₚ = 1-u²/U², `U` is the freestreeam velocity and u=U+∇Φ is the flow velocity.
-Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
-"""
-steady_force(q,panels;U=SVector(-1,0,0),kwargs...) = ThreadsX.sum(panels) do pᵢ
-    u² = sum(abs2,U+∇Φ(pᵢ.x,q,panels;kwargs...))
-    cₚ = 1-u²/sum(abs2,U)
-    cₚ*pᵢ.n*pᵢ.dA
+# Pretty printing
+Base.show(io::IO, sys::PanelSystem) = print(io, "PanelSystem($(length(sys.panels)) panels")
+Base.show(io::IO, ::MIME"text/plain", sys::AbstractPanelSystem) = abstract_show(io,sys)
+function abstract_show(io,sys)
+    show(io,sys);println()
+    println(io, "  total area: $(total_area(sys))")
+    println(io, "  strength extrema: $(extrema(sys.panels.q))")
 end
-"""
-    added_mass(panels;kwargs...)
+total_area(sys) = sum(sys.panels.dA)
 
-Added mass matrix mᵢⱼ = -∫ₛ Φᵢ(x) nⱼ da for a set of `panels`, where Φᵢ is the
-potential due to unit motion in direction i.
-Computation is accelerated with multi-threading when `Threads.nthreads()>1`.
 """
-function added_mass(panels;kwargs...)
-    A = influence(panels;kwargs...)
+    Φ(x,sys)
+
+Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢϕ(x,pᵢ)` induced by **solved** panel system `sys`.
+
+See also: [`PanelSystem`](@ref)
+"""
+Φ(x,sys;ignore...) = sum(pᵢ.q*sys.ϕ(x,pᵢ;sys.kwargs...) for pᵢ in sys.panels)
+∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
+
+"""
+    panel_cp(sys;U=SVector(-1,0,0)) -> cₚ
+
+Measure the pressure coefficient `cₚ = 1-u²/U²` on each panel center, where `U` is the free stream
+velocity and `u = U+∇Φ` is the flow velocity. Computation is accelerated when Threads.nthreads()>1
+and/or when using a solved Barnes-Hut panel tree.
+
+See also: [`Φ`](@ref)
+"""
+panel_cp(sys;U=SVector(-1,0,0)) = (b=similar(sys.panels.q);panel_cp!(b,sys;U);b)
+panel_cp!(b,sys;U=SVector(-1,0,0)) = AK.foreachindex(b) do i
+    b[i] = local_cp(sys.panels.x[i],sys;U)
+end
+local_cp(x,sys;U=SVector(-1,0,0)) = 1-sum(abs2,U+∇Φ(x,sys))/sum(abs2,U)
+
+"""
+    steady_force(sys;U=SVector(-1,0,0))
+
+Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/A = Fᵢ/(½ρU²A)`, where `A`
+is the total panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using
+a solved Barnes-Hut panel tree.
+
+See also: [`Φ`](@ref)
+"""
+steady_force(sys;U=SVector(-1,0,0)) = surface_integral(sys,(x,sys)->local_cp(x,sys;U))/total_area(sys)
+@inline function surface_integral(sys, f)
+    panels = sys.panels
+    init = neutral = zero(eltype(panels.n))
+    AK.mapreduce(+, panels, AK.get_backend(panels.q); init, neutral) do p
+        f(p.x,sys) * p.n * p.dA
+    end
+end
+
+"""
+    added_mass(sys)
+
+Added mass coefficient force vector `-∫ₛ Φⱼ nᵢ da = mᵢⱼ/ρV` induced by a panel system
+solved with unit velocity in direction j, ie `j=2` requires `U=[0,1,0]`.
+
+**Note:** Call this function for j=1:3 to fill in the full added mass matrix,
+
+See also: [`Φ`](@ref)
+"""
+added_mass(sys) = -surface_integral(sys,Φ)
+
+"""
+    added_mass(panels::Table,kwargs...)
+
+Convenience function to fill in the full added mass matrix via direct solve.
+"""
+function added_mass(panels::Table;kwargs...)
+    A = ∂ₙϕ.(panels,panels';kwargs...)
     B = panels.n |> stack # source _matrix_ over i=1,2,3
-    Q = A\B' # solution _matrix_ over i=1,2,3
-    [-ThreadsX.sum(p->Φ(p.x,view(Q,:,i),panels;kwargs...)*p.n[j]*p.dA,panels) for i in 1:3, j in 1:3]
+    Q = A\B'              # solution _matrix_ over i=1,2,3
+    map(j->added_mass(PanelSystem(panels,view(Q,:,j);kwargs...)),1:3) |>stack
 end

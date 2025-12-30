@@ -1,10 +1,17 @@
 """
-    ∫kelvin(ξ,p;ℓ,d²=4,contour=false,filter=contour)
+    ζ(x,y,q,panels;ℓ=1,kwargs...)
+    ζ(x,y,BH:BarnesHut;ℓ=1)
+
+Linear free-surface elevation `η(x,y) = ℓ*∂ₓΦ([x,y,0])` where `ℓ ≡ U²/g` is the Froude length.
+"""
+ζ(x,y,args...;kwargs...) = derivative(x->Φ(SA[x,y,0],args...;kwargs...),x)
+"""
+    ∫kelvin(ξ,p;ℓ=1,d²=4,contour=false,filter=contour)
 
 Integrated disturbance of traveling submerged panel `p` on point `ξ` with Froude length `ℓ ≡ U²/g`.
-Uses `∫G` for the source and reflected sink potentials and `kelvin` for the free-surface potential. 
+Uses `∫G` for the source and reflected sink potentials and `kelvin` for the free-surface potential.
 A 2x2 quadrature is used when `|x-p.x|² , (z-p.z)²/ℓ² ≤ d²p.dA`, otherwise it uses the midpoint.
-If `contour=true` and `p` touches the `z=0` plane, the contribution from the waterline contour 
+If `contour=true` and `p` touches the `z=0` plane, the contribution from the waterline contour
 `ϕ₀=ℓ∫Gₙₖn₁dy` is included. See Noblesse 1983 and Barr & Price 1988.
 If `filter=true`, the `z_max` argument to `kelvin` is used to filter waves too small for the panel.
 """
@@ -98,7 +105,7 @@ using FastChebInterp,QuadGK,SpecialFunctions
 function makecheb(l,u;xfrm=identity,tol=1e-4)
     lb,ub = SA[l,0,0],SA[u,π/2-eps(),(π/2)^2];
     S = S2X.(xfrm.(chebpoints((16,16,8),lb,ub)))
-    D = ThreadsX.map(Ngk,S) # generate data (with multi-threading)
+    D = AK.map(Ngk,S)       # generate data (with multi-threading)
     chebinterp(D,lb,ub;tol) # create interpolation function
 end
 

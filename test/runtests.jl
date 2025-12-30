@@ -98,7 +98,6 @@ using LinearAlgebra,BenchmarkTools
     b = @benchmark ∂ₙϕ($p,$p); @test minimum(b).allocs==0
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
-    @test A ≈ influence(panels)
     @test tr(A) ≈ 8*2π
     @test minimum(A) ≈ panels[1].dA/4 rtol=0.2 # rough estimate
     @test sum(b)<8eps()
@@ -111,6 +110,7 @@ using LinearAlgebra,BenchmarkTools
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
 
     #check reflections
+    influence(panels;ϕ) = ∂ₙϕ.(panels,panels';ϕ)
     ∫G₃ = reflect(∫G,3)                                  # 2 ∫G calls
     @test influence(panels[1:4],ϕ=∫G₃)\b[1:4] ≈ q[1:4]   # ×4² coeffs => 32 ∫G calls
     ∫G₂₃ = reflect(∫G₃,2)                                # 2² calls
@@ -119,8 +119,18 @@ using LinearAlgebra,BenchmarkTools
     @test influence(panels[1:1],ϕ=∫G₁₂₃)\b[1:1] ≈ q[1:1] # ×1 coeff(!) => 8 calls
 end
 
+@testset "GMRESsolve.jl" begin
+    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
+    panels = panelize(S,0,π,0,2π,hᵤ=0.12)
+    sys = GMRESsolve!(PanelSystem(panels),atol=1e-6)
+    q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
+    @test sys.panels.q ≈ q
+    @test norm(steady_force(sys)) < 3e-5
+    @test collect(extrema(panel_cp(sys))) ≈ [-1.25,1.0] rtol=0.015
+end
+
 using NeumannKelvin:bvh_panels,fill_nodes,evaluate
-@testset "barnes_hut.jl" begin
+@testset "BarnesHutCore.jl" begin
     cen = SA[0,0,1]
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
@@ -140,13 +150,16 @@ using NeumannKelvin:bvh_panels,fill_nodes,evaluate
     x = panels.x[1]
     b = @benchmark evaluate(∫G,$x,$bvh,$nodes,$panels,stack=$stack); @test minimum(b).allocs==0
     b = @benchmark gradient(x->evaluate(∫G,x,$bvh,$nodes,$panels,stack=$stack),$x); @test minimum(b).allocs==0
+end
 
-    BH = BarnesHutSolve(panels)
+@testset "BarnesHut.jl" begin
+    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
+    panels = panelize(S,0,π,0,2π,hᵤ=0.12)
+    BH = BarnesHutsolve(panels)
     q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
-    @test norm(BH.panels.q-q)/norm(q)<0.0032
-
-    c_p = cₚ(BH)
-    @test collect(extrema(c_p)) ≈ [-1.25,1.0] rtol=0.01
+    @test norm(BH.panels.q-q)/norm(q) < 0.0032
+    @test norm(steady_force(BH)) < 4e-3
+    @test collect(extrema(panel_cp(BH))) ≈ [-1.25,1.0] rtol=0.01
 end
 
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]

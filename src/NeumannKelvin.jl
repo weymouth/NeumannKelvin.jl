@@ -15,12 +15,23 @@ include("panels.jl")
 export measure_panel,panelize
 
 # Panel method
-using ThreadsX # multi-threaded map,sum, & foreach
+import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
 include("panel_method.jl")
-export ∫G,∂ₙϕ,influence,ζ,steady_force,added_mass
 
-include("barnes_hut.jl")
-export BarnesHut,BarnesHutSolve,BarnesHutSolve!,cₚ,cₚ!
+## Green's functions and PanelSystem
+export ∫G,∂ₙϕ,PanelSystem
+
+## AbstractPanelSystem measurements
+export Φ,∇Φ,panel_cp,steady_force,added_mass
+
+# Indirect matrix-free solver
+include("gmres.jl")
+export GMRESsolve!
+
+# Barnes-Hut functions and panel tree system
+include("BarnesHutCore.jl")
+include("BarnesHut.jl")
+export BarnesHut,BarnesHutsolve
 
 # Kelvin Green function definitions
 include("kelvin.jl")

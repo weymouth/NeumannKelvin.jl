@@ -1,20 +1,21 @@
 """
     BarnesHut(panels::Table;ϕ,kwargs...)
 
-Creates a BarnesHut tree structure from a set of `panels` that enables O(log N)
+Creates a Barnes-Hut tree structure from a set of `panels` that enables O(log N)
 evaluation of the panel influence instead of O(N). This is a huge speed-up for N>O(10).
 
 # All the `PanelSystem` fields _plus_
-- `nodes::Table`: Aggregated node values in the BVH tree
+- `nodes::Table`: Aggregated node values in the binary tree
 - `bvh::BVH`: Bounding volume hierarchy of the panels and nodes
+- `d²=4`: Barnes-Hut distance cutoff. The node monopole is used once `|x-bb|²/bb.R² > d²`
+where `bb` is the node's Bounding-Box. Setting `d²=Inf` would evaluate all N panels.
 
 # Example
 ```julia
 using NeumannKelvin
 S(θ,φ) = SA[sin(θ)*cos(φ), sin(θ)*sin(φ), cos(θ)]
-panels = panelize(S, 0, π, 0, 2π, hᵤ=1/16, N_max=3214) # quite a few panels
-BH = BarnesHut(panels)
-GMRESSolve!(BH) # you shold probably solve the system right away
+panels = panelize(S, 0, π, 0, 2π, hᵤ=1/50, N_max=3214) # quite a few panels
+BH = BarnesHut(panels); GMRESsolve!(BH) # you can also do BarnesHutsolve(panels)
 ```
 
 See also: [`PanelSystem`](@ref)
@@ -43,8 +44,8 @@ end
 total_area(BH::BarnesHut) = BH.nodes[1].dA
 @inline function set_q!(BH::BarnesHut,q)
     BH.panels.q .= q
-    accumulate!(BH.nodes.q,BH.panels.dA .* q,BH.bvh)
-    BH.nodes.q ./= BH.nodes.dA; BH
+    accumulate!(BH.nodes.q,BH.panels.dA .* q,BH.bvh); BH.nodes.q ./= BH.nodes.dA
+    BH
 end
 
 """
@@ -52,8 +53,7 @@ end
 
 Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢϕ(x,pᵢ)` induced by **solved** panel system `BH`.
 The Barnes-Hut approximation uses the aggregated node information in the tree to avoid the sum
-over all N panels. The node monopole is used once `(x-bb.x)²/bb.R > d²` where `bb` is the
-node's Bounding-Box.
+over all N panels.
 """
 @inline Φ(x,(;panels,nodes,bvh,ϕ,kwargs)::BarnesHut;args...) = evaluate((x,p)->p.q*ϕ(x,p,kwargs...),x,bvh,nodes,panels;kwargs...,args...)
 

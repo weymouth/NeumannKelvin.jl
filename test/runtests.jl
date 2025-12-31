@@ -140,9 +140,10 @@ using NeumannKelvin:bvh_panels,fill_nodes,evaluate
     @test nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
 
     ρ = panels.x[length(panels)÷3]-cen
+    @show length(nodes), length(panels)
     for r in 1:6
         x = r*ρ+cen
-        @test evaluate(∫G,x,bvh,nodes,panels) ≈ sum(∫G(x,p,d²=Inf) for p in panels) rtol=0.01
+        @test evaluate(∫G,x,bvh,nodes,panels;verbose=true) ≈ sum(∫G(x,p,d²=Inf) for p in panels) rtol=0.01
         @test gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ≈ gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),x) rtol=0.04
     end
 

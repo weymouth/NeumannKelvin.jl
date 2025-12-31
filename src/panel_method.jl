@@ -48,9 +48,9 @@ sys1 = PanelSystem(panels, q; kwargs...)
 extrema(panel_cp(sys1))      # for example, the extreme values of cₚ
 
 # Or you can bundle first and use an indirect solver
-sys2 = PanelSystem(panels; kwargs...)
-GMRESsolve!(sys2,atol=1e-6)  # approximate solve (but still O(N²) operations!)
-extrema(panel_cp(sys2))      # should match with tol ~ 1e-6
+sys2 = PanelSystem(panels; kwargs...) # q isn't set yet...
+GMRESsolve!(sys2,atol=1e-6)  # approximate solve - but still O(N²) operations!
+extrema(panel_cp(sys2))      # matches sys1 almost perfectly
 ```
 """
 struct PanelSystem{T,F,K} <: AbstractPanelSystem
@@ -99,14 +99,14 @@ local_cp(x,sys;U=SVector(-1,0,0)) = 1-sum(abs2,U+∇Φ(x,sys))/sum(abs2,U)
 """
     steady_force(sys;U=SVector(-1,0,0))
 
-Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/A = Fᵢ/(½ρU²A)`, where `A`
-is the total panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using
-a solved Barnes-Hut panel tree.
+Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/A = Fᵢ/(½ρU²A)`, where `A` is
+the total panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using a
+solved Barnes-Hut panel tree.
 
 See also: [`Φ`](@ref)
 """
-steady_force(sys;U=SVector(-1,0,0)) = surface_integral(sys,(x,sys)->local_cp(x,sys;U))/total_area(sys)
-@inline function surface_integral(sys, f)
+steady_force(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->local_cp(x,sys;U),sys)/total_area(sys)
+@inline function surface_integral(f,sys)
     panels = sys.panels
     init = neutral = zero(eltype(panels.n))
     AK.mapreduce(+, panels, AK.get_backend(panels.q); init, neutral) do p
@@ -117,14 +117,15 @@ end
 """
     added_mass(sys)
 
-Added mass coefficient force vector `-∫ₛ Φⱼ nᵢ da = mᵢⱼ/ρV` induced by a panel system
-solved with unit velocity in direction j, ie `j=2` requires `U=[0,1,0]`.
+Added mass coefficient force vector `-∫ₛ Φⱼ nᵢ da = mᵢⱼ/ρV` induced by a panel system solved
+with unit velocity in direction j, ie `j=2` requires `U=[0,±1,0]`. Computation is accelerated
+when Threads.nthreads()>1 and/or when using a solved Barnes-Hut panel tree.
 
 **Note:** Call this function for j=1:3 to fill in the full added mass matrix,
 
 See also: [`Φ`](@ref)
 """
-added_mass(sys) = -surface_integral(sys,Φ)
+added_mass(sys) = -surface_integral(Φ,sys)
 
 """
     added_mass(panels::Table,kwargs...)

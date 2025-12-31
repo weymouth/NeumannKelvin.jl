@@ -36,7 +36,7 @@ function GMRESsolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true)
     verbose && println(stats)
     set_q!(sys,q)
 end
-@inline set_q!(sys,q) = (sys.panels.q .= q;sys)
+@inline set_q!(sys,q) = (sys.panels.q .= q; sys)
 @inline uₙ!(b::AbstractArray{T},sys) where T = AK.foreachindex(b) do i
-    b[i] = derivative(t->Φ(sys.panels.x[i]+t*sys.panels.n[i],sys;val=zero(T)),0.)
+    b[i] = derivative(t->Φ(sys.panels.x[i]+t*sys.panels.n[i],sys;val=zero(T)),0)
 end

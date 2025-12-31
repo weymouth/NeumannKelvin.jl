@@ -39,23 +39,26 @@ reldist(x,bb::BoundingVolume) = reldist(x,bb.volume)
 using ImplicitBVH: memory_index
 function evaluate(fnc,x,bvh,node_values,leaf_values;
                   d²=4,stack=Vector{Int}(undef,bvh.tree.levels),
-                  val=zero(fnc(x,leaf_values[1])))
+                  val=zero(fnc(x,leaf_values[1])),verbose=false)
     tree = bvh.tree; length_nodes = length(bvh.nodes)
-    top = 1; stack[top] = 1
+    top = 1; stack[top] = 1; node_count = leaf_count = 0
     while top>0
         i = stack[top]; top-=1
         j = memory_index(tree,i)
         if j ≤ length_nodes
             if reldist(x,bvh.nodes[j])>d²
                 val += fnc(x,node_values[j])
+                verbose && (node_count+=1)
             else
                 stack[top+=1] = 2i;
                 !unsafe_isvirtual(tree,2i+1) && (stack[top+=1] = 2i+1)
             end
         else
             val += fnc(x,leaf_values[bvh.leaves[j-length_nodes].index])
+            verbose && (leaf_count+=1)
         end
     end
+    verbose && println("evaluated: node count=$node_count, leaf count=$leaf_count")
     val
 end
 

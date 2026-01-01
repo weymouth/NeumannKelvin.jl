@@ -1,8 +1,9 @@
 """
-    BarnesHut(panels::Table;ϕ,kwargs...)
+    BarnesHut(panels::Table;ϕ,sym_axes,kwargs...)
 
 Creates a Barnes-Hut tree structure from a set of `panels` that enables O(log N)
 evaluation of the panel influence instead of O(N). This is a huge speed-up for N>O(10).
+**Note** System should be solved using a matrix-free method like `GMRESSolve!`.
 
 # All the `PanelSystem` fields _plus_
 - `nodes::Table`: Aggregated node values in the binary tree
@@ -20,18 +21,19 @@ BH = BarnesHut(panels); GMRESsolve!(BH) # you can also do BarnesHutsolve(panels)
 
 See also: [`PanelSystem`](@ref)
 """
-struct BarnesHut{TP,TN,TB,F,KW} <: AbstractPanelSystem
+struct BarnesHut{TP,TN,TB,F,M,KW} <: AbstractPanelSystem
     panels::TP
     nodes::TN
     bvh::TB
     ϕ::F
+    mirrors::M
     kwargs::KW
 end
-function BarnesHut(panels;ϕ=∫G,kwargs...)
+function BarnesHut(panels;ϕ=∫G,sym_axes=(),kwargs...)
     bvh = bvh_panels(panels)
     nodes = fill_nodes(panels,bvh)
     q = similar(panels.dA); q .= 0
-    BarnesHut(Table(panels;q),Table(nodes,q=similar(nodes.dA)),bvh,ϕ,kwargs)
+    BarnesHut(Table(panels;q),Table(nodes,q=similar(nodes.dA)),bvh,ϕ,mirrors(sym_axes),kwargs)
 end
 
 # Pretty printing
@@ -52,10 +54,12 @@ end
     Φ(x,BH::BarnesHut)
 
 Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢϕ(x,pᵢ)` induced by **solved** panel system `BH`.
-The Barnes-Hut approximation uses the aggregated node information in the tree to avoid the sum
-over all N panels.
+The Barnes-Hut approximation uses the aggregated node information in the tree to replace the sum
+over all N panels with O(log N) panel and node contributions.
+
+See: [`BarnesHut`](@ref)
 """
-@inline Φ(x,(;panels,nodes,bvh,ϕ,kwargs)::BarnesHut;args...) = evaluate((x,p)->p.q*ϕ(x,p,kwargs...),x,bvh,nodes,panels;kwargs...,args...)
+@inline Φ_sys(x,(;panels,nodes,bvh,ϕ,kwargs)::BarnesHut;args...) = evaluate((x,p)->p.q*ϕ(x,p;kwargs...),x,bvh,nodes,panels;kwargs...,args...)
 
 """
     BarnesHutsolve(panels::Table,b;...) = GMRESsolve!(BarnesHut(panels;...),b;...)

@@ -71,6 +71,6 @@ bvh_panels(panels) = BVH(bb_panel.(panels))
 function fill_nodes(panels,bvh)
     dA = accumulate(panels.dA,bvh)
     x = accumulate(panels.dA .* panels.x, bvh) ./ dA
-    n = NeumannKelvin.normalize.(accumulate(panels.dA .* panels.n, bvh))
+    n = normalize.(accumulate(panels.dA .* panels.n, bvh))
     Table(;x,dA,n)
 end

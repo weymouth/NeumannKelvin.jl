@@ -30,10 +30,13 @@ Normal velocity influence of panel `pⱼ` on `pᵢ`.
 
 abstract type AbstractPanelSystem end
 """
-    PanelSystem(panels, q=zeros; ϕ=∫G, kwargs...)
+    PanelSystem(panels, q=zeros; ϕ=∫G, sym_axes=(), kwargs...)
 
 Represents a panel **system**, i.e., a set of `panels` with strengths `q` used to
 statisfy the boundary conditions for the given Green's function `ϕ(x,p;kwargs...)`.
+Setting `sym_axes` imposes symmetry conditions on the solution using the method of
+images. For example, `sym_axes=(2,3)` mirrors each contribution across `y=0,z=0`, so
+only one quarter of a centered & symmetric geometry needs to be covered in panels.
 
 # Usage
 ```julia
@@ -53,13 +56,18 @@ GMRESsolve!(sys2,atol=1e-6)  # approximate solve - but still O(N²) operations!
 extrema(panel_cp(sys2))      # matches sys1 almost perfectly
 ```
 """
-struct PanelSystem{T,F,K} <: AbstractPanelSystem
+struct PanelSystem{T,F,M,K} <: AbstractPanelSystem
     panels::T # includes strengths!
     ϕ::F
+    mirrors::M
     kwargs::K
 end
-PanelSystem(panels,q;ϕ=∫G,kwargs...) = PanelSystem(Table(panels;q),ϕ,kwargs)
-PanelSystem(panels;ϕ=∫G,kwargs...) = (q=similar(panels.dA); q.=0; PanelSystem(panels,q;ϕ,kwargs))
+PanelSystem(panels,q;ϕ=∫G,sym_axes=(),kwargs...) = PanelSystem(Table(panels;q),ϕ,mirrors(sym_axes),kwargs)
+PanelSystem(panels;kwargs...) = (q=similar(panels.dA); q.=0; PanelSystem(panels,q;kwargs...))
+@inline function mirrors(axes::Tuple{Vararg{Int}})
+    M = length(axes)
+    ntuple(combo -> SA[ntuple(i -> any(j -> axes[j] == i && ((combo >> (j-1)) & 1) == 1, 1:M) ? -1 : 1, 3)...], 1 << M)
+end
 
 # Pretty printing
 Base.show(io::IO, sys::PanelSystem) = print(io, "PanelSystem($(length(sys.panels)) panels")
@@ -67,6 +75,7 @@ Base.show(io::IO, ::MIME"text/plain", sys::AbstractPanelSystem) = abstract_show(
 function abstract_show(io,sys)
     show(io,sys);println()
     println(io, "  total area: $(total_area(sys))")
+    println(io, "  mirrors: $(sys.mirrors)")
     println(io, "  strength extrema: $(extrema(sys.panels.q))")
 end
 total_area(sys) = sum(sys.panels.dA)
@@ -78,7 +87,8 @@ Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢϕ(x,pᵢ)` induced by **
 
 See also: [`PanelSystem`](@ref)
 """
-Φ(x,sys;ignore...) = sum(pᵢ.q*sys.ϕ(x,pᵢ;sys.kwargs...) for pᵢ in sys.panels)
+Φ(x,sys;kwargs...) = sum(Φ_sys(x .* m,sys;kwargs...) for m in sys.mirrors)
+@inline Φ_sys(x,sys;ignore...) = sum(pᵢ.q*sys.ϕ(x,pᵢ;sys.kwargs...) for pᵢ in sys.panels)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 
 """

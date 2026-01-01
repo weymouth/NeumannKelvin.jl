@@ -24,9 +24,9 @@ export ∫G,∂ₙϕ,PanelSystem
 ## AbstractPanelSystem measurements
 export Φ,∇Φ,panel_cp,steady_force,added_mass
 
-# Indirect matrix-free solver
-include("gmres.jl")
-export GMRESsolve!
+# Direct and matrix-free solver
+include("solvers.jl")
+export GMRESsolve!,directsolve!
 
 # Barnes-Hut functions and panel tree system
 include("BarnesHutCore.jl")

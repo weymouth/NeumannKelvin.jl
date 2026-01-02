@@ -19,7 +19,7 @@ function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p;d²=4,kwargs...) where {Tag,T
     ∂ = ntuple(i->2π*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
     Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=2πn̂ contribution
 end
-_∫G(ξ,p;d²) = (!hasproperty(p,:x₄) || sum(abs2,ξ-p.x)>d²*p.dA) ? p.dA*source(ξ,p.x) : quadgl(x->source(ξ,x),x=p.x₄,w=p.w₄)
+_∫G(ξ,p;d²) = (!hasproperty(p, :x₄) || sum(abs2,ξ-p.x)>d²*p.dA) ? p.dA*source(ξ,p.x) : sum(w*source(ξ,x) for (x,w) in zip(p.x₄,p.w₄))
 
 """
     ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = Aᵢⱼ

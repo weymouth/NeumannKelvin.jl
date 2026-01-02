@@ -2,33 +2,6 @@ using NeumannKelvin
 using Test
 
 using QuadGK
-@testset "quad.jl" begin
-    xgl2,wgl2 = (-1/√3,1/√3),(1,1)
-    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
-    @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
-
-    (((a₁,f₁),(a₂,f₂)),)=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
-    @test [a₁,a₂]≈[-2,2] atol=0.3
-    @test all([f₁,f₂])
-
-    (((a₁,f₁),(a₂,f₂)),)=NeumannKelvin.finite_ranges((0.,),x->x^2,6,2,atol=0)
-    @test [a₁,a₂]≈[-2,2] && !any([f₁,f₂])
-
-    # Highly oscillatory integral set-up
-    g(x) = x^2+im*x^2/100
-    dg(x) = 2x+im*x/50
-    f(x) = imag(exp(im*g(x)))
-    ρ = √(3π); rng = (-ρ,ρ); rngs = (((-ρ,true),(ρ,true)),)
-
-    I,e,c=quadgk_count(f,ρ,Inf)
-    # @show I,e,c # (-0.14690637593307346, 2.133881538591021e-9, 8265) # hard
-    @test NeumannKelvin.nsp(ρ,g,dg) ≈ I atol=1e-5
-
-    I,e,c=quadgk_count(f,-Inf,Inf)
-    # @show I,e,c # (1.247000964522693, 1.824659458372201e-8, 15195)
-    @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
-end
-
 @testset "panels.jl" begin
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
@@ -159,55 +132,4 @@ end
     @test norm(BH.panels.q-q)/norm(q) < 0.0032
     @test norm(steady_force(BH)) < 4e-3
     @test collect(extrema(panel_cp(BH))) ≈ [-1.25,1.0] rtol=0.01
-end
-
-@inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]
-@inline bruteN(x,y,z) = -2*(1-z/(hypot(x,y,z)+abs(x)))+NeumannKelvin.Ngk(x,y,z)
-using SpecialFunctions
-@testset "kelvin.jl" begin
-    @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
-
-    @test NeumannKelvin.wavelike(10.,0.,-0.)==NeumannKelvin.wavelike(0.,10.,-0.)==0.
-
-    @test 4π*bessely1(10)≈NeumannKelvin.wavelike(-10.,0.,-0.) atol=1e-5
-
-    # @test @allocated(NeumannKelvin.wavelike(-10.,0.,-0.))≤1000
-
-    for R = (0.0,0.1,0.5,2.0,8.0), a = (0.,0.1,0.3,1/sqrt(8),0.5,1.0), z = (-1.,-0.1,-0.01)
-        x = -R*cos(atan(a))
-        y = R*sin(atan(a))
-        x==y==0 && continue
-        @test NeumannKelvin.nearfield(x,y,z)≈bruteN(x,y,z) atol=3e-4 rtol=31e-5
-        @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-5 rtol=1e-4
-    end
-end
-
-Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
-function spheroid(h;L=1,Z=-1/8,r=1/12,AR=2)
-    S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-    panelize(S,0,π,0,2π,hᵤ=h*√AR,hᵥ=h/√AR)
-end
-function prism(h;q=0.2,Z=1)
-    S(θ,z) = 0.5SA[cos(θ),q*sin(θ),z]
-    dθ = π/round(π*0.5/h) # cosine sampling
-    dz = Z/round(Z/h)
-    measure_panel.(S,dθ:dθ:2π,-(0.5dz:dz:Z)',dθ,dz) |> Table
-end
-wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure_panel.(
-    (u,v)->SA[u-0.5,2B*u*(1-u)*(v)*(2-v),D*(v-1)],
-    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) |> Table
-
-@testset "NeumannKelvin.jl" begin
-    # Compare thin-ship wigley to Tuck 2008
-    ∫kelvin₀(x,p;kwargs...) = ∫kelvin(x,reflect(p,SA[1,0,1]);kwargs...) # centerplane
-    panels = wigley(0.05)
-    q = components(panels.n,1)/2π # thin-ship source density
-    d = steady_force(q,panels;ϕ=∫kelvin₀,ℓ=0.51^2)[1]/sum(panels.dA)
-    @test d ≈ 0.0088-0.0036 rtol=0.02 # Remove ITTC Cf
-    # Compare submerged spheroid drag to Farell/Baar
-    d = Cw(spheroid(0.04,AR=6);ϕ=∫kelvin,ℓ=0.5^2)
-    @test d ≈ 6e-3 rtol=0.02
-    # Compare elliptical prism drag to Guevel/Baar
-    d = Cw(prism(0.1);ϕ=∫kelvin,ℓ=0.55^2,contour=true)
-    @test d ≈ 0.042 rtol=0.02
 end

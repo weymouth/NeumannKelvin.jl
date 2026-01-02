@@ -5,10 +5,7 @@ version = "0.7.0"
 
 [deps]
 AcceleratedKernels = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
-FastChebInterp = "cf66c380-9a80-432c-aff8-4f9c79c0bdde"
-FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"
 ImplicitBVH = "932a18dc-bb55-4cd5-bdd6-1368ec9cea29"
@@ -17,10 +14,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearOperators = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
-Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
-ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [weakdeps]
@@ -37,8 +31,6 @@ NeumannKelvinPlotsExt = "Plots"
 AcceleratedKernels = "0.4.3"
 BenchmarkTools = "1.6.3"
 DataInterpolations = "8.0.1"
-FastChebInterp = "1"
-FastGaussQuadrature = "1"
 ForwardDiff = "0.10"
 HCubature = "1.7.0"
 ImplicitBVH = "0.7.0"
@@ -47,15 +39,13 @@ LinearOperators = "2.11.0"
 NURBS = "0.8.0"
 QuadGK = "2.9"
 Reexport = "1"
-Roots = "2.2.3"
-SpecialFunctions = "2"
 StaticArrays = "1"
-ThreadsX = "0.1.12"
 TypedTables = "1"
 julia = "1.9"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 
 [targets]
-test = ["Test"]
+test = ["Test","BenchmarkTools"]

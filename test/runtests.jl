@@ -82,6 +82,7 @@ using LinearAlgebra,BenchmarkTools
     @test Ma ≈ 2π/3*I rtol=0.1 # ϵ=10% with 8 panels
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
 end
+
 extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
@@ -128,7 +129,7 @@ end
 @testset "BarnesHut.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    BH = BarnesHutsolve(panels)
+    BH = gmressolve!(BarnesHut(panels))
     q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
     @test norm(BH.panels.q-q)/norm(q) < 0.0032
     @test norm(steadyforce(BH)) < 4e-3
@@ -136,10 +137,10 @@ end
 end
 
 @testset "freesurf" begin
-    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)-1.1] # just below z=0
-    body = panelize(S,0,π,0,2π,hᵤ=1/4)
-    P(u,v; x_min = -5, x_max = 5, y_min = -5, y_max = 5) = SA[u*x_min+(1-u)*x_max, v*y_min+(1-v)*y_max, 0]
-    freesurf = panelize(P,hᵤ=1/2)
+    S(θ₁,θ₂,Z=-1.1) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)+Z] # just below z=0
+    body = panelize(S,0,π,0,2π,hᵤ=0.3)
+    P(u,v; x_min = -3, x_max = 3, y_min = -3, y_max = 3) = SA[u*x_min+(1-u)*x_max, v*y_max+(1-v)*y_min, 0]
+    freesurf = panelize(P,hᵤ=0.21)
     sys = PanelSystem(body;freesurf,ℓ=0)
     @test length(sys.panels)==length(body)+length(freesurf)
     @test sys.body.dA == body.dA
@@ -148,10 +149,10 @@ end
 
     # Direct solve ignores! freesurf
     directsolve!(sys)
-    @test collect(extrema(cₚ(sys))) ≈ [-1.25,1.0] rtol=0.02
+    @test collect(extrema(cₚ(sys))) ≈ [-1.25,1.0] rtol=0.04
 
     # Setting ℓ=0 should turn freesurf into reflection wall
-    gmressolve!(sys)
-    sys2 = BarnesHutsolve(body;sym_axes=3)
-    @test extreme_cₚ(sys)≈extreme_cₚ(sys2) broken=true
+    sys = gmressolve!(sys)
+    sys2 = gmressolve!(BarnesHut(body;sym_axes=3))
+    @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.01
 end

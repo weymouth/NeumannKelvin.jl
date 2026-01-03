@@ -28,7 +28,7 @@ export gmressolve!,directsolve!
 # Barnes-Hut functions and panel tree system
 include("BarnesHutCore.jl")
 include("BarnesHut.jl")
-export BarnesHut,BarnesHutsolve
+export BarnesHut
 
 # Plotting fallback
 """

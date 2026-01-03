@@ -16,7 +16,7 @@ where `bb` is the node's Bounding-Box. Setting `d²=Inf` would evaluate all N pa
 using NeumannKelvin
 S(θ,φ) = SA[sin(θ)*cos(φ), sin(θ)*sin(φ), cos(θ)]
 panels = panelize(S, 0, π, 0, 2π, hᵤ=1/50, N_max=3214) # quite a few panels
-BH = BarnesHut(panels); gmressolve!(BH) # you can also do BarnesHutsolve(panels)
+BH = BarnesHut(panels); gmressolve!(BH)
 ```
 
 See also: [`PanelSystem`](@ref)
@@ -55,10 +55,3 @@ end
     BH
 end
 @inline Φ_sys(x,(;panels,nodes,bvh,kwargs)::BarnesHut;args...) = evaluate((x,p)->p.q*∫G(x,p;kwargs...),x,bvh,nodes,panels;kwargs...,args...)
-
-"""
-    BarnesHutsolve(panels::Table,b;...) = gmressolve!(BarnesHut(panels;...),b;...)
-
-See: [`BarnesHut`](@ref), [`gmresSolve!`](@ref)
-"""
-BarnesHutsolve(panels,b=components(panels.n,1);atol=1e-3,kwargs...) = gmressolve!(BarnesHut(panels;kwargs...),b;atol)

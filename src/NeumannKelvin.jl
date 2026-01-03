@@ -9,7 +9,7 @@ Base.adjoint(t::Table) = permutedims(t)
 
 # Panel set-up
 include("panels.jl")
-export measure_panel,panelize
+export measure,panelize
 
 # Panel method
 import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
@@ -19,11 +19,11 @@ include("panel_method.jl")
 export ∫G,∂ₙϕ,PanelSystem
 
 ## AbstractPanelSystem measurements
-export Φ,∇Φ,panel_cp,steady_force,added_mass
+export Φ,∇Φ,cₚ,steadyforce,addedmass
 
 # Direct and matrix-free solver
 include("solvers.jl")
-export GMRESsolve!,directsolve!
+export gmressolve!,directsolve!
 
 # Barnes-Hut functions and panel tree system
 include("BarnesHutCore.jl")

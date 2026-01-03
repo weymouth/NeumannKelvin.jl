@@ -18,7 +18,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))
     (hᵤ≤0 || hᵥ≤0 || c≤0) && throw(ArgumentError("Need positive `hᵤ,hᵥ,c`. Got $hᵤ,$hᵥ,$c."))
     !(typeof(surface(u₀,v₀)) <: SVector) && throw(ArgumentError("`surface` function doesn't return an SVector."))
-    init = typeof(measure_panel(surface,0.5u₀+0.5u₁,0.5v₀+0.5v₁,u₁-u₀,v₁-v₀))[]
+    init = typeof(measure(surface,0.5u₀+0.5u₁,0.5v₀+0.5v₁,u₁-u₀,v₁-v₀))[]
 
     # Get arcslength and inverse along bottom & top edges
     S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)
@@ -45,7 +45,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
         dv = ve[2:end]-ve[1:end-1]             # panel heights
 
         # Measure panels along strip
-        @. measure_panel(surface,u,v,du,dv;flip,kwargs...)
+        @. measure(surface,u,v,du,dv;flip,kwargs...)
     end
 
     # Check length and return as a Table
@@ -94,7 +94,7 @@ secant(Δ)=(Δ.b-Δ.a)/Δ.I
 
 using HCubature
 """
-    measure_panel(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,x₄,w₄)
+    measure(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,x₄,w₄)
 
 Measures a parametric surface function `S(u,v)` for a `u,v ∈ [u±0.5du]×[v±0.5dv]` panel.
 Returns centroid point and normal `x,n`, the surface area `dA`, and the 2x2 Gauss-point
@@ -102,8 +102,8 @@ locations and weights `x₄,w₄`. Panel corner data `xᵤᵥ,nᵤᵥ` is used o
  - `flip=true` flips the panel to point the other way.
  - `cubature=true` uses an adaptive "h-cubature" for `dA,x,n`.
 """
-function measure_panel(S,u,v,du,dv;flip=false,cubature=false,Δg=SA[-1/√3,1/√3],wg=SA[1,1])
-    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;cubature)
+function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA[-1/√3,1/√3],wg=SA[1,1])
+    flip && return measure((v,u)->S(u,v),v,u,dv,du;cubature)
     # get Gauss-points
     x₄ = S.(u .+ 0.5du*Δg, v .+ 0.5dv*Δg')
     n₄ = normal.(S, u .+ 0.5du*Δg, v .+ 0.5dv*Δg')

@@ -3,7 +3,7 @@
 
 Creates a Barnes-Hut tree structure from a set of `panels` that enables O(log N)
 evaluation of the panel influence instead of O(N). This is a huge speed-up for N>O(10).
-**Note** System should be solved using a matrix-free method like `GMRESSolve!`.
+**Note** System should be solved using a matrix-free method like `gmresSolve!`.
 
 # All the `PanelSystem` fields _plus_
 - `nodes::Table`: Aggregated node values in the binary tree
@@ -16,54 +16,49 @@ where `bb` is the node's Bounding-Box. Setting `d²=Inf` would evaluate all N pa
 using NeumannKelvin
 S(θ,φ) = SA[sin(θ)*cos(φ), sin(θ)*sin(φ), cos(θ)]
 panels = panelize(S, 0, π, 0, 2π, hᵤ=1/50, N_max=3214) # quite a few panels
-BH = BarnesHut(panels); GMRESsolve!(BH) # you can also do BarnesHutsolve(panels)
+BH = BarnesHut(panels); gmressolve!(BH) # you can also do BarnesHutsolve(panels)
 ```
 
 See also: [`PanelSystem`](@ref)
 """
-struct BarnesHut{TP,TN,TB,F,M,KW} <: AbstractPanelSystem
-    panels::TP
-    nodes::TN
-    bvh::TB
-    ϕ::F
-    mirrors::M
-    kwargs::KW
+struct BarnesHut{P<:PanelSystem, B, N} <: AbstractPanelSystem
+    sys::P
+    bvh::B
+    nodes::N
 end
-function BarnesHut(panels;ϕ=∫G,sym_axes=(),kwargs...)
-    bvh = bvh_panels(panels)
-    nodes = fill_nodes(panels,bvh)
-    q = similar(panels.dA); q .= 0
-    BarnesHut(Table(panels;q),Table(nodes,q=similar(nodes.dA)),bvh,ϕ,mirrors(sym_axes),kwargs)
+function BarnesHut(sys::PanelSystem)
+    bvh = BVH(BBox.(sys.panels))
+    BarnesHut(sys,bvh,fill_nodes(sys.panels,bvh))
 end
+function fill_nodes(panels,bvh)  # nodes only have monopole properties
+    dA = accumulate(panels.dA,bvh)
+    x = accumulate(panels.dA .* panels.x, bvh) ./ dA
+    n = normalize.(accumulate(panels.dA .* panels.n, bvh))
+    add_columns(Table(;x,dA,n),q = 0.)
+end
+BarnesHut(args...;kwargs...) = BarnesHut(PanelSystem(args...;kwargs...))
 
-# Pretty printing
+# Overload properties
+Base.getproperty(f::BarnesHut, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sys, s)
+Base.setproperty!(f::BarnesHut, s::Symbol, x) = s in propertynames(f) ? setproperty!(f,s,x) : setproperty!(f.sys,s,x)
+
+# Overload printing
 Base.show(io::IO, BH::BarnesHut) = print(io, "BarnesHut($(length(BH.panels)) panels, $(BH.bvh.tree.levels) levels)")
 function Base.show(io::IO, ::MIME"text/plain", BH::BarnesHut)
     abstract_show(io,BH); println(io, "  bounds: $(BH.bvh.nodes[1].lo) to $(BH.bvh.nodes[1].up)")
 end
 
-# Overload a few functions
-total_area(BH::BarnesHut) = BH.nodes[1].dA
+# Overload the two key functions, setting q and evaluating Φ!!
 @inline function set_q!(BH::BarnesHut,q)
     BH.panels.q .= q
     accumulate!(BH.nodes.q,BH.panels.dA .* q,BH.bvh); BH.nodes.q ./= BH.nodes.dA
     BH
 end
+@inline Φ_sys(x,(;panels,nodes,bvh,kwargs)::BarnesHut;args...) = evaluate((x,p)->p.q*∫G(x,p;kwargs...),x,bvh,nodes,panels;kwargs...,args...)
 
 """
-    Φ(x,BH::BarnesHut)
+    BarnesHutsolve(panels::Table,b;...) = gmressolve!(BarnesHut(panels;...),b;...)
 
-Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢϕ(x,pᵢ)` induced by **solved** panel system `BH`.
-The Barnes-Hut approximation uses the aggregated node information in the tree to replace the sum
-over all N panels with O(log N) panel and node contributions.
-
-See: [`BarnesHut`](@ref)
+See: [`BarnesHut`](@ref), [`gmresSolve!`](@ref)
 """
-@inline Φ_sys(x,(;panels,nodes,bvh,ϕ,kwargs)::BarnesHut;args...) = evaluate((x,p)->p.q*ϕ(x,p;kwargs...),x,bvh,nodes,panels;kwargs...,args...)
-
-"""
-    BarnesHutsolve(panels::Table,b;...) = GMRESsolve!(BarnesHut(panels;...),b;...)
-
-See: [`BarnesHut`](@ref), [`GMRESSolve!`](@ref)
-"""
-BarnesHutsolve(panels,b=components(panels.n,1);atol=1e-3,kwargs...) = GMRESsolve!(BarnesHut(panels;kwargs...),b;atol)
+BarnesHutsolve(panels,b=components(panels.n,1);atol=1e-3,kwargs...) = gmressolve!(BarnesHut(panels;kwargs...),b;atol)

@@ -59,7 +59,7 @@ end
 using LinearAlgebra,BenchmarkTools
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-    panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
+    panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
     @test size(panels) == (8,)
     @test panels.dA ≈ fill(π/2,8) rtol=1e-6   # cubature gives perfect areas
     @test panels.n ⋅ panels.x ≈ 4√3 rtol=1e-6 # ...and centroids
@@ -78,34 +78,35 @@ using LinearAlgebra,BenchmarkTools
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    Ma = added_mass(panels)
+    Ma = addedmass(panels)
     @test Ma ≈ 2π/3*I rtol=0.1 # ϵ=10% with 8 panels
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
 end
-
+extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    sys = GMRESsolve!(PanelSystem(panels),atol=1e-6); q = copy(sys.panels.q)
+    sys = gmressolve!(PanelSystem(panels),atol=1e-6); q = copy(sys.panels.q)
     directsolve!(sys)
     @test sys.panels.q ≈ q
-    @test norm(steady_force(sys)) < 3e-5
-    @test collect(extrema(panel_cp(sys))) ≈ [-1.25,1.0] rtol=0.015
+    @test norm(steadyforce(sys)) < 3e-5
+    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
 
     #check symmetry enforcement
     panels = panelize(S,0,π/2,0,π,hᵤ=0.12) # quarter plane
-    sys = GMRESsolve!(PanelSystem(panels,sym_axes=(2,3)),atol=1e-6); q = copy(sys.panels.q)
+    sys = gmressolve!(PanelSystem(panels,sym_axes=(2,3)),atol=1e-6); q = copy(sys.panels.q)
     directsolve!(sys)
     @test sys.panels.q ≈ q
-    @test collect(extrema(panel_cp(sys))) ≈ [-1.25,1.0] rtol=0.015
+    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
 end
 
-using NeumannKelvin:bvh_panels,fill_nodes,evaluate
+using ImplicitBVH
+using NeumannKelvin:fill_nodes,evaluate
 @testset "BarnesHutCore.jl" begin
     cen = SA[0,0,1]
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    bvh = bvh_panels(panels)
+    bvh = BVH(ImplicitBVH.BBox.(panels))
     nodes = fill_nodes(panels,bvh)
     @test nodes.dA[1]≈sum(panels.dA)
     @test nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
@@ -130,6 +131,27 @@ end
     BH = BarnesHutsolve(panels)
     q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
     @test norm(BH.panels.q-q)/norm(q) < 0.0032
-    @test norm(steady_force(BH)) < 4e-3
-    @test collect(extrema(panel_cp(BH))) ≈ [-1.25,1.0] rtol=0.01
+    @test norm(steadyforce(BH)) < 4e-3
+    @test extreme_cₚ(BH) ≈ [-1.25,1.0] rtol=0.01
+end
+
+@testset "freesurf" begin
+    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)-1.1] # just below z=0
+    body = panelize(S,0,π,0,2π,hᵤ=1/4)
+    P(u,v; x_min = -5, x_max = 5, y_min = -5, y_max = 5) = SA[u*x_min+(1-u)*x_max, v*y_min+(1-v)*y_max, 0]
+    freesurf = panelize(P,hᵤ=1/2)
+    sys = PanelSystem(body;freesurf,ℓ=0)
+    @test length(sys.panels)==length(body)+length(freesurf)
+    @test sys.body.dA == body.dA
+    @test sys.freesurf.dA == freesurf.dA
+    @test sys.kwargs[:ℓ] == 0
+
+    # Direct solve ignores! freesurf
+    directsolve!(sys)
+    @test collect(extrema(cₚ(sys))) ≈ [-1.25,1.0] rtol=0.02
+
+    # Setting ℓ=0 should turn freesurf into reflection wall
+    gmressolve!(sys)
+    sys2 = BarnesHutsolve(body;sym_axes=3)
+    @test extreme_cₚ(sys)≈extreme_cₚ(sys2) broken=true
 end

@@ -30,41 +30,55 @@ Normal velocity influence of panel `pⱼ` on `pᵢ`.
 
 abstract type AbstractPanelSystem end
 """
-    PanelSystem(panels, q=zeros; ϕ=∫G, sym_axes=(), kwargs...)
+    PanelSystem(body; freesurf=nothing, sym_axes=(), kwargs...)
 
-Represents a panel **system**, i.e., a set of `panels` with strengths `q` used to
-statisfy the boundary conditions for the given Green's function `ϕ(x,p;kwargs...)`.
+Represents a panel **system**, i.e., a set of panels with strengths `q` used to
+satisfy the boundary conditions for the Green's function `∫G(x,p;kwargs...)`.
+
+The system consists of:
+- `body`: Required body panel table
+- `freesurf`: Optional free surface panel table
+- `sym_axes`: Optional symmetry axes, see below
+
+The combined panel table is stored in `sys.panels`, with views to the body and free
+surface portions available as `sys.body` and `sys.freesurf`. The strength `q` is
+initialized to zero and added as a column to `panels`.
+
 Setting `sym_axes` imposes symmetry conditions on the solution using the method of
 images. For example, `sym_axes=(2,3)` mirrors each contribution across `y=0,z=0`, so
 only one quarter of a centered & symmetric geometry needs to be covered in panels.
 
 # Usage
 ```julia
-# You can solve the system first directly...
-kwargs = (ϕ=∫G,d²=Inf)              # set the potential and keyword arguments
-A = ∂ₙϕ.(panels,panels';kwargs...)  # create the influence matrix (N² elements!)
-b = components(panels.n,1)          # and right-hand vector
-q = A\\b                             # direct solve for the strength
-
-# .. and then bundle everything together to measure.
-sys1 = PanelSystem(panels, q; kwargs...)
-extrema(panel_cp(sys1))      # for example, the extreme values of cₚ
-
-# Or you can bundle first and use an indirect solver
-sys2 = PanelSystem(panels; kwargs...) # q isn't set yet...
-GMRESsolve!(sys2,atol=1e-6)  # approximate solve - but still O(N²) operations!
-extrema(panel_cp(sys2))      # matches sys1 almost perfectly
+sys = PanelSystem(body_panels)                    # body only
+sys = PanelSystem(body_panels, freesurf_panels)   # body + free surface
+gmressolve!(sys, atol=1e-6)  # approximate solve - but still O(N²) operations!
+extrema(cₚ(sys))       # check solution quality
 ```
 """
-struct PanelSystem{T,F,M,K} <: AbstractPanelSystem
-    panels::T # includes strengths!
-    ϕ::F
+struct PanelSystem{T,B,F,M,K} <: AbstractPanelSystem
+    panels::T    # combined body & free surface table with q and fsbc columns
+    body::B      # view of body panels
+    freesurf::F  # view of free surface panels (or nothing)
     mirrors::M
     kwargs::K
 end
-PanelSystem(panels,q;ϕ=∫G,sym_axes=(),kwargs...) = PanelSystem(Table(panels;q),ϕ,mirrors(sym_axes),kwargs)
-PanelSystem(panels;kwargs...) = (q=similar(panels.dA); q.=0; PanelSystem(panels,q;kwargs...))
-@inline function mirrors(axes::Tuple{Vararg{Int}})
+function PanelSystem(body; freesurf=nothing, sym_axes=(), kwargs...)
+    panels = add_columns(body, q=0., fsbc=false)
+    !isnothing(freesurf) && (panels = [panels; add_columns(freesurf, q=0., fsbc=true)])
+    bview = @view panels[1:length(body)]
+    fview = isnothing(freesurf) ? nothing : @view panels[length(body)+1:end]
+    PanelSystem(panels, bview, fview, mirrors(sym_axes...), kwargs)
+end
+PanelSystem(body,q::AbstractArray;kwargs...) = (sys = PanelSystem(body;kwargs...); sys.body.q .= q; sys)
+
+function add_columns(t::Table; kwargs...)
+    col = getproperty(t, first(propertynames(t)))
+    new_cols = (name => sim_fill(val, col) for (name, val) in kwargs)
+    return Table(t; new_cols...)
+end
+sim_fill(val,array::AbstractArray) = (a = similar(array,typeof(val)); a .= val; a)
+@inline function mirrors(axes...)
     M = length(axes)
     ntuple(combo -> SA[ntuple(i -> any(j -> axes[j] == i && ((combo >> (j-1)) & 1) == 1, 1:M) ? -1 : 1, 3)...], 1 << M)
 end
@@ -74,58 +88,66 @@ Base.show(io::IO, sys::PanelSystem) = print(io, "PanelSystem($(length(sys.panels
 Base.show(io::IO, ::MIME"text/plain", sys::AbstractPanelSystem) = abstract_show(io,sys)
 function abstract_show(io,sys)
     show(io,sys);println()
-    println(io, "  total area: $(total_area(sys))")
+    println(io, "  total body area: $(body_area(sys))")
+    println(io, "  free surface: $(!isnothing(sys.freesurf))")
     println(io, "  mirrors: $(sys.mirrors)")
+    println(io, "  kwargs: $(sys.kwargs...)")
     println(io, "  strength extrema: $(extrema(sys.panels.q))")
 end
-total_area(sys) = sum(sys.panels.dA)
+body_area(sys) = sum(sys.body.dA)
 
 """
     Φ(x,sys)
 
-Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢϕ(x,pᵢ)` induced by **solved** panel system `sys`.
+Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢ∫G(x,pᵢ)` induced by **solved** panel system `sys`.
 
 See also: [`PanelSystem`](@ref)
 """
 Φ(x,sys;kwargs...) = sum(Φ_sys(x .* m,sys;kwargs...) for m in sys.mirrors)
-@inline Φ_sys(x,sys;ignore...) = sum(pᵢ.q*sys.ϕ(x,pᵢ;sys.kwargs...) for pᵢ in sys.panels)
+@inline Φ_sys(x,sys;ignore...) = sum(pᵢ.q*∫G(x,pᵢ;sys.kwargs...) for pᵢ in sys.panels)
+Φₙ(p,sys;kwargs...) = derivative(t->Φ(p.x+t*p.n,sys;kwargs...),0) # WRT the panel normal
+Φₓ(x,sys;kwargs...) = derivative(t->Φ(x+t*SA[1,0,0],sys;kwargs...),0)
+Φₓₓ(x,sys;kwargs...) = derivative(t->Φₓ(x+t*SA[1,0,0],sys;kwargs...),0)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 
 """
-    panel_cp(sys;U=SVector(-1,0,0)) -> cₚ
+    cₚ([x::SVector{3},] sys; U=SVector(-1,0,0))
 
-Measure the pressure coefficient `cₚ = 1-u²/U²` on each panel center, where `U` is the free stream
-velocity and `u = U+∇Φ` is the flow velocity. Computation is accelerated when Threads.nthreads()>1
-and/or when using a solved Barnes-Hut panel tree.
+Measure the pressure coefficient cₚ = 1-u²/U², where `U` is the free stream velocity and
+`u = U+∇Φ` is the flow velocity. If no location `x` is given, a vector of cₚ at all body
+centers is returned. Computation is accelerated when Threads.nthreads()>1 and/or when using
+a solved Barnes-Hut panel tree.
 
 See also: [`Φ`](@ref)
 """
-panel_cp(sys;U=SVector(-1,0,0)) = (b=similar(sys.panels.q);panel_cp!(b,sys;U);b)
-panel_cp!(b,sys;U=SVector(-1,0,0)) = AK.foreachindex(b) do i
-    b[i] = local_cp(sys.panels.x[i],sys;U)
+cₚ(x::SVector{3},sys;U=SVector(-1,0,0)) = 1-sum(abs2,U+∇Φ(x,sys))/sum(abs2,U)
+function cₚ(sys;U=SVector(-1,0,0))
+    b = similar(sys.body.q)
+    AK.foreachindex(b) do i
+        b[i] = cₚ(sys.body.x[i],sys;U)
+    end; b
 end
-local_cp(x,sys;U=SVector(-1,0,0)) = 1-sum(abs2,U+∇Φ(x,sys))/sum(abs2,U)
 
 """
-    steady_force(sys;U=SVector(-1,0,0))
+    steadyforce(sys;U=SVector(-1,0,0))
 
-Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/A = Fᵢ/(½ρU²A)`, where `A` is
-the total panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using a
+Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/S = Fᵢ/(½ρU²S)`, where `S` is
+the body panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using a
 solved Barnes-Hut panel tree.
 
 See also: [`Φ`](@ref)
 """
-steady_force(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->local_cp(x,sys;U),sys)/total_area(sys)
+steadyforce(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->cₚ(x,sys;U),sys)/body_area(sys)
 @inline function surface_integral(f,sys)
-    panels = sys.panels
-    init = neutral = zero(eltype(panels.n))
-    AK.mapreduce(+, panels, AK.get_backend(panels.q); init, neutral) do p
+    body = sys.body
+    init = neutral = zero(eltype(body.n))
+    AK.mapreduce(+, body, AK.get_backend(body.q); init, neutral) do p
         f(p.x,sys) * p.n * p.dA
     end
 end
 
 """
-    added_mass(sys)
+    addedmass(sys)
 
 Added mass coefficient force vector `-∫ₛ Φⱼ nᵢ da = mᵢⱼ/ρV` induced by a panel system solved
 with unit velocity in direction j, ie `j=2` requires `U=[0,±1,0]`. Computation is accelerated
@@ -135,16 +157,16 @@ when Threads.nthreads()>1 and/or when using a solved Barnes-Hut panel tree.
 
 See also: [`Φ`](@ref)
 """
-added_mass(sys) = -surface_integral(Φ,sys)
+addedmass(sys) = -surface_integral(Φ,sys)
 
 """
-    added_mass(panels::Table,kwargs...)
+    addedmass(panels::Table,kwargs...)
 
 Convenience function to fill in the full added mass matrix via direct solve.
 """
-function added_mass(panels::Table;kwargs...)
+function addedmass(panels::Table;kwargs...)
     A = ∂ₙϕ.(panels,panels';kwargs...)
     B = panels.n |> stack # source _matrix_ over i=1,2,3
     Q = A\B'              # solution _matrix_ over i=1,2,3
-    map(j->added_mass(PanelSystem(panels,view(Q,:,j);kwargs...)),1:3) |>stack
+    map(j->addedmass(PanelSystem(panels,view(Q,:,j);kwargs...)),1:3) |>stack
 end

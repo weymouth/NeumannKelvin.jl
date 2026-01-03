@@ -62,15 +62,8 @@ function evaluate(fnc,x,bvh,node_values,leaf_values;
     val
 end
 
-# panel bounding-box and node info
-function bb_panel(panel)
+# panel bounding-box
+function ImplicitBVH.BBox(panel::NamedTuple)
     ext = extrema.(components(panel.xᵤᵥ))
     BBox(first.(ext),last.(ext))
-end
-bvh_panels(panels) = BVH(bb_panel.(panels))
-function fill_nodes(panels,bvh)
-    dA = accumulate(panels.dA,bvh)
-    x = accumulate(panels.dA .* panels.x, bvh) ./ dA
-    n = normalize.(accumulate(panels.dA .* panels.n, bvh))
-    Table(;x,dA,n)
 end

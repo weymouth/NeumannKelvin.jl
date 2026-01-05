@@ -12,7 +12,7 @@ Approximate integral `∫ₚ G(x,x')da'` over source panel `p`.
 
 A 2x2 quadrature is used when `|x-p.x|²≤d²p.dA`, otherwise it uses the midpoint.
 """
-∫G(x,p;d²=4,kwargs...) = _∫G(x,p;d²)
+∫G(x,p;d²=4,ignore...) = _∫G(x,p;d²)
 function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p;d²=4,kwargs...) where {Tag,T,N}
     val = _∫G(d,p;d²) # use auto-diff
     value(d) ≠ p.x && return val
@@ -68,7 +68,8 @@ function PanelSystem(body; freesurf=nothing, sym_axes=(), kwargs...)
     !isnothing(freesurf) && (panels = [panels; add_columns(freesurf, q=0., fsbc=true)])
     bview = @view panels[1:length(body)]
     fview = isnothing(freesurf) ? nothing : @view panels[length(body)+1:end]
-    PanelSystem(panels, bview, fview, mirrors(sym_axes...), kwargs)
+    !isnothing(freesurf) && !haskey(kwargs,:ℓ) && @warn "Must define ℓ (\ell) as keyword with freesurf"
+    PanelSystem(panels, bview, fview, mirrors(sym_axes...), kwargs) #, Dict(kwargs...)) # SUPER slow
 end
 PanelSystem(body,q::AbstractArray;kwargs...) = (sys = PanelSystem(body;kwargs...); sys.body.q .= q; sys)
 
@@ -111,6 +112,22 @@ See also: [`PanelSystem`](@ref)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 
 """
+    ζ([x::SVector{3},] sys; U=1)
+
+Scaled linear free surface elevation `ζ/ℓ=Φₓ/U` induced by **solved** panel system `sys`.
+If no location `x` is given, a vector of ζ at all freesurf centers is returned.
+
+See also: [`Φ`](@ref)
+"""
+ζ(x::SVector{3},sys;U=1) = Φₓ(x,sys)/abs(U)
+function ζ(sys;kwargs...)
+    b = similar(sys.freesurf.q)
+    AK.foreachindex(b) do i
+        b[i] = ζ(sys.freesurf.x[i],sys;kwargs...)
+    end; b
+end
+
+"""
     cₚ([x::SVector{3},] sys; U=SVector(-1,0,0))
 
 Measure the pressure coefficient cₚ = 1-u²/U², where `U` is the free stream velocity and
@@ -135,7 +152,7 @@ Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/S = F�
 the body panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using a
 solved Barnes-Hut panel tree.
 
-See also: [`Φ`](@ref)
+See also: [`cₚ`](@ref)
 """
 steadyforce(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->cₚ(x,sys;U),sys)/body_area(sys)
 @inline function surface_integral(f,sys)

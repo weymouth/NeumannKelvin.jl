@@ -15,7 +15,7 @@ boundary conditions:
 - `verbose=true`: Print GMRES convergence statistics
 
 # Returns
-Modified `sys` with updated panel strengths in `sys.panels.q`
+Modified `sys` with updated panel strengths `q`
 
 # References
 Saad, Y., & Schultz, M. H. (1986). GMRES: A generalized minimal residual
@@ -74,7 +74,7 @@ extrema(cₚ(sys))          # measure
 """
 function directsolve!(sys::PanelSystem,b=components(sys.body.n,1);verbose=true)
     if verbose
-        @warn "This routine ignores free surfaces and is memory intensive. See help?>directsolve!."
+        @warn "This routine ignores free surface panels and is memory intensive. See help?>directsolve!."
         @time sys.body.q .= _direct(sys,b)
     else
         sys.body.q .= _direct(sys,b)

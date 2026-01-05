@@ -19,7 +19,7 @@ include("panel_method.jl")
 export ∫G,∂ₙϕ,PanelSystem
 
 ## AbstractPanelSystem measurements
-export Φ,∇Φ,cₚ,steadyforce,addedmass
+export Φ,∇Φ,cₚ,steadyforce,addedmass,ζ
 
 # Direct and matrix-free solver
 include("solvers.jl")

@@ -74,7 +74,7 @@ function _direct((;panels,ϕ,mirrors,kwargs)::PanelSystem,b)
     ϕ_sym(x,p) = sum(ϕ(x .* m,p;kwargs...) for m in mirrors)
     A = Array{eltype(panels.q)}(undef,length(panels.q),length(panels.q))
     AK.foraxes(A,2) do j
-        for i in axes(A,1)
+        @simd for i in axes(A,1)
             @inbounds A[i,j] = ∂ₙϕ(panels[i],panels[j];ϕ=ϕ_sym)
         end
     end

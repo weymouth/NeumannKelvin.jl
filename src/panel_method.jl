@@ -41,7 +41,7 @@ only one quarter of a centered & symmetric geometry needs to be covered in panel
 
 # Usage
 ```julia
-sys = PanelSystem(panels; sym_axes=2) # half a body with y-symmetry
+sys = PanelSystem(panels; sym_axes=2) # half-body with y-symmetry
 gmressolve!(sys, atol=1e-6)           # approximate solve - but still O(N²) operations!
 extrema(cₚ(sys))                      # check solution quality
 ```
@@ -76,14 +76,18 @@ body_area(sys) = sum(sys.panels.dA)
 """
     Φ(x,sys)
 
-Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢ∫G(x,pᵢ)` induced by **solved** panel system `sys`.
+Potential `Φ(x) = ∑ᵢqᵢ*ϕ(x,pᵢ)` induced by **solved** panel system `sys`.
 
 See also: [`PanelSystem`](@ref)
 """
-Φ(x,sys;kwargs...) = sum(Φ_sys(x .* m,sys;kwargs...) for m in sys.mirrors)
-@inline Φ_sys(x,sys;ignore...) = sum(pᵢ.q*∫G(x,pᵢ;sys.kwargs...) for pᵢ in sys.panels)
-Φₙ(p,sys;kwargs...) = derivative(t->Φ(p.x+t*p.n,sys;kwargs...),0) # WRT the panel normal
-Φₓ(x,sys;kwargs...) = derivative(t->Φ(x+t*SA[1,0,0],sys;kwargs...),0)
+function Φ(x::SVector{3,T},(;panels,ϕ,mirrors,kwargs)::PanelSystem) where T
+    val = zero(T)
+    @simd for p in panels
+        val += sum(p.q * ϕ(x .* m, p; kwargs...) for m in mirrors)
+    end; val
+end
+Φₙ(p,sys) = derivative(t->Φ(p.x+t*p.n,sys),0) # WRT the panel normal
+Φₓ(x,sys) = derivative(t->Φ(x+t*SA[1,0,0],sys),0)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 
 """

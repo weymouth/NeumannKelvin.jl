@@ -15,9 +15,18 @@ include("panels.jl")
 export measure_panel,panelize
 
 # Panel method
-using ThreadsX # multi-threaded map,sum, & foreach
+import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
 include("panel_method.jl")
-export ∫G,∂ₙϕ,influence,ζ,steady_force,added_mass
+
+## Green's functions and PanelSystem
+export ∫G,∂ₙϕ,PanelSystem
+
+## PanelSystem measurements
+export Φ,∇Φ,cₚ,steadyforce,addedmass,ζ
+
+# Direct and matrix-free solver
+include("solvers.jl")
+export gmressolve!,directsolve!
 
 # Kelvin Green function definitions
 include("kelvin.jl")

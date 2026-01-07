@@ -83,7 +83,7 @@ end
     @test_throws ArgumentError panelize((u,v)->[u,u,v])
 end
 
-using LinearAlgebra
+using LinearAlgebra,BenchmarkTools
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = measure_panel.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
@@ -91,8 +91,13 @@ using LinearAlgebra
     @test panels.dA ≈ fill(π/2,8) rtol=1e-6   # cubature gives perfect areas
     @test panels.n ⋅ panels.x ≈ 4√3 rtol=1e-6 # ...and centroids
 
+    # Check that ∫G is non-allocating, including duals
+    p = panels[1]
+    b = @benchmark ∫G($p.x,$p); @test minimum(b).allocs==0
+    b = @benchmark gradient(x->∫G(x,$p),$p.x); @test minimum(b).allocs==0
+    b = @benchmark ∂ₙϕ($p,$p); @test minimum(b).allocs==0
+
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
-    @test A ≈ influence(panels)
     @test tr(A) ≈ 8*2π
     @test minimum(A) ≈ panels[1].dA/4 rtol=0.2 # rough estimate
     @test sum(b)<8eps()
@@ -100,17 +105,27 @@ using LinearAlgebra
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    Ma = added_mass(panels)
+    Ma = addedmass(panels)
     @test Ma ≈ 2π/3*I rtol=0.1 # ϵ=10% with 8 panels
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
+end
 
-    #check reflections
-    ∫G₃ = reflect(∫G,3)                                  # 2 ∫G calls
-    @test influence(panels[1:4],ϕ=∫G₃)\b[1:4] ≈ q[1:4]   # ×4² coeffs => 32 ∫G calls
-    ∫G₂₃ = reflect(∫G₃,2)                                # 2² calls
-    @test influence(panels[1:2],ϕ=∫G₂₃)\b[1:2] ≈ q[1:2]  # ×2² coeffs => 16 calls
-    ∫G₁₂₃ = reflect(∫G₂₃,1,op=-) # sign flip             # 2³ calls 
-    @test influence(panels[1:1],ϕ=∫G₁₂₃)\b[1:1] ≈ q[1:1] # ×1 coeff(!) => 8 calls
+extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
+@testset "solvers.jl" begin
+    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
+    panels = panelize(S,0,π,0,2π,hᵤ=0.12)
+    sys = gmressolve!(PanelSystem(panels),atol=1e-6); q = copy(sys.panels.q)
+    directsolve!(sys)
+    @test sys.panels.q ≈ q
+    @test norm(steadyforce(sys)) < 3e-5
+    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
+
+    #check symmetry enforcement
+    panels = panelize(S,0,π/2,0,π,hᵤ=0.12) # quarter plane
+    sys = gmressolve!(PanelSystem(panels,sym_axes=(2,3)),atol=1e-6); q = copy(sys.panels.q)
+    directsolve!(sys)
+    @test sys.panels.q ≈ q
+    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
 end
 
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]

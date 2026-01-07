@@ -29,20 +29,26 @@ gmressolve!(BH)         # approximate solve
 extrema(cₚ(BH))         # measure
 ```
 """
-function gmressolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true)
+function gmressolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true,kwargs...)
     # Make LinearOperator
-    mult!(b,q) = (set_q!(sys,q); uₙ!(b,sys))
+    mult!(b,q) = (set_q!(sys,q); bc!(b,sys))
     A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
 
     # Solve with GMRES and return updated BarnesHutBEM
-    q, stats = gmres(A, b, sys.panels.q; atol)
+    q, stats = gmres(A, b, sys.panels.q; atol, kwargs...)
     verbose && println(stats)
     set_q!(sys,q)
 end
 @inline set_q!(sys,q) = (sys.panels.q .= q; sys)
-@inline uₙ!(b::AbstractArray{T},sys,val=zero(T)) where T = AK.foreachindex(b) do i
+@inline bc!(b::AbstractArray{T},sys,val=zero(T),h=0.3,hx=h*SA[1,0,0]) where T = AK.foreachindex(b) do i
     p = sys.panels[i]
-    b[i] = Φₙ(p,sys;val)
+    if p.fsbc # Φₙ - ℓ*Φₓₓ = 0
+        ℓ=sys.kwargs[:ℓ]
+        # b[i] = Φₙ(p,sys;val) - ℓ*(Φₓ(p.x+hx,sys;val)-Φₓ(p.x,sys;val))/h
+        b[i] = Φₙ(p,sys;val) - ℓ*(Φ(p.x,sys;val)-2Φ(p.x+hx,sys;val)+Φ(p.x+2hx,sys;val))/h^2
+    else      # uₙ = -Uₙ
+        b[i] = Φₙ(p,sys;val)
+    end
 end
 
 """

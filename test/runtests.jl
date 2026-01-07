@@ -138,10 +138,10 @@ end
 
 @testset "freesurf" begin
     S(θ₁,θ₂,Z=-1.1) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)+Z] # just below z=0
-    body = panelize(S,0,π,0,2π,hᵤ=0.3) # smaller at the poles
-    P(u,v; x_min = -3, x_max = 3, y_min = -3, y_max = 3) = SA[u*x_min+(1-u)*x_max, v*y_max+(1-v)*y_min, 0]
-    freesurf = panelize(P,hᵤ=0.21) # match pole resolution
-    sys = PanelSystem(body;freesurf,ℓ=0)
+    body = panelize(S,0,π,0,π,hᵤ=1/4)
+    P(u,v; x_min = -4π, x_max = 2π, y_min = 0, y_max = 2π) = SA[u*x_min+(1-u)*x_max, v*y_max+(1-v)*y_min, 0]
+    freesurf = panelize(P,hᵤ=0.3,N_max=1500)
+    sys = PanelSystem(body;freesurf,sym_axes=2,ℓ=0)
     @test length(sys.panels)==length(body)+length(freesurf)
     @test sys.body.dA == body.dA
     @test sys.freesurf.dA == freesurf.dA
@@ -151,8 +151,15 @@ end
     directsolve!(sys)
     @test collect(extrema(cₚ(sys))) ≈ [-1.25,1.0] rtol=0.04
 
-    # Setting ℓ=0 should turn freesurf into reflection wall
+    # Setting ℓ=0 turns freesurf into reflection wall
     sys = gmressolve!(sys)
-    sys2 = gmressolve!(BarnesHut(body;sym_axes=3))
-    @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.01
+    sys2 = gmressolve!(BarnesHut(body;sym_axes=(2,3)))
+    @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.02
+
+    # Setting ℓ=1 turns on freesurf, but it's very slow to converge
+    sys = BarnesHut(body;freesurf,sym_axes=2,ℓ=1)
+    gmressolve!(sys,itmax=160) # should converge...
+    @test steadyforce(sys)[1] > 0.1 # non-zero drag!
+    f = ζ(sys)
+    @test -2minimum(f)>maximum(f) # trough is much bigger than crest
 end

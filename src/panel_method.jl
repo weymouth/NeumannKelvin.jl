@@ -108,7 +108,6 @@ See also: [`PanelSystem`](@ref)
 @inline Φ_sys(x,sys;ignore...) = sum(pᵢ.q*∫G(x,pᵢ;sys.kwargs...) for pᵢ in sys.panels)
 Φₙ(p,sys;kwargs...) = derivative(t->Φ(p.x+t*p.n,sys;kwargs...),0) # WRT the panel normal
 Φₓ(x,sys;kwargs...) = derivative(t->Φ(x+t*SA[1,0,0],sys;kwargs...),0)
-Φₓₓ(x,sys;kwargs...) = derivative(t->Φₓ(x+t*SA[1,0,0],sys;kwargs...),0)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 
 """

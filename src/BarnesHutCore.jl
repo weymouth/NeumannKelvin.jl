@@ -63,7 +63,9 @@ function evaluate(fnc,x,bvh,node_values,leaf_values;
 end
 
 # panel bounding-box
-function ImplicitBVH.BBox(panel::NamedTuple)
+ImplicitBVH.BoundingVolume(panel::NamedTuple) = if hasproperty(panel,:xᵤᵥ)
     ext = extrema.(components(panel.xᵤᵥ))
-    BBox(first.(ext),last.(ext))
+    return BBox(first.(ext),last.(ext))
+else
+    return BSphere(panel.x,√panel.dA)
 end

@@ -27,7 +27,7 @@ struct BarnesHut{P<:PanelSystem, B, N} <: AbstractPanelSystem
     nodes::N
 end
 function BarnesHut(sys::PanelSystem)
-    bvh = BVH(BBox.(sys.panels))
+    bvh = BVH(BoundingVolume.(sys.panels))
     BarnesHut(sys,bvh,fill_nodes(sys.panels,bvh))
 end
 function fill_nodes(panels,bvh)  # nodes only have monopole properties

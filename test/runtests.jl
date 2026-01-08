@@ -107,7 +107,7 @@ using NeumannKelvin:fill_nodes,evaluate
     cen = SA[0,0,1]
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    bvh = BVH(ImplicitBVH.BBox.(panels))
+    bvh = BVH(ImplicitBVH.BoundingVolume.(panels))
     nodes = fill_nodes(panels,bvh)
     @test nodes.dA[1]≈sum(panels.dA)
     @test nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen

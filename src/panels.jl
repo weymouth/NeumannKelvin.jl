@@ -92,13 +92,16 @@ arcspeed(r) = u->norm(derivative(r,u))
 κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
 
+abstract type GreenKernel end
+struct MonoKernel <: GreenKernel end
+struct QuadKernel <: GreenKernel end
 using HCubature
 """
-    measure(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,x₄,w₄)
+    measure(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,xg,wg)
 
 Measures a parametric surface function `S(u,v)` for a `u,v ∈ [u±0.5du]×[v±0.5dv]` panel.
-Returns centroid point and normal `x,n`, the surface area `dA`, and the 2x2 Gauss-point
-locations and weights `x₄,w₄`. Panel corner data `xᵤᵥ,nᵤᵥ` is used only for plotting.
+Returns centroid point and normal `x,n`, the surface area `dA`, and the Gauss-point
+locations and weights `xg,wg`. Panel corner data `vertices,nvertices` is used only for plotting.
  - `flip=true` flips the panel to point the other way.
  - `cubature=true` uses an adaptive "h-cubature" for `dA,x,n`.
 """
@@ -118,7 +121,7 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA[-1/√3,1/√3],wg
     xᵤᵥ = S.(u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]')
     nᵤᵥ = normalize.(normal.(S, u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]'))
     # combine everything into named tuple
-    (x=x, n=n, dA=dA, x₄=x₄, w₄=dA₄ .* dA/sum(dA₄), xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
+    (x=x, n=n, dA=dA, xg=x₄, wg=dA₄ .* dA/sum(dA₄), xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ, kernel=QuadKernel())
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))

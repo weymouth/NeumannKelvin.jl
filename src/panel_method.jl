@@ -3,23 +3,30 @@
 Green function `G(x)` for a source at position `a`.
 """
 source(x,a) = -1/norm(x-a)
+""" ∫G_kernel(x,p) = p.dA*source(x,p.x)
+
+Monopole Green's function for a source panel `p`.
+"""
+∫G_kernel(x,p,args...;kwargs...) = p.dA*source(x,p.x)
+""" ∫G_kernel(ξ,p,::QuadKernel;d²=4) = ∑ᵢ wgᵢ*source(ξ,xgᵢ)
+
+Gauss quadrature over source panel `p`. If |ξ-p.x|²/p.dA > d², simplify to monopole.
+"""
+∫G_kernel(ξ,p,::QuadKernel;d²=4,ignore...) = sum(abs2,ξ-p.x) ≤ d²*p.dA ? sum(w*source(ξ,x) for (x,w) in zip(p.xg,p.wg)) : ∫G_kernel(ξ,p)
 
 using ForwardDiff: value, partials, Dual
 """
-    ∫G(x,p;d²=4)
+    ∫G(x,p;kwargs...)
 
-Approximate integral `∫ₚ G(x,x')da'` over source panel `p`.
-
-A 2x2 quadrature is used when `|x-p.x|²≤d²p.dA`, otherwise it uses the midpoint.
+Approximate integral `∫ₚ G(x,x')da'` over source panel `p`. This function correctly enforces ∇∫G=2π̂n.
 """
-∫G(x,p;d²=4,ignore...) = _∫G(x,p;d²)
-function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p;d²=4,kwargs...) where {Tag,T,N}
-    val = _∫G(d,p;d²) # use auto-diff
+∫G(x,p;kwargs...) = ∫G_kernel(x,p,p.kernel;kwargs...)
+function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p;kwargs...) where {Tag,T,N}
+    val = ∫G_kernel(d,p,p.kernel;kwargs...) # use auto-diff
     value(d) ≠ p.x && return val
     ∂ = ntuple(i->2π*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
     Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=2πn̂ contribution
 end
-_∫G(ξ,p;d²) = (!hasproperty(p, :x₄) || sum(abs2,ξ-p.x)>d²*p.dA) ? p.dA*source(ξ,p.x) : sum(w*source(ξ,x) for (x,w) in zip(p.x₄,p.w₄))
 
 """
     ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G,kwargs...) = Aᵢⱼ
@@ -68,7 +75,6 @@ function PanelSystem(body; freesurf=nothing, sym_axes=(), kwargs...)
     !isnothing(freesurf) && (panels = [panels; add_columns(freesurf, q=0., fsbc=true)])
     bview = @view panels[1:length(body)]
     fview = isnothing(freesurf) ? nothing : @view panels[length(body)+1:end]
-    !isnothing(freesurf) && !haskey(kwargs,:ℓ) && @warn "Must define ℓ (\ell) as keyword with freesurf"
     PanelSystem(panels, bview, fview, mirrors(sym_axes...), kwargs) #, Dict(kwargs...)) # SUPER slow
 end
 PanelSystem(body,q::AbstractArray;kwargs...) = (sys = PanelSystem(body;kwargs...); sys.body.q .= q; sys)
@@ -78,7 +84,7 @@ function add_columns(t::Table; kwargs...)
     new_cols = (name => sim_fill(val, col) for (name, val) in kwargs)
     return Table(t; new_cols...)
 end
-sim_fill(val,array::AbstractArray) = (a = similar(array,typeof(val)); a .= val; a)
+sim_fill(val,array::AbstractArray) = (a = similar(array,typeof(val)); fill!(a,val); a)
 @inline function mirrors(axes...)
     M = length(axes)
     ntuple(combo -> SA[ntuple(i -> any(j -> axes[j] == i && ((combo >> (j-1)) & 1) == 1, 1:M) ? -1 : 1, 3)...], 1 << M)
@@ -90,6 +96,7 @@ Base.show(io::IO, ::MIME"text/plain", sys::AbstractPanelSystem) = abstract_show(
 function abstract_show(io,sys)
     show(io,sys);println()
     println(io, "  total body area: $(body_area(sys))")
+    println(io, "  body panel type: $(eltype(sys.body.kernel))")
     println(io, "  free surface: $(!isnothing(sys.freesurf))")
     println(io, "  mirrors: $(sys.mirrors)")
     println(io, "  kwargs: $(sys.kwargs...)")

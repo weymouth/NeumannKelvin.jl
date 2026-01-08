@@ -72,8 +72,8 @@ using LinearAlgebra,BenchmarkTools
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    Ma = addedmass(panels)
-    @test Ma ≈ 2π/3*I rtol=0.1 # ϵ=10% with 8 panels
+    Ma = addedmass(panels,V=4π/3)
+    @test Ma ≈ I/2 rtol=0.1 # ϵ=10% with 8 panels
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
 end
 
@@ -156,4 +156,34 @@ end
     @test steadyforce(sys)[1] > 0.1 # non-zero drag!
     f = ζ(sys)
     @test -2minimum(f)>maximum(f) # trough is much bigger than crest
+end
+
+using GeometryBasics,FileIO  # or whatever triggers the extension
+@testset "GeometryBasics" begin
+    panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
+    @test panel.x ≈ SA[2,1,0]/3
+    @test panel.n ≈ SA[0,0,1]
+    @test panel.dA ≈ 0.5
+    @test ∫G(SA[0,0,2],panel)/4π ≈ -0.01847387 rtol=1e-6
+    @test ∫G(SA[0,0,-0.5],panel)/4π ≈ −0.04558955 rtol=1e-6
+    @test ∫G(SA[0.5,1,0],panel)/4π ≈ −0.05806854 rtol=1e-6
+    @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ −0.03856218 rtol=1e-6
+    @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ −0.00495674 rtol=1e-6
+    b = @benchmark ∫G($panel.x,$panel); @test minimum(b).allocs==0
+    b = @benchmark gradient(x->∫G(x,$panel),$panel.x); @test minimum(b).allocs==0
+
+    ext = Base.get_extension(NeumannKelvin, :NeumannKelvinGeometryBasicsExt)
+    panels = panelize(load("examples/Icosahedron.stl"))
+    @test length(panels)==20
+    @test eltype(panels.kernel)==ext.TriKernel
+    @test all([p.n'p.x>0 for p in panels]) # all outward facing
+
+    sys = BarnesHut(panels)
+    @test sys.bvh.leaves[1].volume isa ImplicitBVH.BBox # triggered correct BV
+    @test NeumannKelvin.body_area(sys) ≈ 957 rtol=1e-3
+    @test NeumannKelvin.body_vol(sys) ≈ 2475 rtol=3e-2
+
+    Ma = addedmass(panels,V=1)
+    @test diag(Ma) ≈ fill(tr(Ma)/3,3) rtol=1e-4
+    @test 2π/3*7.95^3 < tr(Ma)/3 < 2π/3*10^3 # between the insphere & circumsphere
 end

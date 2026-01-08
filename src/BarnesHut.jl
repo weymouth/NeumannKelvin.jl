@@ -35,7 +35,7 @@ function fill_nodes(panels,bvh)  # nodes only have monopole properties
     dA = accumulate(panels.dA,bvh)
     x = accumulate(panels.dA .* panels.x, bvh) ./ dA
     n = normalize.(accumulate(panels.dA .* panels.n, bvh))
-    add_columns(Table(;x,n,dA), q=0., kernel=MonoKernel())
+    add_columns(Table(;x,n,dA), q=zero(eltype(dA)), kernel=MonoKernel())
 end
 BarnesHut(args...;kwargs...) = BarnesHut(PanelSystem(args...;kwargs...))
 

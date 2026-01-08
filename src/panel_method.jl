@@ -71,8 +71,8 @@ struct PanelSystem{T,B,F,M,K} <: AbstractPanelSystem
     kwargs::K
 end
 function PanelSystem(body; freesurf=nothing, sym_axes=(), kwargs...)
-    panels = add_columns(body, q=0., fsbc=false)
-    !isnothing(freesurf) && (panels = [panels; add_columns(freesurf, q=0., fsbc=true)])
+    panels = add_columns(body, q=zero(eltype(body.dA)), fsbc=false)
+    !isnothing(freesurf) && (panels = [panels; add_columns(freesurf, q=zero(eltype(freesurf.dA)), fsbc=true)])
     bview = @view panels[1:length(body)]
     fview = isnothing(freesurf) ? nothing : @view panels[length(body)+1:end]
     PanelSystem(panels, bview, fview, mirrors(sym_axes...), kwargs) #, Dict(kwargs...)) # SUPER slow
@@ -103,6 +103,7 @@ function abstract_show(io,sys)
     println(io, "  strength extrema: $(extrema(sys.panels.q))")
 end
 body_area(sys) = sum(sys.body.dA)
+body_vol(sys) = sum(p.x'p.n * p.dA for p in sys.body) / 3
 
 """
     Φ(x,sys)
@@ -170,26 +171,26 @@ steadyforce(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->cₚ(x,sys;U),sys
 end
 
 """
-    addedmass(sys)
+    addedmass(sys; Uⱼ=-1, V=body_vol(sys))
 
-Added mass coefficient force vector `-∫ₛ Φⱼ nᵢ da = mᵢⱼ/ρV` induced by a panel system solved
-with unit velocity in direction j, ie `j=2` requires `U=[0,±1,0]`. Computation is accelerated
-when Threads.nthreads()>1 and/or when using a solved Barnes-Hut panel tree.
+Added mass coefficient force vector `-∫ₛ Φⱼ/Uⱼ nᵢ da/V = mᵢⱼ/ρV` induced by a panel system,
+where `V` is the body volume. Computation is accelerated when Threads.nthreads()>1.
 
-**Note:** Call this function for j=1:3 to fill in the full added mass matrix,
+**Note:** The index j is set by the velocity vector used to solve the system. For example,
+using `U = [0,-1,0]`, means j=2 and addedmass returns the mᵢ₂ vector. Call this function for
+j=1:3 to fill in the full added mass matrix,
 
 See also: [`Φ`](@ref)
 """
-addedmass(sys) = -surface_integral(Φ,sys)
-
+addedmass(sys;Uⱼ=-1,V=body_vol(sys)) = -surface_integral(Φ,sys)/abs(Uⱼ)/V
 """
-    addedmass(panels::Table,kwargs...)
+    addedmass(panels::Table)
 
 Convenience function to fill in the full added mass matrix via direct solve.
 """
-function addedmass(panels::Table;kwargs...)
-    A = ∂ₙϕ.(panels,panels';kwargs...)
+function addedmass(panels::Table;sys=PanelSystem(panels),V=body_vol(sys))
+    A = ∂ₙϕ.(panels,panels')
     B = panels.n |> stack # source _matrix_ over i=1,2,3
     Q = A\B'              # solution _matrix_ over i=1,2,3
-    map(j->addedmass(PanelSystem(panels,view(Q,:,j);kwargs...)),1:3) |>stack
+    map(j->addedmass(set_q!(sys,view(Q,:,j));V),1:3) |>stack
 end

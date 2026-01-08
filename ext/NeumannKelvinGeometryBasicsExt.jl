@@ -17,17 +17,23 @@ struct TriKernel <: GreenKernel end
 Measure the properties of a triangular panel defined by it's vertices in counter-clockwise order.
 """
 function NeumannKelvin.measure(v₁, v₂, v₃)
-    n = (v₂ - v₁) × (v₃ - v₁)
-    (x=(v₁+v₂+v₃)/3, n=normalize(n), dA=norm(n)/2, verts=SA[v₁, v₂, v₃], kernel=TriKernel())
+    n = (v₂-v₁) × (v₃-v₁); dA = norm(n)/2; n = normalize(n)
+    t₁ =  normalize(v₂ - v₁); t₂ = normalize(v₃-v₂); t₃ = normalize(v₁-v₃)
+    (x=(v₁+v₂+v₃)/3, n=n, dA=dA, verts=SA[v₁, v₂, v₃], tangents=SA[t₁, t₂, t₃], inplane=SA[t₁×n, t₂×n, t₃×n], kernel=TriKernel())
 end
 
 """ ∫G_kernel(ξ,p,::TriKernel)
 
-Exact integrated potential over a triangular panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001) 
+Exact integrated potential over a triangular panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
 """
 function NeumannKelvin.∫G_kernel(ξ, p, ::TriKernel; ignore...)
-    r₁,r₂,r₃ = p.verts .- Ref(ξ); l₁,l₂,l₃ = norm.((r₁,r₂,r₃))
-    @inbounds -abs(r₁'p.n)*2atan(r₁'*(r₂×r₃),l₁*l₂*l₃+r₁'r₂*l₃+r₂'r₃*l₁+r₃'r₁*l₂)
+    r = p.verts .- Ref(ξ); R = norm.(r)
+    edges = sum(1:3) do i
+        m,t,j = p.inplane[i],p.tangents[i],i%3+1
+        r[i]'m*log((R[i]+r[i]'t)/(R[j]+r[j]'t))
+    end
+    Ω = 2atan(r[1]'*(r[2]×r[3]),prod(R)+sum(i->r[i]'r[i%3+1]*R[(i+1)%3+1],1:3))
+    @inbounds edges+r[1]'p.n*Ω
 end
 
 end

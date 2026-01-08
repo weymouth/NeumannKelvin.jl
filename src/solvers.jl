@@ -35,7 +35,7 @@ function gmressolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true,kwa
     A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
 
     # Solve with GMRES and return updated BarnesHutBEM
-    q, stats = gmres(A, b, sys.panels.q; atol, kwargs...)
+    q, stats = gmres(A, b, sys.panels.q; atol=convert(eltype(b),atol), kwargs...)
     verbose && println(stats)
     set_q!(sys,q)
 end

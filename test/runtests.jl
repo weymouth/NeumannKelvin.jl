@@ -173,7 +173,7 @@ using GeometryBasics,FileIO  # or whatever triggers the extension
     b = @benchmark gradient(x->∫G(x,$panel),$panel.x); @test minimum(b).allocs==0
 
     ext = Base.get_extension(NeumannKelvin, :NeumannKelvinGeometryBasicsExt)
-    panels = panelize(load("examples/Icosahedron.stl"))
+    panels = panelize(load("../examples/Icosahedron.stl"))
     @test length(panels)==20
     @test eltype(panels.kernel)==ext.TriKernel
     @test all([p.n'p.x>0 for p in panels]) # all outward facing

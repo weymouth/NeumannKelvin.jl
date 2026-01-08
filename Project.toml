@@ -21,11 +21,13 @@ TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NURBS = "dde13934-061e-461b-aa91-2c0fad390a0d"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 
 [extensions]
 NeumannKelvinMakieExt = "Makie"
 NeumannKelvinNURBSExt = "NURBS"
 NeumannKelvinPlotsExt = "Plots"
+NeumannKelvinGeometryBasicsExt = "GeometryBasics"
 
 [compat]
 AcceleratedKernels = "0.4.3"
@@ -44,8 +46,8 @@ TypedTables = "1"
 julia = "1.9"
 
 [extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test","BenchmarkTools"]
+test = ["Test", "BenchmarkTools"]

@@ -93,7 +93,6 @@ arcspeed(r) = u->norm(derivative(r,u))
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
 
 abstract type GreenKernel end
-struct MonoKernel <: GreenKernel end
 struct QuadKernel <: GreenKernel end
 using HCubature
 """
@@ -121,15 +120,8 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA[-1/√3,1/√3],wg
     xᵤᵥ = S.(u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]')
     nᵤᵥ = normalize.(normal.(S, u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]'))
     # combine everything into named tuple
-    (x=x, n=n, dA=dA, xg=x₄, wg=dA₄ .* dA/sum(dA₄), xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ, kernel=QuadKernel())
+    (x=x, n=n, dA=dA, xg=x₄, wg=dA₄ .* dA/sum(dA₄), verts=unwrap(xᵤᵥ), nverts=unwrap(nᵤᵥ), kernel=QuadKernel())
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
-"""
-    deviation = distance from panel center to plane defined by the corners
-"""
-function deviation(p)
-    a =   0.5p.xᵤᵥ[1,1]+0.5p.xᵤᵥ[1,2] # plane base
-    l = a-0.5p.xᵤᵥ[2,1]-0.5p.xᵤᵥ[2,2] # vector to plane top
-    hypot((p.x-a-l*(p.x-a)'l/l'l...)) # distance from center
-end
+unwrap(a) = map(i->a[i],SA[1,2,4,3])

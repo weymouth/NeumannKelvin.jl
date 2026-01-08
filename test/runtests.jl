@@ -42,12 +42,6 @@ using QuadGK
     panels_bad = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,c=Inf)
     @test panels[1].n ⋅ panels_bad[1].n > 0.99
 
-    # Deviation checks
-    dev_checks(panels,goal) = @test maximum(NeumannKelvin.deviation,panels) ≤ goal
-    dev_checks(panelize(spheroid,0,pi,0,2pi,hᵤ=0.5),0.05)
-    dev_checks(panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=1,hᵥ=0.5),0.075)
-    dev_checks(panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true),0.045)
-
     # Check inputs
     @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=0)
     @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,0,hᵤ=0.2)

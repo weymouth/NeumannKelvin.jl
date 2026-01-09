@@ -1,39 +1,50 @@
 module NeumannKelvinPlotsExt
 using NeumannKelvin,Plots
-function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=0.3panels.n, kwargs...)
-    @warn "Using fallback Plots-based panel plotting. Load GLMakie or WGLMakie instead for more functionality." maxlog=1
-    (xmn,xmx),(ymn,ymx),(zmn,zmx)=extrema.(components(panels.x))
-    xc,yc,zc = 0.5xmx+0.5xmn,0.5ymx+0.5ymn,0.5zmx+0.5zmn
-    h=1.05max(xmx-xc,ymx-yc,zmx-zc)
-    scatter(components(panels.x),marker_z=values;label="",kwargs...)
-    !isnothing(vectors) && quiver!(components(panels.x),quiver=components(vectors),
-            color=:grey,xlims=(xc-h,xc+h),ylims=(yc-h,yc+h),zlims=(zc-h,zc+h))
-    plot!()
+using Plots
+
+function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=panels.n,
+                           clims=extrema(values), colormap=:viridis, kwargs...)
+    # Get colors from colormap
+    cmap = cgrad(colormap)
+    color = [cmap[(v - clims[1]) / (clims[2] - clims[1])] for v in values]
+    tricolor = eltype(panels.kernel)==NeumannKelvin.QuadKernel ? mapreduce(c->[c;c],vcat,color) : color
+    
+    # Collect all vertices
+    xs = Float32[]
+    ys = Float32[]
+    zs = Float32[]
+    connections_i = Int[]
+    connections_j = Int[]
+    connections_k = Int[]
+    
+    for panel in panels
+        addtri!(xs,ys,zs,connections_i,connections_j,connections_k,panel.verts,panel.kernel)
+    end
+    
+    # Main 3D plot
+    cx,cy,cz = components(panels.x)
+    p1 = scatter3d(cx,cy,cz;markersize=0,fill_z=values,clims,c=colormap,colorbar=true,legend=false,kwargs...)
+    mesh3d!(p1, xs, ys, zs; color = tricolor, linewidth=0,
+            connections=(connections_i, connections_j, connections_k))
+            
+    # Add normal vectors if provided
+    if !isnothing(vectors)
+        # Extract panel centers and normal vectors
+        nx,ny,nz = components(vectors)
+        quiver!(p1, cx, cy, cz; color,
+            quiver=(nx, ny, nz), arrow=:closed, linewidth=1.5)
+    end
+    plot(p1)
 end
-@recipe function f(table::Table)
-    cols = columns(table)
-    col_names = columnnames(table)
-    
-    if length(col_names) < 2
-        error("Table must have at least 2 columns (x-axis and at least one y-series)")
+addtri!(x,y,z,i,j,k,verts,::NeumannKelvin.QuadKernel) = (
+    addtri!(x,y,z,i,j,k,verts[1:3]); addtri!(x,y,z,i,j,k,verts[[1,3,4]]))
+function addtri!(x,y,z,i,j,k,verts,args...)
+    for v in verts
+        push!(x, v[1]); push!(y, v[2]); push!(z, v[3])
     end
-    
-    # First column as x-axis
-    x_data = cols[1]
-    x_name = string(col_names[1])
-    
-    # Set x-axis label
-    xlabel --> x_name
-    
-    # Plot each remaining column as a separate series
-    for i in 2:length(col_names)
-        y_data = cols[i]
-        y_name = string(col_names[i])
         
-        @series begin
-            label --> y_name
-            x_data, y_data
-        end
-    end
+    # Connections for this triangle (0-indexed)
+    base = length(x)-3
+    push!(i, base); push!(j, base + 1); push!(k, base + 2)
 end
 end

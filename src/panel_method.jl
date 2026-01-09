@@ -95,15 +95,15 @@ Base.show(io::IO, sys::PanelSystem) = print(io, "PanelSystem($(length(sys.panels
 Base.show(io::IO, ::MIME"text/plain", sys::AbstractPanelSystem) = abstract_show(io,sys)
 function abstract_show(io,sys)
     show(io,sys);println()
-    println(io, "  total body area: $(body_area(sys))")
+    println(io, "  body area & volume: $(bodyarea(sys)), $(bodyvol(sys))")
     println(io, "  body panel type: $(eltype(sys.body.kernel))")
     println(io, "  free surface: $(!isnothing(sys.freesurf))")
     println(io, "  mirrors: $(sys.mirrors)")
     println(io, "  kwargs: $(sys.kwargs...)")
     println(io, "  strength extrema: $(extrema(sys.panels.q))")
 end
-body_area(sys) = sum(sys.body.dA)
-body_vol(sys) = sum(p.x'p.n * p.dA for p in sys.body) / 3
+bodyarea(sys) = sum(sys.body.dA)
+bodyvol(sys) = sum(p.x'p.n * p.dA for p in sys.body) / 3
 
 """
     Φ(x,sys)
@@ -161,7 +161,7 @@ solved Barnes-Hut panel tree.
 
 See also: [`cₚ`](@ref)
 """
-steadyforce(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->cₚ(x,sys;U),sys)/body_area(sys)
+steadyforce(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->cₚ(x,sys;U),sys)/bodyarea(sys)
 @inline function surface_integral(f,sys)
     body = sys.body
     init = neutral = zero(eltype(body.n))
@@ -171,7 +171,7 @@ steadyforce(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->cₚ(x,sys;U),sys
 end
 
 """
-    addedmass(sys; Uⱼ=-1, V=body_vol(sys))
+    addedmass(sys; Uⱼ=-1, V=bodyvol(sys))
 
 Added mass coefficient force vector `-∫ₛ Φⱼ/Uⱼ nᵢ da/V = mᵢⱼ/ρV` induced by a panel system,
 where `V` is the body volume. Computation is accelerated when Threads.nthreads()>1.
@@ -182,13 +182,13 @@ j=1:3 to fill in the full added mass matrix,
 
 See also: [`Φ`](@ref)
 """
-addedmass(sys;Uⱼ=-1,V=body_vol(sys)) = -surface_integral(Φ,sys)/abs(Uⱼ)/V
+addedmass(sys;Uⱼ=-1,V=bodyvol(sys)) = -surface_integral(Φ,sys)/abs(Uⱼ)/V
 """
     addedmass(panels::Table)
 
 Convenience function to fill in the full added mass matrix via direct solve.
 """
-function addedmass(panels::Table;sys=PanelSystem(panels),V=body_vol(sys))
+function addedmass(panels::Table;sys=PanelSystem(panels),V=bodyvol(sys))
     A = ∂ₙϕ.(panels,panels')
     B = panels.n |> stack # source _matrix_ over i=1,2,3
     Q = A\B'              # solution _matrix_ over i=1,2,3

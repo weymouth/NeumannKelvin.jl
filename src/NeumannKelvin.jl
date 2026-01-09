@@ -16,7 +16,7 @@ import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
 include("panel_method.jl")
 
 ## Green's functions and PanelSystem
-export ∫G,∂ₙϕ,PanelSystem
+export ∫G,∂ₙϕ,PanelSystem,bodyarea,bodyvol
 
 ## AbstractPanelSystem measurements
 export Φ,∇Φ,cₚ,steadyforce,addedmass,ζ

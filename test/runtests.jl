@@ -158,6 +158,25 @@ end
     @test -2minimum(f)>maximum(f) # trough is much bigger than crest
 end
 
+using NURBS,FileIO  # or whatever triggers the extension
+@testset "NURBS" begin
+    sphere = load(pkgdir(NURBS) * "/test/assets/sphere.stp")
+    # measure a whole patch as one panel
+    panel = measure(sphere[1],0.5,0.5,1.0,1.0)
+    @test panel.kernel isa NeumannKelvin.QuadKernel
+    @test panel.dA ≈ 4π/6 rtol=0.03
+
+    # panlize the whole sphere
+    panels = panelize(sphere,hᵤ=0.25)
+    @test all( 0.9 .< extrema(panels.dA) ./ 0.25^2 .< 4/3)
+
+    sys = directsolve!(PanelSystem(panels))
+    @test bodyarea(sys) ≈ 4π rtol=1e-5
+    @test bodyvol(sys) ≈ 4π/3 rtol=0.01
+    @test extreme_cₚ(sys) ≈ [-1.25,1] rtol=0.04
+    @test addedmass(panels) ≈ I/2 rtol=0.01
+end
+
 using GeometryBasics,FileIO  # or whatever triggers the extension
 @testset "GeometryBasics" begin
     panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
@@ -180,8 +199,8 @@ using GeometryBasics,FileIO  # or whatever triggers the extension
 
     sys = BarnesHut(panels)
     @test sys.bvh.leaves[1].volume isa ImplicitBVH.BBox # triggered correct BV
-    @test NeumannKelvin.body_area(sys) ≈ 957 rtol=1e-3
-    @test NeumannKelvin.body_vol(sys) ≈ 2475 rtol=3e-2
+    @test bodyarea(sys) ≈ 957 rtol=1e-3
+    @test bodyvol(sys) ≈ 2475 rtol=3e-2
 
     Ma = addedmass(panels,V=1)
     @test diag(Ma) ≈ fill(tr(Ma)/3,3) rtol=1e-4

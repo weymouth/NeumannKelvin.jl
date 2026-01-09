@@ -5,6 +5,7 @@ using NeumannKelvin,NURBS
 scalarize(patch) = (u, v) -> patch(u, v)[1]
 
 # Make sure exported panel functions use this wrapper
+NeumannKelvin.panelize(patches::AbstractArray{T},args...;kwargs...) where {T<: NURBSsurface} = mapreduce(patch->panelize(patch,args...;kwargs...),vcat,patches)
 NeumannKelvin.panelize(patch::NURBSsurface,args...;kwargs...) = panelize(scalarize(patch),args...;kwargs...)
-NeumannKelvin.measure_panel(patch::NURBSsurface,args...;kwargs...) = measure_panel(scalarize(patch),args...;kwargs...)
+NeumannKelvin.measure(patch::NURBSsurface,args...;kwargs...) = measure(scalarize(patch),args...;kwargs...)
 end

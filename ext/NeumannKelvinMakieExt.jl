@@ -8,8 +8,7 @@ function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=0.3panels.n,
 
     # Mesh geometry (vertices, normals, and colors)
     face = decompose(QuadFace{GLIndex},Tessellation(Rect(0,0,1,1),(2,2))) # 2x2 quad type
-    unwrap(a) = Point3f.(map(i->a[i],SA[1,2,4,3])) # flattens our 2x2 data counter-clockwise
-    quad(panel) = GeometryBasics.Mesh(unwrap(panel.xᵤᵥ), face, normal=unwrap(panel.nᵤᵥ))
+    quad(panel) = GeometryBasics.Mesh(Point3f.(panel.verts), face, normal=Point3f.(panel.nverts))  
     mesh!(ax, quad.(panels); color=values, colorrange=clims, kwargs...)
 
     # Normals & color bar

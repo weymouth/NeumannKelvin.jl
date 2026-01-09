@@ -60,8 +60,7 @@ velocity boundary condition `∂ₙϕ(pᵢ,pⱼ)*qⱼ = bᵢ` is satisfied on bo
 **Warning**: This function ignores sys.freesurf!
 
 **Note**: This function is memory (and therefore time) intensive for large number of
-panels N because it constructs the full N² matrix elements and calls a linear algebra
-routine that decomposes the matrix and solves for `q`.
+panels N because it constructs the full N² matrix elements.
 
 # Arguments
 - `sys`: Pre-constructed panel system (modified in-place)
@@ -69,7 +68,7 @@ routine that decomposes the matrix and solves for `q`.
 - `verbose=true`: Print warning and solve time
 
 # Returns
-Modified `sys` with updated panel strengths in `sys.body.q`
+Modified `sys` with updated body panel strengths `q`
 
 # Example
 ```julia
@@ -81,12 +80,17 @@ extrema(cₚ(sys))          # measure
 function directsolve!(sys::PanelSystem,b=components(sys.body.n,1);verbose=true)
     if verbose
         @warn "This routine ignores free surface panels and is memory intensive. See help?>directsolve!."
-        @time sys.body.q .= _direct(sys,b)
+        @time sys.body.q .= influence(sys)\b
     else
-        sys.body.q .= _direct(sys,b)
+        sys.body.q .= influence(sys)\b
     end;sys
 end
-function _direct((;body,mirrors,kwargs)::PanelSystem,b)
+function influence((;body,mirrors,kwargs)::PanelSystem)
     ϕ_sym(x,p) = sum(∫G(x .* m,p;kwargs...) for m in mirrors)
-    ∂ₙϕ.(body,body';ϕ=ϕ_sym)\b
+    A = Array{eltype(body.dA)}(undef,length(body),length(body))
+    AK.foraxes(A,2) do j
+        @simd for i in axes(A,1)
+            @inbounds A[i,j] = ∂ₙϕ(body[i],body[j];ϕ=ϕ_sym)
+        end
+    end; A
 end

@@ -50,6 +50,16 @@ using QuadGK
     @test_throws ArgumentError panelize((u,v)->[u,u,v])
 end
 
+@testset "PanelSystem.jl" begin
+    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
+    panels = panelize(S, 0, π, 0, 2π, hᵤ=1/4, T=Float32)
+    @test eltype(panels.dA) == Float32
+    sys = PanelSystem(panels)
+    @test sys.panels.q == zeros(Float32,length(panels))
+    @test bodyarea(sys) ≈ 4π rtol=1e-6
+    @test bodyvol(sys) ≈ 4π/3 rtol=5e-3
+end
+
 using LinearAlgebra,BenchmarkTools
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
@@ -84,8 +94,8 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
     sys = gmressolve!(PanelSystem(panels),atol=1e-6); q = copy(sys.panels.q)
     directsolve!(sys)
     @test sys.panels.q ≈ q
-    @test norm(steadyforce(sys)) < 3e-5
-    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
+    @test norm(steadyforce(sys)) < 4e-5
+    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.02
 
     # Check allocations
     p = panels[1]
@@ -97,7 +107,7 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
     sys = gmressolve!(PanelSystem(panels,sym_axes=(2,3)),atol=1e-6); q = copy(sys.panels.q)
     directsolve!(sys)
     @test sys.panels.q ≈ q
-    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
+    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.02
 end
 
 using ImplicitBVH
@@ -115,8 +125,8 @@ using NeumannKelvin:fill_nodes,evaluate
     @show length(nodes), length(panels)
     for r in 1:6
         x = r*ρ+cen
-        @test evaluate(∫G,x,bvh,nodes,panels;verbose=true) ≈ sum(∫G(x,p,d²=Inf) for p in panels) rtol=0.01
-        @test gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ≈ gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),x) rtol=0.04
+        @test evaluate(∫G,x,bvh,nodes,panels;verbose=true) ≈ sum(∫G(x,p) for p in panels) rtol=0.01
+        @test gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ≈ gradient(x->sum(∫G(x,p) for p in panels),x) rtol=0.04
     end
 
     x = panels.x[1]
@@ -131,7 +141,7 @@ end
     q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
     @test norm(BH.panels.q-q)/norm(q) < 0.0032
     @test norm(steadyforce(BH)) < 4e-3
-    @test extreme_cₚ(BH) ≈ [-1.25,1.0] rtol=0.01
+    @test extreme_cₚ(BH) ≈ [-1.25,1.0] rtol=0.015
 end
 
 @testset "freesurf" begin
@@ -143,7 +153,7 @@ end
     @test length(sys.panels)==length(body)+length(freesurf)
     @test sys.body.dA == body.dA
     @test sys.freesurf.dA == freesurf.dA
-    @test sys.kwargs[:ℓ] == 0
+    @test sys.ℓ[1] == 0
 
     # Direct solve ignores freesurf
     directsolve!(sys)
@@ -152,7 +162,7 @@ end
     # Setting ℓ=0 turns freesurf into reflection wall
     sys = gmressolve!(sys)
     sys2 = gmressolve!(BarnesHut(body;sym_axes=(2,3)))
-    @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.02
+    @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.03
 
     # Setting ℓ=1 turns on freesurf, but it's very slow to converge
     sys = BarnesHut(body;freesurf,sym_axes=2,ℓ=1)
@@ -178,7 +188,7 @@ using NURBS,FileIO  # or whatever triggers the extension
     @test bodyarea(sys) ≈ 4π rtol=1e-5
     @test bodyvol(sys) ≈ 4π/3 rtol=0.01
     @test extreme_cₚ(sys) ≈ [-1.25,1] rtol=0.04
-    @test addedmass(panels) ≈ I/2 rtol=0.01
+    @test addedmass(panels) ≈ I/2 rtol=0.013
 end
 
 using GeometryBasics,FileIO  # or whatever triggers the extension

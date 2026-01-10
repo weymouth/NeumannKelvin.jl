@@ -40,14 +40,14 @@ function gmressolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true,kwa
     set_q!(sys,q)
 end
 @inline set_q!(sys,q) = (sys.panels.q .= q; sys)
-@inline bc!(b::AbstractArray{T},sys,val=zero(T),h=0.3,hx=h*SA[1,0,0]) where T = AK.foreachindex(b) do i
+@inline bc!(b::AbstractArray{T},sys,h=0.3,hx=h*SA[1,0,0]) where T = AK.foreachindex(b) do i
     p = sys.panels[i]
     if p.fsbc # Φₙ - ℓ*Φₓₓ = 0
-        ℓ=sys.kwargs[:ℓ]
-        # b[i] = Φₙ(p,sys;val) - ℓ*(Φₓ(p.x+hx,sys;val)-Φₓ(p.x,sys;val))/h
-        b[i] = Φₙ(p,sys;val) - ℓ*(Φ(p.x,sys;val)-2Φ(p.x+hx,sys;val)+Φ(p.x+2hx,sys;val))/h^2
+        ℓ = sys.ℓ[1]
+        # b[i] = Φₙ(p,sys) - ℓ*(Φₓ(p.x+hx,sys)-Φₓ(p.x,sys))/h
+        b[i] = Φₙ(p,sys) - ℓ*(Φ(p.x,sys)-2Φ(p.x+hx,sys)+Φ(p.x+2hx,sys))/h^2
     else      # uₙ = -Uₙ
-        b[i] = Φₙ(p,sys;val)
+        b[i] = Φₙ(p,sys)
     end
 end
 
@@ -85,8 +85,8 @@ function directsolve!(sys::PanelSystem,b=components(sys.body.n,1);verbose=true)
         sys.body.q .= influence(sys)\b
     end;sys
 end
-function influence((;body,mirrors,kwargs)::PanelSystem)
-    ϕ_sym(x,p) = sum(∫G(x .* m,p;kwargs...) for m in mirrors)
+function influence((;body,mirrors)::PanelSystem)
+    ϕ_sym(x,p) = sum(∫G(x .* m,p) for m in mirrors)
     A = Array{eltype(body.dA)}(undef,length(body),length(body))
     AK.foraxes(A,2) do j
         @simd for i in axes(A,1)

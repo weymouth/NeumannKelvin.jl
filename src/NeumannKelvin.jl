@@ -11,15 +11,13 @@ Base.adjoint(t::Table) = permutedims(t)
 include("panels.jl")
 export measure,panelize
 
-# Panel method
+# PanelSystem
+include("PanelSystem.jl")
+export PanelSystem,bodyarea,bodyvol
+
 import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
 include("panel_method.jl")
-
-## Green's functions and PanelSystem
-export ∫G,∂ₙϕ,PanelSystem,bodyarea,bodyvol
-
-## AbstractPanelSystem measurements
-export Φ,∇Φ,cₚ,steadyforce,addedmass,ζ
+export ∫G,∂ₙϕ,Φ,∇Φ,cₚ,steadyforce,addedmass,ζ
 
 # Direct and matrix-free solver
 include("solvers.jl")

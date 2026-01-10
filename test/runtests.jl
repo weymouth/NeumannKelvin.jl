@@ -87,6 +87,11 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
     @test norm(steadyforce(sys)) < 3e-5
     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
 
+    # Check allocations
+    p = panels[1]
+    b = @benchmark Φ($p.x,$sys); @test minimum(b).allocs==0
+    b = @benchmark ∇Φ($p.x,$sys); @test minimum(b).allocs==0
+
     #check symmetry enforcement
     panels = panelize(S,0,π/2,0,π,hᵤ=0.12) # quarter plane
     sys = gmressolve!(PanelSystem(panels,sym_axes=(2,3)),atol=1e-6); q = copy(sys.panels.q)

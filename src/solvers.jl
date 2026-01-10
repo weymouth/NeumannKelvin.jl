@@ -86,7 +86,7 @@ function directsolve!(sys::PanelSystem,b=components(sys.body.n,1);verbose=true)
     end;sys
 end
 function influence((;body,mirrors)::PanelSystem)
-    ϕ_sym(x,p) = sum(∫G(x .* m,p) for m in mirrors)
+    ϕ_sym(x,p) = sum(m->∫G(x .* m,p),mirrors)
     A = Array{eltype(body.dA)}(undef,length(body),length(body))
     AK.foraxes(A,2) do j
         @simd for i in axes(A,1)

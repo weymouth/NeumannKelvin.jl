@@ -42,13 +42,8 @@ Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢ∫G(x,pᵢ)` induced by 
 
 See also: [`PanelSystem`](@ref)
 """
-Φ(x,sys) = sum(Φ_sys(x .* m,sys) for m in sys.mirrors)
-@inline function Φ_sys(x,(;panels)::AbstractPanelSystem)
-    val = zero(eltype(x))
-    @simd for pᵢ in panels
-        val += pᵢ.q*∫G(x,pᵢ)
-    end; val
-end
+Φ(x,sys) = sum(m->Φ_sys(x .* m,sys),sys.mirrors)
+@inline Φ_sys(x,(;panels)::AbstractPanelSystem) = sum(p->p.q*∫G(x,p),panels)
 Φₙ(p,sys) = derivative(t->Φ(p.x+t*p.n,sys),0) # WRT the panel normal
 Φₓ(x,sys) = derivative(t->Φ(x+t*SA[1,0,0],sys),0)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)

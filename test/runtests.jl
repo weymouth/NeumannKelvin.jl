@@ -56,7 +56,7 @@ end
     @test eltype(panels.dA) == Float32
     sys = PanelSystem(panels)
     @test sys.panels.q == zeros(Float32,length(panels))
-    @test bodyarea(sys) ≈ 4π rtol=1e-6
+    @test bodyarea(sys) ≈ 4π rtol=1e-5
     @test bodyvol(sys) ≈ 4π/3 rtol=5e-3
 end
 

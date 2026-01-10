@@ -119,10 +119,9 @@ using NeumannKelvin:fill_nodes,evaluate
         @test gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ≈ gradient(x->sum(∫G(x,p,d²=Inf) for p in panels),x) rtol=0.04
     end
 
-    stack = Vector{Int}(undef,bvh.tree.levels)
     x = panels.x[1]
-    b = @benchmark evaluate(∫G,$x,$bvh,$nodes,$panels,stack=$stack); @test minimum(b).allocs==0
-    b = @benchmark gradient(x->evaluate(∫G,x,$bvh,$nodes,$panels,stack=$stack),$x); @test minimum(b).allocs==0
+    b = @benchmark evaluate(∫G,$x,$bvh,$nodes,$panels); @test minimum(b).allocs==0
+    b = @benchmark gradient(x->evaluate(∫G,x,$bvh,$nodes,$panels),$x); @test minimum(b).allocs==0
 end
 
 @testset "BarnesHut.jl" begin

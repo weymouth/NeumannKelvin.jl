@@ -38,28 +38,37 @@ reldist(x,bb::BoundingVolume) = reldist(x,bb.volume)
 # Barnes-Hut kernel evaluation
 using ImplicitBVH: memory_index
 function evaluate(fnc,x,bvh,node_values,leaf_values;
-                  d²=4,stack=Vector{Int}(undef,bvh.tree.levels),
-                  val=zero(fnc(x,leaf_values[1])),verbose=false,ignore...)
+                  d²=4,val=zero(fnc(x,leaf_values[1])),verbose=false,ignore...)
     tree = bvh.tree; length_nodes = length(bvh.nodes)
-    top = 1; stack[top] = 1; node_count = leaf_count = 0
-    while top>0
-        i = stack[top]; top-=1
-        j = memory_index(tree,i)
+    i = 1; node_count = leaf_count = 0
+    while i>0
+        @inbounds j = memory_index(tree,i)
         if j ≤ length_nodes
-            if reldist(x,bvh.nodes[j])>d²
-                val += fnc(x,node_values[j])
+            if reldist(x,@inbounds bvh.nodes[j])>d²
+                val += fnc(x,@inbounds node_values[j])
                 verbose && (node_count+=1)
+                i = findsibling(i,tree)
             else
-                stack[top+=1] = 2i;
-                !unsafe_isvirtual(tree,2i+1) && (stack[top+=1] = 2i+1)
+                i = 2i # decend to child
             end
         else
-            val += fnc(x,leaf_values[bvh.leaves[j-length_nodes].index])
+            @inbounds j = bvh.leaves[j-length_nodes].index
+            val += fnc(x,@inbounds leaf_values[j])
             verbose && (leaf_count+=1)
+            i = findsibling(i,tree)
         end
     end
     verbose && println("evaluated: node count=$node_count, leaf count=$leaf_count")
     val
+end
+@inline function findsibling(i,tree)
+    while i>0
+        if iseven(i) && !unsafe_isvirtual(tree, i+1)
+            return i+1 # found a sibling
+        else
+            i = i >> 1 # go to parent and keep looking
+        end
+    end; return 0
 end
 
 # panel bounding-box

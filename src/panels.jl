@@ -40,7 +40,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
         verbose && @show i,S
         S ≤ 0.5hᵥ && return init               # not enough height
         ve = s⁻¹(range(0,S,round(Int,S/hᵥ)+1)) # panel endpoints
-        verbose && @show length(ve)
+        verbose && @show length(ve)-1
         v = 0.5*(ve[2:end]+ve[1:end-1])        # panel centers
         dv = ve[2:end]-ve[1:end-1]             # panel heights
 
@@ -104,21 +104,22 @@ locations and weights `xg,wg`. Panel corner data `vertices,nvertices` is used on
  - `flip=true` flips the panel to point the other way.
  - `cubature=true` uses an adaptive "h-cubature" for `dA,x,n`.
 """
-function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA[-1/√3,1/√3],wg=SA[1,1])
-    flip && return measure((v,u)->S(u,v),v,u,dv,du;cubature)
+function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3],wg=SA[1,1],T=Float64)
+    flip && return measure((v,u)->S(u,v),v,u,dv,du;cubature,Δg,wg,T)
+    u,v,du,dv = T.((u,v,du,dv))
     # get Gauss-points
-    x₄ = S.(u .+ 0.5du*Δg, v .+ 0.5dv*Δg')
-    n₄ = normal.(S, u .+ 0.5du*Δg, v .+ 0.5dv*Δg')
+    x₄ = S.(u .+ du*Δg/2, v .+ dv*Δg'/2)
+    n₄ = normal.(S, u .+ du*Δg/2, v .+ dv*Δg'/2)
     dA₄ = norm.(n₄).*(wg*wg')*du*dv/4 # area-scaled weights
     # get area
-    cube(f) = hcubature(f,SA[u-0.5du,v-0.5dv],SA[u+0.5du,v+0.5dv],rtol=0.01)[1]
+    cube(f) = hcubature(f,SA[u-du/2,v-dv/2],SA[u+du/2,v+dv/2],rtol=0.01)[1]
     dA = cubature ? cube(uv->norm(normal(S,uv...))) : sum(dA₄)
     # get centroid
     x = cubature ? cube(uv->S(uv...)*norm(normal(S,uv...)))/dA : sum(x₄ .* dA₄)/dA
     n = cubature ? normalize(cube(uv->normal(S,uv...))) : normalize(sum(n₄.*(wg*wg')))
     # get corners (only for pretty plots)
-    xᵤᵥ = S.(u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]')
-    nᵤᵥ = normalize.(normal.(S, u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]'))
+    xᵤᵥ = S.(u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2)
+    nᵤᵥ = normalize.(normal.(S, u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2))
     # combine everything into named tuple
     (x=x, n=n, dA=dA, xg=x₄, wg=dA₄ .* dA/sum(dA₄), verts=unwrap(xᵤᵥ), nverts=unwrap(nᵤᵥ), kernel=QuadKernel())
 end

@@ -37,38 +37,32 @@ reldist(x,bb::BoundingVolume) = reldist(x,bb.volume)
 
 # Barnes-Hut kernel evaluation
 using ImplicitBVH: memory_index
-function evaluate(fnc,x,bvh,node_values,leaf_values;
-                  d²=4,val=zero(fnc(x,leaf_values[1])),verbose=false,ignore...)
+function evaluate(fnc, x, bvh, node_values, leaf_values; d²=4,
+                  val=zero(fnc(x,leaf_values[1])), verbose=false)
     tree = bvh.tree; length_nodes = length(bvh.nodes)
-    i = 1; node_count = leaf_count = 0
-    while i>0
+    node_count = leaf_count = 0
+    # Depth-First-Search
+    i = 1; while true
         @inbounds j = memory_index(tree,i)
         if j ≤ length_nodes
+            # check if we can prune at this node
             if reldist(x,@inbounds bvh.nodes[j])>d²
                 val += fnc(x,@inbounds node_values[j])
                 verbose && (node_count+=1)
-                i = findsibling(i,tree)
-            else
-                i = 2i # decend to child
+            else # otherwise decend to child and continue
+                i = 2i; continue
             end
-        else
+        else # use the leaf value
             @inbounds j = bvh.leaves[j-length_nodes].index
             val += fnc(x,@inbounds leaf_values[j])
             verbose && (leaf_count+=1)
-            i = findsibling(i,tree)
         end
+        # get next sibling index
+        i = i>>trailing_ones(i)+1
+        (i==1 || unsafe_isvirtual(tree, i)) && break # search complete!
     end
     verbose && println("evaluated: node count=$node_count, leaf count=$leaf_count")
     val
-end
-@inline function findsibling(i,tree)
-    while i>0
-        if iseven(i) && !unsafe_isvirtual(tree, i+1)
-            return i+1 # found a sibling
-        else
-            i = i >> 1 # go to parent and keep looking
-        end
-    end; return 0
 end
 
 # panel bounding-box

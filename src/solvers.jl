@@ -30,25 +30,48 @@ extrema(cₚ(BH))         # measure
 ```
 """
 function gmressolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true,kwargs...)
-    # Make LinearOperator
+    # Make LinearOperators
     mult!(b,q) = (set_q!(sys,q); bc!(b,sys))
     A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
+    M = LinearOperator(eltype(b), length(b), length(b), false, false, (z,r)->precon!(z,sys,r))
 
     # Solve with GMRES and return updated BarnesHutBEM
-    q, stats = gmres(A, b, sys.panels.q; atol=convert(eltype(b),atol), kwargs...)
+    q, stats = gmres(A, b, sys.panels.q; M, atol=convert(eltype(b),atol), kwargs...)
     verbose && println(stats)
     set_q!(sys,q)
 end
 @inline set_q!(sys,q) = (sys.panels.q .= q; sys)
-@inline bc!(b::AbstractArray{T},sys,h=0.3,hx=h*SA[1,0,0]) where T = AK.foreachindex(b) do i
-    p = sys.panels[i]
-    if p.fsbc # Φₙ - ℓ*Φₓₓ = 0
-        ℓ = sys.ℓ[1]
-        # b[i] = Φₙ(p,sys) - ℓ*(Φₓ(p.x+hx,sys)-Φₓ(p.x,sys))/h
-        b[i] = Φₙ(p,sys) - ℓ*(Φ(p.x,sys)-2Φ(p.x+hx,sys)+Φ(p.x+2hx,sys))/h^2
-    else      # uₙ = -Uₙ
-        b[i] = Φₙ(p,sys)
+@inline function bc!(b,sys)
+    # body: Φₙ = -Uₙ
+    Nb = length(sys.body)
+    AK.foreachindex(view(b,1:length(sys.body))) do i
+        b[i] = Φₙ(sys.panels[i],sys)
     end
+    isnothing(sys.freesurf) && return
+
+    # freesurf: Φₙ-ℓ*Φₓₓ = 0
+    ℓ = sys.ℓ[1]
+    AK.foreachindex(view(b,1:length(sys.freesurf))) do j
+        i = j+Nb; p = sys.panels[i]
+        # b[i] = Φₙ(p,sys)-ℓ*derivative(t->Φₓ(p.x+t*SA[1,0,0],sys) # unstable & missing upwind bias
+        x⁺=sys.panels.x[i-1]; x⁺[1]<p.x[1] && (x⁺=2p.x-sys.panels.x[i+1])
+        x⁺⁺=sys.panels.x[i-2]; x⁺⁺[1]<x⁺[1] && (x⁺⁺=2x⁺-p.x)
+        x⁺⁺⁺=sys.panels.x[i-3]; x⁺⁺⁺[1]<x⁺⁺[1] && (x⁺⁺⁺=2x⁺⁺-x⁺)
+        h = (x⁺⁺[1]-p.x[1])/2
+        # b[i] = Φₙ(p,sys)-ℓ*(Φ(p.x,sys)-2Φ(x⁺,sys)+Φ(x⁺⁺,sys))/h^2 # too diffusive
+        b[i] = Φₙ(p,sys)-ℓ*(2Φ(p.x,sys)-5Φ(x⁺,sys)+4Φ(x⁺⁺,sys)-Φ(x⁺⁺⁺,sys))/h^2
+    end
+end
+function precon!(z,sys,r,T=eltype(z))
+    z .= r # identity preconditioner
+    isnothing(sys.freesurf) && return
+
+    # sweep resdual information downstream
+    Nᵢ,Nⱼ = sys.fssize; Nb = length(sys.body)
+    AK.foreachindex(view(z,1:Nⱼ)) do j
+    for i in (2:Nᵢ) .+ (Nb+(j-1)*Nᵢ)
+        @inbounds z[i] += z[i-1]
+    end;end
 end
 
 """

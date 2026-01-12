@@ -26,19 +26,27 @@ gmressolve!(sys, atol=1e-6)  # approximate solve - but still O(N²) operations!
 extrema(cₚ(sys))       # check solution quality
 ```
 """
-struct PanelSystem{T,B,F,M,L} <: AbstractPanelSystem
+struct PanelSystem{T,B,F,M,S,L} <: AbstractPanelSystem
     panels::T    # combined body & free surface table with q and fsbc columns
     body::B      # view of body panels
     freesurf::F  # view of free surface panels (or nothing)
     mirrors::M   # mirror contributions
+    fssize::S    # free-surface array size
     ℓ::L         # Froude-length
 end
 function PanelSystem(body; freesurf=nothing, sym_axes=(), ℓ=0)
     panels = add_columns(body, q=zero(eltype(body.dA)), fsbc=false)
-    !isnothing(freesurf) && (panels = [panels; add_columns(freesurf, q=zero(eltype(freesurf.dA)), fsbc=true)])
+    fssize=nothing
+    if !isnothing(freesurf)
+        @assert typeof(freesurf)<:AbstractMatrix
+        @assert freesurf[1,1].x[1]>freesurf[2,1].x[1] # i runs in -x direction
+        @assert freesurf[1,1].n[3]<0 # n points down into the fluid
+        fssize = size(freesurf)
+        panels = [panels; add_columns(Table(freesurf), q=zero(eltype(body.dA)), fsbc=true)]
+    end
     bview = @view panels[1:length(body)]
     fview = isnothing(freesurf) ? nothing : @view panels[length(body)+1:end]
-    PanelSystem(panels, bview, fview, mirrors(sym_axes...), [ℓ])
+    PanelSystem(panels, bview, fview, mirrors(sym_axes...), fssize, [ℓ])
 end
 PanelSystem(body,q::AbstractArray;kwargs...) = (sys = PanelSystem(body;kwargs...); sys.body.q .= q; sys)
 
@@ -60,10 +68,7 @@ function abstract_show(io,sys)
     show(io,sys);println()
     println(io, "  body area & volume: $(bodyarea(sys)), $(bodyvol(sys))")
     println(io, "  body panel type: $(eltype(sys.body.kernel))")
-    if !isnothing(sys.freesurf)
-        println(io, "  free surface panels: $(length(sys.freesurf))")
-        println(io, "  Froude length: ℓ=$(ℓ[1])")
-    end
+    !isnothing(sys.freesurf) && println(io, "  free surface: $(sys.fssize) panels with ℓ=U²/g=$(sys.ℓ[1])")
     println(io, "  mirrors: $(sys.mirrors)")
     println(io, "  strength extrema: $(extrema(sys.panels.q))")
 end

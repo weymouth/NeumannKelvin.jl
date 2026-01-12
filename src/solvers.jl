@@ -31,7 +31,8 @@ extrema(cₚ(BH))         # measure
 """
 function gmressolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true,kwargs...)
     # Make LinearOperators
-    mult!(b,q) = (set_q!(sys,q); bc!(b,sys))
+    p = isnothing(sys.freesurf) ? nothing : similar(b,length(sys.freesurf))
+    mult!(b,q) = (set_q!(sys,q); bodybc!(b,sys); !isnothing(p) && fsbc!(b,p,sys))
     A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
     M = LinearOperator(eltype(b), length(b), length(b), false, false, (z,r)->precon!(z,sys,r))
 
@@ -41,28 +42,17 @@ function gmressolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true,kwa
     set_q!(sys,q)
 end
 @inline set_q!(sys,q) = (sys.panels.q .= q; sys)
-@inline function bc!(b,sys)
-    # body: Φₙ = -Uₙ
-    Nb = length(sys.body)
-    AK.foreachindex(view(b,1:length(sys.body))) do i
-        b[i] = Φₙ(sys.panels[i],sys)
-    end
-    isnothing(sys.freesurf) && return
-
-    # freesurf: Φₙ-ℓ*Φₓₓ = 0
-    ℓ = sys.ℓ[1]
-    AK.foreachindex(view(b,1:length(sys.freesurf))) do j
-        i = j+Nb; p = sys.panels[i]
-        # b[i] = Φₙ(p,sys)-ℓ*derivative(t->Φₓ(p.x+t*SA[1,0,0],sys) # unstable & missing upwind bias
-        x⁺=sys.panels.x[i-1]; x⁺[1]<p.x[1] && (x⁺=2p.x-sys.panels.x[i+1])
-        x⁺⁺=sys.panels.x[i-2]; x⁺⁺[1]<x⁺[1] && (x⁺⁺=2x⁺-p.x)
-        x⁺⁺⁺=sys.panels.x[i-3]; x⁺⁺⁺[1]<x⁺⁺[1] && (x⁺⁺⁺=2x⁺⁺-x⁺)
-        h = (x⁺⁺[1]-p.x[1])/2
-        # b[i] = Φₙ(p,sys)-ℓ*(Φ(p.x,sys)-2Φ(x⁺,sys)+Φ(x⁺⁺,sys))/h^2 # too diffusive
-        b[i] = Φₙ(p,sys)-ℓ*(2Φ(p.x,sys)-5Φ(x⁺,sys)+4Φ(x⁺⁺,sys)-Φ(x⁺⁺⁺,sys))/h^2
+@inline bodybc!(b,sys) = AK.foreachindex(i-> b[i] = Φₙ(sys.panels[i],sys),b) # body: Φₙ = -Uₙ
+@inline function fsbc!(b,p,sys)   # freesurf: Φₙ-ℓ*Φₓₓ = 0
+    ℓ = sys.ℓ[1]; Nᵢ,Nⱼ = sys.fssize; Nb = length(sys.body)
+    AK.foreachindex(i-> p[i] = Φ(sys.freesurf.x[i],sys), p) # fill p->Φ
+    AK.foreachindex(p) do j  # add ℓΦₓₓ contribution
+        (j-1)%Nᵢ<3 && return     # too close to leading edge of freesurf
+        i = j+Nb; h = extent(view(sys.panels.x,i-1:i))[1]
+        @inbounds b[i] -=ℓ*(2p[j]-5p[j-1]+4p[j-2]-p[j-3])/h^2 # 3rd order upwind FD
     end
 end
-function precon!(z,sys,r,T=eltype(z))
+function precon!(z,sys,r)
     z .= r # identity preconditioner
     isnothing(sys.freesurf) && return
 

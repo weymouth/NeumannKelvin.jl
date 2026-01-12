@@ -27,7 +27,7 @@ extrema(cₚ(sys))       # check solution quality
 ```
 """
 struct PanelSystem{T,B,F,M,S,L} <: AbstractPanelSystem
-    panels::T    # combined body & free surface table with q and fsbc columns
+    panels::T    # combined body & free surface table with q column
     body::B      # view of body panels
     freesurf::F  # view of free surface panels (or nothing)
     mirrors::M   # mirror contributions
@@ -35,14 +35,14 @@ struct PanelSystem{T,B,F,M,S,L} <: AbstractPanelSystem
     ℓ::L         # Froude-length
 end
 function PanelSystem(body; freesurf=nothing, sym_axes=(), ℓ=0)
-    panels = add_columns(body, q=zero(eltype(body.dA)), fsbc=false)
+    panels = add_columns(body, q=zero(eltype(body.dA)))
     fssize=nothing
     if !isnothing(freesurf)
         @assert typeof(freesurf)<:AbstractMatrix
         @assert freesurf[1,1].x[1]>freesurf[2,1].x[1] # i runs in -x direction
         @assert freesurf[1,1].n[3]<0 # n points down into the fluid
         fssize = size(freesurf)
-        panels = [panels; add_columns(Table(freesurf), q=zero(eltype(body.dA)), fsbc=true)]
+        panels = [panels; add_columns(Table(freesurf), q=zero(eltype(body.dA)))]
     end
     bview = @view panels[1:length(body)]
     fview = isnothing(freesurf) ? nothing : @view panels[length(body)+1:end]

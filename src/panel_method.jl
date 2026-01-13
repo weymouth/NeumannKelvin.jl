@@ -83,7 +83,7 @@ function cₚ(sys;U=SVector(-1,0,0))
 end
 
 """
-    steadyforce(sys;U=SVector(-1,0,0))
+    steadyforce(sys; U=SVector(-1,0,0), S=bodyarea(sys))
 
 Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/S = Fᵢ/(½ρU²S)`, where `S` is
 the body panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using a
@@ -91,7 +91,7 @@ solved Barnes-Hut panel tree.
 
 See also: [`cₚ`](@ref)
 """
-steadyforce(sys;U=SVector(-1,0,0)) = surface_integral((x,sys)->cₚ(x,sys;U),sys)/bodyarea(sys)
+steadyforce(sys;U=SVector(-1,0,0),S=bodyarea(sys)) = surface_integral((x,sys)->cₚ(x,sys;U),sys)/S
 @inline function surface_integral(f,sys)
     body = sys.body
     init = neutral = zero(eltype(body.n))

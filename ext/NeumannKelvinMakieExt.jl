@@ -41,6 +41,6 @@ function viz!(ax::Axis3,sys,::Val{ζ}; kwargs...)
     x,y,_ = reshape.(components(sys.freesurf.x),Ref(sys.fssize))
     z = reshape(ζ(sys)*sys.ℓ[1],sys.fssize)
     ζmax  = maximum(abs, z); @. z[abs(z)<ζmax/20] = 0
-    surface!(ax,x,y,z;shading = NoShading, colormap = :balance, kwargs...)
+    surface!(ax,x,y,z;shading = NoShading, colormap = :balance, colorrange = (-ζmax,ζmax), kwargs...)
 end
 end

@@ -42,9 +42,11 @@ function PanelSystem(body; U = SA[-1,0,0], freesurf=nothing, sym_axes=(), ℓ=0)
     panels = add_columns(Table(body), q=zero(eltype(body.dA)))
     fssize=nothing
     if !isnothing(freesurf)
-        !(typeof(freesurf)<:AbstractMatrix && (freesurf[2,1].x-freesurf[1,1].x)'SA[-1,1,1]>0 && freesurf[1,1].n[3]<0) && 
-            throw(ArgumentError("`freesurf[i,j]` must be a matrix of panels with `i` aligned with -x and `n` pointing down."))
-        U'SA[-1,0,0]<0 && throw(ArgumentError("U must point in -x when using `freesurf`"))
+        !(typeof(freesurf)<:AbstractMatrix && freesurf[1,1].n[3]<0) && 
+            throw(ArgumentError("`freesurf` must be a Matrix of panels with `n` pointing down."))
+        dx = freesurf[2,1].x-freesurf[1,1].x
+        (dx[1]>-abs(dx[2]) || dx[3]≠0) && throw(ArgumentError("first index of `freesurf` must align with -x."))
+        U'SA[-1,0,0] < norm(U) && throw(ArgumentError("`U` must align with -x when using `freesurf`"))
         fssize = size(freesurf)
         panels = [panels; add_columns(Table(freesurf), q=zero(eltype(body.dA)))]
     end

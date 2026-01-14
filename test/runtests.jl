@@ -152,6 +152,7 @@ end
     @test_throws ArgumentError PanelSystem(body,freesurf=badsurf)
 
     h = 0.3; freesurf = measure.((u,v)->SA[u,v,0],2π:-h:-4π,(h/2:h:2π)',h,h,flip=true)
+    @test_throws ArgumentError PanelSystem(body;U=SA[0,1,0],freesurf)
     @test_throws ArgumentError PanelSystem(body,freesurf=Table(freesurf))
 
     sys = PanelSystem(body;freesurf,sym_axes=2,ℓ=0)

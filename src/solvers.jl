@@ -1,6 +1,6 @@
 using Krylov,LinearOperators
 """
-    gmressolve!(sys, b=components(sys.panels.n,1); atol=1e-3, verbose=true)
+    gmressolve!(sys; verbose=true, atol=1e-3, kwargs...)
 
 Approximately solves a panel system using GMRES iteration to satisfy the panel
 boundary conditions:
@@ -10,9 +10,8 @@ boundary conditions:
 
 # Arguments
 - `sys`: Pre-constructed panel system (modified in-place)
-- `b`: Right-hand side vector (default: `p.n[1]`, corresponding to `U=[-1,0,0]`)
-- `atol=1e-3`: Absolute tolerance for GMRES convergence
 - `verbose=true`: Print GMRES convergence statistics
+- `atol=1e-3, kwargs...`: Absolute tolerance and other arguments passed to gmres
 
 # Returns
 Modified `sys` with updated panel strengths `q`
@@ -29,8 +28,9 @@ gmressolve!(BH)         # approximate solve
 extrema(cₚ(BH))         # measure
 ```
 """
-function gmressolve!(sys,b=components(sys.panels.n,1);atol=1e-3,verbose=true,kwargs...)
+function gmressolve!(sys;atol=1e-3,verbose=true,kwargs...)
     # Make LinearOperators
+    b = similar(panels.q); @. b = -Ref(sys.U)'components(sys.panels.n)
     p = isnothing(sys.freesurf) ? nothing : similar(b,length(sys.freesurf))
     mult!(b,q) = (set_q!(sys,q); bodybc!(b,sys); !isnothing(p) && fsbc!(b,p,sys))
     A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
@@ -65,7 +65,7 @@ function precon!(z,sys,r)
 end
 
 """
-    directsolve!(sys, b=components(sys.body.n,1))
+    directsolve!(sys)
 
 Solve a panel system using a direct construction and solve such that the normal
 velocity boundary condition `∂ₙϕ(pᵢ,pⱼ)*qⱼ = bᵢ` is satisfied on body panels.
@@ -77,7 +77,6 @@ panels N because it constructs the full N² matrix elements.
 
 # Arguments
 - `sys`: Pre-constructed panel system (modified in-place)
-- `b`: Right-hand side vector (default: `p.n[1]`, corresponding to `U=[-1,0,0]`)
 - `verbose=true`: Print warning and solve time
 
 # Returns
@@ -90,7 +89,8 @@ directsolve!(sys)         # solve
 extrema(cₚ(sys))          # measure
 ```
 """
-function directsolve!(sys::PanelSystem,b=components(sys.body.n,1);verbose=true)
+function directsolve!(sys::PanelSystem;verbose=true)
+    b = similar(panels.q); @. b = -Ref(sys.U)'components(sys.panels.n)
     if verbose
         @warn "This routine ignores free surface panels and is memory intensive. See help?>directsolve!."
         @time sys.body.q .= influence(sys)\b

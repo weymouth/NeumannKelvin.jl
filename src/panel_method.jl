@@ -49,41 +49,41 @@ See also: [`PanelSystem`](@ref)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 
 """
-    ζ([x::SVector{3},] sys; U=1)
+    ζ([x::SVector{3},] sys)
 
-Scaled linear free surface elevation `ζ/ℓ=Φₓ/U` induced by **solved** panel system `sys`.
+Scaled linear free surface elevation `ζ/ℓ=Φₓ/|U|` induced by **solved** panel system `sys`.
 If no location `x` is given, a vector of ζ at all freesurf centers is returned.
 
 See also: [`Φ`](@ref)
 """
-ζ(x::SVector{3},sys;U=1) = Φₓ(x,sys)/abs(U)
-function ζ(sys;U=1)
+ζ(x::SVector{3},sys) = Φₓ(x,sys)/norm(sys.U)
+function ζ(sys)
     b = similar(sys.freesurf.q)
     AK.foreachindex(b) do i
-        b[i] = ζ(sys.freesurf.x[i],sys;U)
+        b[i] = ζ(sys.freesurf.x[i],sys)
     end; b
 end
 
 """
-    cₚ([x::SVector{3},] sys; U=SVector(-1,0,0))
+    cₚ([x::SVector{3},] sys)
 
-Measure the pressure coefficient cₚ = 1-u²/U², where `U` is the free stream velocity and
+Measure the pressure coefficient cₚ = 1-u²/U², where `U` is the background velocity and
 `u = U+∇Φ` is the flow velocity. If no location `x` is given, a vector of cₚ at all body
 centers is returned. Computation is accelerated when Threads.nthreads()>1 and/or when using
 a solved Barnes-Hut panel tree.
 
 See also: [`Φ`](@ref)
 """
-cₚ(x::SVector{3},sys;U=SVector(-1,0,0)) = 1-sum(abs2,U+∇Φ(x,sys))/sum(abs2,U)
-function cₚ(sys;U=SVector(-1,0,0))
+cₚ(x::SVector{3},sys) = 1-sum(abs2,sys.U+∇Φ(x,sys))/sum(abs2,U)
+function cₚ(sys)
     b = similar(sys.body.q)
     AK.foreachindex(b) do i
-        b[i] = cₚ(sys.body.x[i],sys;U)
+        b[i] = cₚ(sys.body.x[i],sys)
     end; b
 end
 
 """
-    steadyforce(sys; U=SVector(-1,0,0), S=bodyarea(sys))
+    steadyforce(sys; S=bodyarea(sys))
 
 Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/S = Fᵢ/(½ρU²S)`, where `S` is
 the body panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using a
@@ -91,7 +91,7 @@ solved Barnes-Hut panel tree.
 
 See also: [`cₚ`](@ref)
 """
-steadyforce(sys;U=SVector(-1,0,0),S=bodyarea(sys)) = surface_integral((x,sys)->cₚ(x,sys;U),sys)/S
+steadyforce(sys;S=bodyarea(sys)) = surface_integral(cₚ,sys)/S
 @inline function surface_integral(f,sys)
     body = sys.body
     init = neutral = zero(eltype(body.n))
@@ -101,7 +101,7 @@ steadyforce(sys;U=SVector(-1,0,0),S=bodyarea(sys)) = surface_integral((x,sys)->c
 end
 
 """
-    addedmass(sys; Uⱼ=-1, V=bodyvol(sys))
+    addedmass(sys; V=bodyvol(sys))
 
 Added mass coefficient force vector `-∫ₛ Φⱼ/Uⱼ nᵢ da/V = mᵢⱼ/ρV` induced by a panel system,
 where `V` is the body volume. Computation is accelerated when Threads.nthreads()>1.
@@ -112,14 +112,14 @@ j=1:3 to fill in the full added mass matrix,
 
 See also: [`Φ`](@ref)
 """
-addedmass(sys;Uⱼ=-1,V=bodyvol(sys)) = -surface_integral(Φ,sys)/abs(Uⱼ)/V
+addedmass(sys;V=bodyvol(sys)) = -surface_integral(Φ,sys)/norm(sys.U)/V
 """
     addedmass(panels::Table)
 
 Convenience function to fill in the full added mass matrix via direct solve.
 """
 function addedmass(panels::Table;sys=PanelSystem(panels),V=bodyvol(sys))
-    A = ∂ₙϕ.(panels,panels')
+    A = influence(sys)
     B = panels.n |> stack # source _matrix_ over i=1,2,3
     Q = A\B'              # solution _matrix_ over i=1,2,3
     map(j->addedmass(set_q!(sys,view(Q,:,j));V),1:3) |>stack

@@ -1,14 +1,17 @@
 abstract type AbstractPanelSystem end
 """
-    PanelSystem(body; freesurf=nothing, sym_axes=(), ℓ=0)
+    PanelSystem(body; U = SVector(-1,0,0), freesurf=nothing, sym_axes=(), ℓ=0)
 
 Represents a panel **system**, i.e., a set of panels with strengths `q` used to
 satisfy the boundary conditions for the Green's function `∫G(x,p)`.
 
 The system consists of:
-- `body`: Required body panel table
-- `freesurf`: Optional free surface panel table and Froude-length `l=U²/g`
-- `sym_axes`: Optional symmetry axes, see below
+- `body::Table`: body panels. *Note* all panel normals must point **into** the fluid region.
+- `U::SVector{3}`: Optional background flow vector. *Note* U must point in -x direction when using
+free surface panels.
+- `freesurf::Matrix`: Optional free surface panels and Froude-length `ℓ=U²/g`. *Note* 
+the first index of the matrix needs to align with -x. i.e. `freesurf.x[i+1,j]-freesurf.x[i,j] ≈ [-Δxᵢⱼ,0,0]`
+- `sym_axes::Int || Tuple`: Optional symmetry axes, see below.
 
 The combined panel table is stored in `sys.panels`, with views to the body and free
 surface portions available as `sys.body` and `sys.freesurf`. The strength `q` is
@@ -20,33 +23,34 @@ only one quarter of a centered & symmetric geometry needs to be covered in panel
 
 # Usage
 ```julia
-sys = PanelSystem(body_panels)                    # body only
-sys = PanelSystem(body_panels, freesurf_panels)   # body + free surface
+sys = PanelSystem(body_panels)             # body only
+sys = PanelSystem(body_panels; freesurf)   # body + free surface
 gmressolve!(sys, atol=1e-6)  # approximate solve - but still O(N²) operations!
 extrema(cₚ(sys))       # check solution quality
 ```
 """
-struct PanelSystem{T,B,F,M,S,L} <: AbstractPanelSystem
+struct PanelSystem{T,Ut,B,F,M,S,L} <: AbstractPanelSystem
     panels::T    # combined body & free surface table with q column
+    U::Ut        # Background velocity SVector
     body::B      # view of body panels
     freesurf::F  # view of free surface panels (or nothing)
     mirrors::M   # mirror contributions
     fssize::S    # free-surface array size
     ℓ::L         # Froude-length
 end
-function PanelSystem(body; freesurf=nothing, sym_axes=(), ℓ=0)
-    panels = add_columns(body, q=zero(eltype(body.dA)))
+function PanelSystem(body; U = SA[-1,0,0], freesurf=nothing, sym_axes=(), ℓ=0)
+    panels = add_columns(Table(body), q=zero(eltype(body.dA)))
     fssize=nothing
     if !isnothing(freesurf)
-        @assert typeof(freesurf)<:AbstractMatrix
-        @assert freesurf[1,1].x[1]>freesurf[2,1].x[1] # i runs in -x direction
-        @assert freesurf[1,1].n[3]<0 # n points down into the fluid
+        !(typeof(freesurf)<:AbstractMatrix && extent(freesurf.x[1:2,1])'SA[-1,1,1]>0 && freesurf[1,1].n[3]<0) && 
+            throw(ArgumentError("`freesurf[i,j]` must be a matrix of panels with `i` aligned with -x and `n` pointing down."))
+        U'SA[-1,0,0]<0 && throw(ArgumentError("U must point in -x when using `freesurf`"))
         fssize = size(freesurf)
         panels = [panels; add_columns(Table(freesurf), q=zero(eltype(body.dA)))]
     end
     bview = @view panels[1:length(body)]
     fview = isnothing(freesurf) ? nothing : @view panels[length(body)+1:end]
-    PanelSystem(panels, bview, fview, mirrors(sym_axes...), fssize, [ℓ])
+    PanelSystem(panels, U, bview, fview, mirrors(sym_axes...), fssize, [ℓ])
 end
 PanelSystem(body,q::AbstractArray;kwargs...) = (sys = PanelSystem(body;kwargs...); sys.body.q .= q; sys)
 
@@ -66,6 +70,7 @@ Base.show(io::IO, sys::PanelSystem) = print(io, "PanelSystem($(length(sys.panels
 Base.show(io::IO, ::MIME"text/plain", sys::AbstractPanelSystem) = abstract_show(io,sys)
 function abstract_show(io,sys)
     show(io,sys);println()
+    println(io, "  background flow: $(sys.U)")
     println(io, "  body area & volume: $(bodyarea(sys)), $(bodyvol(sys))")
     println(io, "  body panel type: $(eltype(sys.body.kernel))")
     !isnothing(sys.freesurf) && println(io, "  free surface: $(sys.fssize) panels with ℓ=U²/g=$(sys.ℓ[1])")

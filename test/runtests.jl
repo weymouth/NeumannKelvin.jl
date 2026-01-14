@@ -91,7 +91,7 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    sys = gmressolve!(PanelSystem(panels),atol=1e-6); q = copy(sys.panels.q)
+    sys = gmressolve!(PanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.panels.q)
     directsolve!(sys)
     @test sys.panels.q ≈ q
     @test norm(steadyforce(sys)) < 4e-5
@@ -147,7 +147,13 @@ end
 @testset "freesurf" begin
     S(θ₁,θ₂,Z=-1.1) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)+Z] # just below z=0
     body = panelize(S,0,π,0,π,hᵤ=1/4)
+    
+    badsurf = measure.((u,v)->SA[u,v,0],-4:1:2,(1/2:1:2)',1,1,flip=true)
+    @test_throws ArgumentError PanelSystem(body,freesurf=badsurf)
+
     h = 0.3; freesurf = measure.((u,v)->SA[u,v,0],2π:-h:-4π,(h/2:h:2π)',h,h,flip=true)
+    @test_throws ArgumentError PanelSystem(body,freesurf=Table(freesurf))
+
     sys = PanelSystem(body;freesurf,sym_axes=2,ℓ=0)
     @test length(sys.panels)==length(body)+length(freesurf)
     @test sys.body.dA == body.dA

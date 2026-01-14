@@ -4,8 +4,8 @@ using Krylov,LinearOperators
 
 Approximately solves a panel system using GMRES iteration to satisfy the panel
 boundary conditions:
- - On body panels, the normal velocity condition `Φₙ(xᵢ,sys) = bᵢ = -U⋅n`
- - On free surface panels, Φₙ(xᵢ,sys)+sys.ℓ*Φₓₓ(xᵢ,sys) = 0`, where `ℓ=U²/g` is the
+ - On body panels, the normal velocity condition `Φₙ(xᵢ,sys) = -U⋅nᵢ`
+ - On free surface panels, Φₙ(xᵢ,sys)-ℓ*Φₓₓ(xᵢ,sys) = 0`, where `ℓ=U²/g` is the
  Foude length.
 
 # Arguments
@@ -30,7 +30,7 @@ extrema(cₚ(BH))         # measure
 """
 function gmressolve!(sys;atol=1e-3,verbose=true,kwargs...)
     # Make LinearOperators
-    b = similar(panels.q); @. b = -Ref(sys.U)'components(sys.panels.n)
+    b = rhs(sys.panels,sys.U)
     p = isnothing(sys.freesurf) ? nothing : similar(b,length(sys.freesurf))
     mult!(b,q) = (set_q!(sys,q); bodybc!(b,sys); !isnothing(p) && fsbc!(b,p,sys))
     A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
@@ -41,6 +41,7 @@ function gmressolve!(sys;atol=1e-3,verbose=true,kwargs...)
     verbose && println(stats)
     set_q!(sys,q)
 end
+@inline rhs(panels,U) = -sum(components(panels.n) .* U)
 @inline set_q!(sys,q) = (sys.panels.q .= q; sys)
 @inline bodybc!(b,sys) = AK.foreachindex(i-> b[i] = Φₙ(sys.panels[i],sys),b) # body: Φₙ = -Uₙ
 @inline function fsbc!(b,p,sys)   # freesurf: Φₙ-ℓ*Φₓₓ = 0
@@ -68,11 +69,11 @@ end
     directsolve!(sys)
 
 Solve a panel system using a direct construction and solve such that the normal
-velocity boundary condition `∂ₙϕ(pᵢ,pⱼ)*qⱼ = bᵢ` is satisfied on body panels.
+velocity boundary condition `∂ₙϕ(pᵢ,pⱼ)*qⱼ = -U⋅nᵢ` is satisfied on body panels.
 
 **Warning**: This function ignores sys.freesurf!
 
-**Note**: This function is memory (and therefore time) intensive for large number of
+*Note*: This function is memory (and therefore time) intensive for large number of
 panels N because it constructs the full N² matrix elements.
 
 # Arguments
@@ -90,12 +91,11 @@ extrema(cₚ(sys))          # measure
 ```
 """
 function directsolve!(sys::PanelSystem;verbose=true)
-    b = similar(panels.q); @. b = -Ref(sys.U)'components(sys.panels.n)
     if verbose
         @warn "This routine ignores free surface panels and is memory intensive. See help?>directsolve!."
-        @time sys.body.q .= influence(sys)\b
+        @time sys.body.q .= influence(sys)\rhs(sys.body,sys.U)
     else
-        sys.body.q .= influence(sys)\b
+        sys.body.q .= influence(sys)\rhs(sys.body,sys.U)
     end;sys
 end
 function influence((;body,mirrors)::PanelSystem)

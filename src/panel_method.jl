@@ -74,7 +74,7 @@ a solved Barnes-Hut panel tree.
 
 See also: [`Φ`](@ref)
 """
-cₚ(x::SVector{3},sys) = 1-sum(abs2,sys.U+∇Φ(x,sys))/sum(abs2,U)
+cₚ(x::SVector{3},sys) = 1-sum(abs2,sys.U+∇Φ(x,sys))/sum(abs2,sys.U)
 function cₚ(sys)
     b = similar(sys.body.q)
     AK.foreachindex(b) do i

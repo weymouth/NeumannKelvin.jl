@@ -7,6 +7,9 @@ Base.adjoint(t::Table) = permutedims(t)
 @reexport using ForwardDiff: derivative,gradient
 @reexport using LinearAlgebra: ×,⋅,tr,norm
 
+# Quadrature functions & utilities
+include("quad.jl")
+
 # Panel set-up
 include("panels.jl")
 export measure,panelize
@@ -27,6 +30,10 @@ export gmressolve!,directsolve!
 include("BarnesHutCore.jl")
 include("BarnesHut.jl")
 export BarnesHut
+
+# Kelvin Green function definitions
+include("kelvin.jl")
+export kelvin
 
 # Plotting fallback
 """

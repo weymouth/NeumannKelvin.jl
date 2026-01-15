@@ -27,18 +27,20 @@ extrema(cₚ(sys))          # measure
 """
 function gmressolve!(sys;atol=1e-3,verbose=true,kwargs...)
     # Make LinearOperators
-    b = rhs(sys.panels,sys.U)
-    mult!(b,q) = (set_q!(sys,q); bodybc!(b,sys))
+    b,q = rhs(sys),get_q(sys)
+    mult!(b,q) = (set_q!(sys,q); bc!(b,sys))
     A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
     M = LinearOperator(eltype(b), length(b), length(b), false, false, (z,r)->precon!(z,sys,r))
 
     # Solve with GMRES and return updated PanelSystem
-    q, stats = gmres(A, b, sys.panels.q; M, atol=convert(eltype(b),atol), kwargs...)
+    q, stats = gmres(A, b, q; M, atol=convert(eltype(b),atol), kwargs...)
     verbose && println(stats)
     set_q!(sys,q)
 end
+@inline rhs(sys) = rhs(sys.body,sys.U)
 @inline rhs(panels,U) = -sum(components(panels.n) .* U)
-@inline bodybc!(b,sys) = AK.foreachindex(i-> b[i] = Φₙ(sys.panels[i],sys),b) # body: Φₙ = -Uₙ
+@inline get_q(sys) = sys.body.q
+@inline bc!(b,sys) = AK.foreachindex(i-> b[i] = Φₙ(sys.body[i],sys),b) # body: Φₙ = -Uₙ
 @inline precon!(z,sys,r) = z .= r # identity
 """
     directsolve!(sys)
@@ -66,17 +68,17 @@ extrema(cₚ(sys))               # measure
 function directsolve!(sys;verbose=true)
     if verbose
         @warn "This routine ignores free surface panels and is memory intensive. See help?>directsolve!."
-        @time sys.panels.q .= influence(sys)\rhs(sys.panels,sys.U)
+        @time sys.body.q .= influence(sys)\rhs(sys.body,sys.U)
     else
-        sys.panels.q .= influence(sys)\rhs(sys.panels,sys.U)
+        sys.body.q .= influence(sys)\rhs(sys.body,sys.U)
     end;sys
 end
-function influence((;panels,mirrors)::AbstractPanelSystem)
+function influence((;body,mirrors)::AbstractPanelSystem)
     ϕ_sym(x,p) = sum(m->∫G(x .* m,p),mirrors)
-    A = Array{eltype(panels.dA)}(undef,length(panels),length(panels))
+    A = Array{eltype(body.dA)}(undef,length(body),length(body))
     AK.foraxes(A,2) do j
         @simd for i in axes(A,1)
-            @inbounds A[i,j] = ∂ₙϕ(panels[i],panels[j];ϕ=ϕ_sym)
+            @inbounds A[i,j] = ∂ₙϕ(body[i],body[j];ϕ=ϕ_sym)
         end
     end; A
 end

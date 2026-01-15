@@ -2,12 +2,13 @@ abstract type AbstractPanelSystem end
 """
     BodyPanelSystem(panels,q=zeros; U = SVector(-1,0,0), sym_axes=(), wrap=identity)
 
-Represents a panel **system**, i.e., a set of panels with strengths `q` used to
+Represents a panel **system**, i.e., a set of `panels` with strengths `q` used to
 satisfy the boundary conditions for the Green's function `∫G(x,p)`.
 
 The system consists of:
-- `panels::Table`: body panels. *Note* all panel normals must point **into** the fluid region.
-- `q::Vector` which is added as a column to `panels`.
+- `panels::Table`: panels defining the body geometry. *Note* all panel normals must 
+point **into** the fluid region.
+- `q::Vector` which is added as a column to `sys.body`.
 - `U::SVector{3}`: Optional background flow vector.
 - `sym_axes::Int || Tuple`: Optional symmetry axes, see below.
 - `wrap::Function` panel data wrapper, such as PanelTree.
@@ -24,14 +25,13 @@ extrema(cₚ(sys))                   # check solution quality
 ```
 """
 struct BodyPanelSystem{P,T,M} <: AbstractPanelSystem
-    panels::P       # body panels
+    body::P         # body panels
     U::SVector{3,T} # Background velocity SVector
     mirrors::M      # mirror contributions
 end
-function BodyPanelSystem(body; U = SA[-1,0,0], sym_axes=(), wrap=identity)
-    body = Table(body; q=zeros_like(body.dA))
-    BodyPanelSystem(wrap(body), U, mirrors(sym_axes...))
-end
+BodyPanelSystem(body; U = SA[-1,0,0], sym_axes=(), wrap=identity) =
+    BodyPanelSystem(snug(body,wrap), U, mirrors(sym_axes...))
+snug(table,wrap) = Table(table; q=zeros_like(table.dA)) |> wrap
 zeros_like(array::AbstractArray) = (a = similar(array); a .= 0; a)
 @inline function mirrors(axes...)
     M = length(axes)
@@ -40,19 +40,19 @@ end
 
 # Set the strength
 BodyPanelSystem(panels,q::AbstractArray;kwargs...) = set_q!(BodyPanelSystem(panels;kwargs...),q)
-@inline set_q!(sys::AbstractPanelSystem,q) = (set_q!(sys.panels,q); sys)
+@inline set_q!(sys::AbstractPanelSystem,q) = (set_q!(sys.body,q); sys)
 @inline set_q!(table::Table,q) = table.q .= q
 
 # Pretty printing
-Base.show(io::IO, sys::BodyPanelSystem) = print(io, "BodyPanelSystem($(length(sys.panels)) panels")
+Base.show(io::IO, sys::BodyPanelSystem) = print(io, "BodyPanelSystem($(length(sys.body)) panels")
 Base.show(io::IO, ::MIME"text/plain", sys::AbstractPanelSystem) = abstract_show(io,sys)
 function abstract_show(io,sys)
     show(io,sys);println()
     println(io, "  body area & volume: $(bodyarea(sys)), $(bodyvol(sys))")
-    println(io, "  body panel type: $(eltype(sys.panels.kernel))")
+    println(io, "  body panel type: $(eltype(sys.body.kernel))")
     println(io, "  background flow: $(sys.U)")
     println(io, "  mirrors: $(sys.mirrors)")
-    println(io, "  strength extrema: $(extrema(sys.panels.q))")
+    println(io, "  strength extrema: $(extrema(sys.body.q))")
 end
-bodyarea(sys) = sum(sys.panels.dA)
-bodyvol(sys) = sum(p->p.x'p.n * p.dA,sys.panels) / 3
+bodyarea(sys) = sum(sys.body.dA)
+bodyvol(sys) = sum(p->p.x'p.n * p.dA,sys.body) / 3

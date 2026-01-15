@@ -31,6 +31,10 @@ include("BarnesHutCore.jl")
 include("PanelTree.jl")
 export PanelTree
 
+# Free-surface panel system
+include("FSPanelSystem.jl")
+export FSPanelSystem,ζ
+
 # Kelvin Green function definitions
 include("kelvin.jl")
 export kelvin

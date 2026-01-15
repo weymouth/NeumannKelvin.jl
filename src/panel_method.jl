@@ -40,7 +40,7 @@ Normal velocity influence of panel `pⱼ` on `pᵢ`.
 
 Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢ∫G(x,pᵢ)` induced by **solved** panel system `sys`.
 """
-Φ(x,sys) = sum(m->Φ_dom(x .* m,sys.panels),sys.mirrors)
+Φ(x,sys) = sum(m->Φ_dom(x .* m,sys.body),sys.mirrors)
 @inline Φ_dom(x,panels) = sum(p->p.q*∫G(x,p),panels)
 Φₙ(p,sys) = derivative(t->Φ(p.x+t*p.n,sys),0) # WRT the panel normal
 Φₓ(x,sys) = derivative(t->Φ(x+t*SA[1,0,0],sys),0)
@@ -57,9 +57,9 @@ See also: [`Φ`](@ref)
 """
 cₚ(x::SVector{3},sys) = 1-sum(abs2,sys.U+∇Φ(x,sys))/sum(abs2,sys.U)
 function cₚ(sys)
-    b = similar(sys.panels.q)
+    b = similar(sys.body.q)
     AK.foreachindex(b) do i
-        b[i] = cₚ(sys.panels.x[i],sys)
+        b[i] = cₚ(sys.body.x[i],sys)
     end; b
 end
 
@@ -73,8 +73,8 @@ See also: [`cₚ`](@ref)
 """
 steadyforce(sys;S=bodyarea(sys)) = surface_integral(cₚ,sys)/S
 @inline function surface_integral(f,sys)
-    init = neutral = zero(eltype(sys.panels.n))
-    AK.mapreduce(+, sys.panels, AK.get_backend(sys.panels.q); init, neutral) do p
+    init = neutral = zero(eltype(sys.body.n))
+    AK.mapreduce(+, sys.body, AK.get_backend(sys.body.q); init, neutral) do p
         f(p.x,sys) * p.n * p.dA
     end
 end

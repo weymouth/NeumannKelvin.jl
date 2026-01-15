@@ -10,7 +10,7 @@ The system consists of:
 - `q::Vector` which is added as a column to `panels`.
 - `U::SVector{3}`: Optional background flow vector.
 - `sym_axes::Int || Tuple`: Optional symmetry axes, see below.
-- `wrap::Function` panel data wrapper, such as BarnesHut.
+- `wrap::Function` panel data wrapper, such as PanelTree.
 
 Setting `sym_axes` imposes symmetry conditions on the solution using the method of
 images. For example, `sym_axes=(2,3)` mirrors each contribution across `y=0,z=0`, so

@@ -1,7 +1,7 @@
-# Accumulate leaf values onto nodes
+# aggregate leaf values onto nodes
 using ImplicitBVH
 using ImplicitBVH: level_indices,pow2,unsafe_isvirtual
-function accumulate!(node_values, leaf_values, bvh)
+function aggregate!(node_values, leaf_values, bvh)
     tree = bvh.tree; levels = tree.levels
     # leaf level
     leaf = 0
@@ -22,7 +22,7 @@ function accumulate!(node_values, leaf_values, bvh)
     end
     node_values
 end
-accumulate(leaf_values,bvh) = accumulate!(similar(leaf_values,length(bvh.nodes)), leaf_values, bvh)
+aggregate(leaf_values,bvh) = aggregate!(similar(leaf_values,length(bvh.nodes)), leaf_values, bvh)
 
 # Relative squared-distance from bounding volumes
 using ImplicitBVH: BBox, BSphere, BoundingVolume
@@ -37,7 +37,7 @@ reldist(x,bb::BoundingVolume) = reldist(x,bb.volume)
 
 # Barnes-Hut kernel evaluation
 using ImplicitBVH: memory_index
-function evaluate(fnc, x, bvh, node_values, leaf_values; d²=4,
+function treesum(fnc, x, bvh, node_values, leaf_values; θ²=4,
                   val=zero(fnc(x,leaf_values[1])), verbose=false)
     tree = bvh.tree; length_nodes = length(bvh.nodes)
     node_count = leaf_count = 0
@@ -46,7 +46,7 @@ function evaluate(fnc, x, bvh, node_values, leaf_values; d²=4,
         @inbounds j = memory_index(tree,i)
         if j ≤ length_nodes
             # check if we can prune at this node
-            if reldist(x,@inbounds bvh.nodes[j])>d²
+            if reldist(x,@inbounds bvh.nodes[j])>θ²
                 val += fnc(x,@inbounds node_values[j])
                 verbose && (node_count+=1)
             else # otherwise decend to child and continue

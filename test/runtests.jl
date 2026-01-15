@@ -142,7 +142,7 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 end
 
 using ImplicitBVH
-using NeumannKelvin:fill_nodes,evaluate,accumulate!
+using NeumannKelvin:fill_nodes,treesum,aggregate!
 @testset "BarnesHutCore.jl" begin
     cen = SA[0,0,1]
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
@@ -151,30 +151,30 @@ using NeumannKelvin:fill_nodes,evaluate,accumulate!
     nodes = fill_nodes(panels,bvh)
     @test nodes.dA[1]≈sum(panels.dA)
     @test nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
-    b = @benchmark accumulate!($nodes.dA,$panels.dA,$bvh); @test minimum(b).allocs==0
+    b = @benchmark aggregate!($nodes.dA,$panels.dA,$bvh); @test minimum(b).allocs==0
 
     ρ = panels.x[length(panels)÷3]-cen
     @show length(nodes), length(panels)
     for r in 1:6
         x = r*ρ+cen
-        @test evaluate(∫G,x,bvh,nodes,panels;verbose=true) ≈ sum(∫G(x,p) for p in panels) rtol=0.01
-        @test gradient(x->evaluate(∫G,x,bvh,nodes,panels),x) ≈ gradient(x->sum(∫G(x,p) for p in panels),x) rtol=0.04
+        @test treesum(∫G,x,bvh,nodes,panels;verbose=true) ≈ sum(∫G(x,p) for p in panels) rtol=0.01
+        @test gradient(x->treesum(∫G,x,bvh,nodes,panels),x) ≈ gradient(x->sum(∫G(x,p) for p in panels),x) rtol=0.04
     end
 
     x = panels.x[1]
-    b = @benchmark evaluate(∫G,$x,$bvh,$nodes,$panels); @test minimum(b).allocs==0
-    b = @benchmark gradient(x->evaluate(∫G,x,$bvh,$nodes,$panels),$x); @test minimum(b).allocs==0
+    b = @benchmark treesum(∫G,$x,$bvh,$nodes,$panels); @test minimum(b).allocs==0
+    b = @benchmark gradient(x->treesum(∫G,x,$bvh,$nodes,$panels),$x); @test minimum(b).allocs==0
 end
 
-@testset "BarnesHut.jl" begin
+@testset "PanelTree.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12); N = length(panels)
-    BH = BarnesHut(Table(panels;q=rand(N)))
+    BH = PanelTree(Table(panels;q=rand(N)))
     q = zeros(N)
     b = @benchmark NeumannKelvin.set_q!($BH,$q); @test minimum(b).allocs==0
     @test BH.q == q
 
-    sys = gmressolve!(BodyPanelSystem(panels,wrap=BarnesHut))
+    sys = gmressolve!(BodyPanelSystem(panels,wrap=PanelTree))
     q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
     @test norm(sys.panels.q-q)/norm(q) < 0.0032
     @test norm(steadyforce(sys)) < 4e-3
@@ -203,11 +203,11 @@ end
 
 #     # Setting ℓ=0 turns freesurf into reflection wall
 #     sys = gmressolve!(sys)
-#     sys2 = gmressolve!(BarnesHut(body;sym_axes=(2,3)))
+#     sys2 = gmressolve!(PanelTree(body;sym_axes=(2,3)))
 #     @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.03
 
 #     # Setting ℓ=1 turns on freesurf, but it's very slow to converge
-#     sys = BarnesHut(body;freesurf,sym_axes=2,ℓ=1)
+#     sys = PanelTree(body;freesurf,sym_axes=2,ℓ=1)
 #     gmressolve!(sys,itmax=160) # should converge...
 #     @test steadyforce(sys)[1] > 0.1 # non-zero drag!
 #     f = ζ(sys)
@@ -305,7 +305,7 @@ using GeometryBasics,FileIO  # or whatever triggers the extension
     @test eltype(panels.kernel)==ext.TriKernel
     @test all([p.n'p.x>0 for p in panels]) # all outward facing
 
-    sys = BodyPanelSystem(panels,wrap=BarnesHut)
+    sys = BodyPanelSystem(panels,wrap=PanelTree)
     @test sys.panels.bvh.leaves[1].volume isa ImplicitBVH.BBox # triggered correct BV
     @test bodyarea(sys) ≈ 957 rtol=1e-3
     @test bodyvol(sys) ≈ 2475 rtol=3e-2

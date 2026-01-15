@@ -20,16 +20,16 @@ export BodyPanelSystem,bodyarea,bodyvol
 
 import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
 include("panel_method.jl")
-export ∫G,∂ₙϕ,Φ,∇Φ,cₚ,steadyforce,addedmass,ζ
+export ∫G,∂ₙϕ,Φ,∇Φ,cₚ,steadyforce,addedmass
 
 # Direct and matrix-free solver
 include("solvers.jl")
 export gmressolve!,directsolve!
 
-# Barnes-Hut functions and panel tree system
+# Barnes-Hut functions and PanelTree wrapper
 include("BarnesHutCore.jl")
-include("BarnesHut.jl")
-export BarnesHut
+include("PanelTree.jl")
+export PanelTree
 
 # Kelvin Green function definitions
 include("kelvin.jl")

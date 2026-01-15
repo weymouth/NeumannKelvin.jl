@@ -8,7 +8,7 @@ source(x,a) = -1/norm(x-a)
 Monopole Green's function for a source panel `p`.
 """
 ∫G_kernel(x,p,args...) = p.dA*source(x,p.x)
-""" ∫G_kernel(ξ,p,::QuadKernel;d²=4) = ∑ᵢ wgᵢ*source(ξ,xgᵢ)
+""" ∫G_kernel(ξ,p,::QuadKernel) = ∑ᵢ wgᵢ*source(ξ,xgᵢ)
 
 Gauss quadrature over source panel `p`.
 """
@@ -39,8 +39,6 @@ Normal velocity influence of panel `pⱼ` on `pᵢ`.
     Φ(x,sys)
 
 Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢ∫G(x,pᵢ)` induced by **solved** panel system `sys`.
-
-See also: [`PanelSystem`](@ref)
 """
 Φ(x,sys) = sum(m->Φ_dom(x .* m,sys.panels),sys.mirrors)
 @inline Φ_dom(x,panels) = sum(p->p.q*∫G(x,p),panels)
@@ -49,28 +47,11 @@ See also: [`PanelSystem`](@ref)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 
 """
-    ζ([x::SVector{3},] sys)
-
-Scaled linear free surface elevation `ζ/ℓ=Φₓ/|U|` induced by **solved** panel system `sys`.
-If no location `x` is given, a vector of ζ at all freesurf centers is returned.
-
-See also: [`Φ`](@ref)
-"""
-ζ(x::SVector{3},sys) = Φₓ(x,sys)/norm(sys.U)
-function ζ(sys)
-    b = similar(sys.freesurf.q)
-    AK.foreachindex(b) do i
-        b[i] = ζ(sys.freesurf.x[i],sys)
-    end; b
-end
-
-"""
     cₚ([x::SVector{3},] sys)
 
 Measure the pressure coefficient cₚ = 1-u²/U², where `U` is the background velocity and
 `u = U+∇Φ` is the flow velocity. If no location `x` is given, a vector of cₚ at all body
-centers is returned. Computation is accelerated when Threads.nthreads()>1 and/or when using
-a solved Barnes-Hut panel tree.
+centers is calculated and is accelerated when Threads.nthreads()>1.
 
 See also: [`Φ`](@ref)
 """
@@ -86,8 +67,7 @@ end
     steadyforce(sys; S=bodyarea(sys))
 
 Integrated steady pressure force coefficient vector `∫ₛ cₚ nᵢ da/S = Fᵢ/(½ρU²S)`, where `S` is
-the body panel area. Computation is accelerated when Threads.nthreads()>1 and/or when using a
-solved Barnes-Hut panel tree.
+the body panel area. Computation is accelerated when Threads.nthreads()>1.
 
 See also: [`cₚ`](@ref)
 """

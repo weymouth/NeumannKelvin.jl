@@ -20,9 +20,9 @@ and Statistical Computing, 7(3), 856-869.
 
 # Example
 ```julia
-BH = BarnesHut(panels)  # set-up
-gmressolve!(BH)         # approximate solve
-extrema(cₚ(BH))         # measure
+sys = BodyPanelSystem(panels,wrap=PanelTree)  # set-up
+gmressolve!(sys)         # approximate solve
+extrema(cₚ(sys))          # measure
 ```
 """
 function gmressolve!(sys;atol=1e-3,verbose=true,kwargs...)
@@ -32,7 +32,7 @@ function gmressolve!(sys;atol=1e-3,verbose=true,kwargs...)
     A = LinearOperator(eltype(b), length(b), length(b), false, false, mult!)
     M = LinearOperator(eltype(b), length(b), length(b), false, false, (z,r)->precon!(z,sys,r))
 
-    # Solve with GMRES and return updated BarnesHutBEM
+    # Solve with GMRES and return updated PanelSystem
     q, stats = gmres(A, b, sys.panels.q; M, atol=convert(eltype(b),atol), kwargs...)
     verbose && println(stats)
     set_q!(sys,q)

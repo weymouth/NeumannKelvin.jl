@@ -13,7 +13,7 @@ function accumulate!(node_values, leaf_values, bvh)
 
     # node levels
     for level in levels-2:-1:1
-        parent,child = @inbounds bvh.skips[level:level+1]
+        parent,child = @inbounds bvh.skips[level],bvh.skips[level+1]
         for i in pow2(level-1):pow2(level) - 1 - (child-parent)
             @inbounds node_values[i-parent] = node_values[2i-child]
             unsafe_isvirtual(tree,2i+1) && continue

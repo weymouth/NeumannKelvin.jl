@@ -14,9 +14,9 @@ include("quad.jl")
 include("panels.jl")
 export measure,panelize
 
-# PanelSystem
-include("PanelSystem.jl")
-export PanelSystem,bodyarea,bodyvol
+# BodyPanelSystem
+include("BodyPanelSystem.jl")
+export BodyPanelSystem,bodyarea,bodyvol
 
 import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
 include("panel_method.jl")

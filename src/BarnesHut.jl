@@ -1,59 +1,59 @@
 """
-    BarnesHut(panels::Table,q=zeros;d²=4,kwargs...)
+    BarnesHut(panels::Table;d²=4)
 
 Creates a Barnes-Hut tree structure from a set of `panels` that enables O(log N)
 evaluation of the panel influence instead of O(N). This is a huge speed-up for N≥O(100).
-**Note** System should be solved using a matrix-free method like `gmresSolve!`.
-
-# All the `PanelSystem` fields _plus_
-- `nodes::Table`: Aggregated node values in the binary tree
-- `bvh::BVH`: Bounding volume hierarchy of the panels and nodes
-- `d²=4`: Barnes-Hut distance cutoff. The node monopole is used once `|x-bb|²/bb.R² > d²`
-where `bb` is the node's Bounding-Box. `d²=Inf` would (inefficiently) evaluate all panels.
+The node monopole is used once `|x-bb|²/bb.R² > d²` where `bb` is the node's Bounding-Box. 
+Setting `d²=Inf` would (inefficiently) evaluate all panels.
 
 # Example
 ```julia
 using NeumannKelvin
 S(θ,φ) = SA[sin(θ)*cos(φ), sin(θ)*sin(φ), cos(θ)]
 panels = panelize(S, 0, π, 0, 2π, hᵤ=1/50, N_max=3214) # quite a few panels
-BH = BarnesHut(panels); gmressolve!(BH)
+BH = BodyPanelSystem(BarnesHut(panels)); gmressolve!(BH)
 ```
-
-See also: [`PanelSystem`](@ref)
 """
-struct BarnesHut{P<:PanelSystem, B, N, D} <: AbstractPanelSystem
-    sys::P
+struct BarnesHut{T, P<:Table, B, N, D} <: AbstractVector{T}
+    panels::P
     bvh::B
     nodes::N
     d²::D
+    BarnesHut(panels::P, bvh::B, nodes::N, d²::D) where {P<:Table,B,N,D} = 
+        new{eltype(panels), P, B, N, D}(panels, bvh, nodes, d²)
 end
-function BarnesHut(args...;d²=4,kwargs...)
-    sys = PanelSystem(args...;kwargs...)
-    bvh = BVH(BoundingVolume.(sys.panels))
-    BarnesHut(sys,bvh,fill_nodes(sys.panels,bvh),d²)
+function BarnesHut(panels;d²=4)
+    bvh = BVH(map(BoundingVolume,panels))
+    BarnesHut(panels,bvh,fill_nodes(panels,bvh),d²)
 end
 struct MonoKernel <: GreenKernel end
 function fill_nodes(panels,bvh)  # nodes only have monopole properties
     dA = accumulate(panels.dA,bvh)
     x = accumulate(panels.dA .* panels.x, bvh) ./ dA
     n = normalize.(accumulate(panels.dA .* panels.n, bvh))
-    add_columns(Table(;x,n,dA), q=zero(eltype(dA)), kernel=MonoKernel())
+    Table(;x,n,dA,q=zeros_like(dA),kernel=fill(MonoKernel(),length(dA)))
 end
 
 # Overload properties
-Base.getproperty(f::BarnesHut, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sys, s)
-Base.setproperty!(f::BarnesHut, s::Symbol, x) = s in propertynames(f) ? setproperty!(f,s,x) : setproperty!(f.sys,s,x)
+Base.getproperty(f::BarnesHut, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getproperty(f.panels, s)
+Base.setproperty!(f::BarnesHut, s::Symbol, x) = s in propertynames(f) ? error("BarnesHut is immutable") : setproperty!(f.panels,s,x)
+for f in [:size, :getindex, :setindex!]
+    @eval @inline Base.@propagate_inbounds Base.$f(bh::BarnesHut, args...; kwargs...) = $f(bh.panels, args...; kwargs...)
+end
 
 # Overload printing
 Base.show(io::IO, BH::BarnesHut) = print(io, "BarnesHut($(length(BH.panels)) panels, $(BH.bvh.tree.levels) levels, d²: $(BH.d²))")
 function Base.show(io::IO, ::MIME"text/plain", BH::BarnesHut)
-    abstract_show(io,BH); println(io, "  bounds: $(BH.bvh.nodes[1].lo) to $(BH.bvh.nodes[1].up)")
+    show(io,BH); println(io,"")
+    println(io, "  bounds: $(BH.bvh.nodes[1].lo) to $(BH.bvh.nodes[1].up)")
+    println(io, "Panel type: $(eltype(BH.kernel))")
 end
 
 # Overload the two key functions, setting q and evaluating Φ!!
 @inline function set_q!(BH::BarnesHut,q)
-    BH.panels.q .= q
-    accumulate!(BH.nodes.q,BH.panels.dA .* q,BH.bvh); BH.nodes.q ./= BH.nodes.dA
-    BH
+    BH.q .= q .* BH.dA # set Q = q*dA on leaves
+    accumulate!(BH.nodes.q,BH.q,BH.bvh) # accumulate
+    BH.nodes.q ./= BH.nodes.dA # scale back to q
+    BH.q .= q; BH     # reset leaf values
 end
-@inline Φ_sys(x,(;panels,nodes,bvh,d²)::BarnesHut) = evaluate((x,p)->p.q*∫G(x,p),x,bvh,nodes,panels;val=zero(eltype(x)),d²)
+@inline Φ_dom(x,(;panels,nodes,bvh,d²)::BarnesHut) = evaluate((x,p)->p.q*∫G(x,p),x,bvh,nodes,panels;val=zero(eltype(x)),d²)

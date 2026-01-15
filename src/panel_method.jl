@@ -42,8 +42,8 @@ Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢ∫G(x,pᵢ)` induced by 
 
 See also: [`PanelSystem`](@ref)
 """
-Φ(x,sys) = sum(m->Φ_sys(x .* m,sys),sys.mirrors)
-@inline Φ_sys(x,(;panels)::AbstractPanelSystem) = sum(p->p.q*∫G(x,p),panels)
+Φ(x,sys) = sum(m->Φ_dom(x .* m,sys.panels),sys.mirrors)
+@inline Φ_dom(x,panels) = sum(p->p.q*∫G(x,p),panels)
 Φₙ(p,sys) = derivative(t->Φ(p.x+t*p.n,sys),0) # WRT the panel normal
 Φₓ(x,sys) = derivative(t->Φ(x+t*SA[1,0,0],sys),0)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
@@ -76,9 +76,9 @@ See also: [`Φ`](@ref)
 """
 cₚ(x::SVector{3},sys) = 1-sum(abs2,sys.U+∇Φ(x,sys))/sum(abs2,sys.U)
 function cₚ(sys)
-    b = similar(sys.body.q)
+    b = similar(sys.panels.q)
     AK.foreachindex(b) do i
-        b[i] = cₚ(sys.body.x[i],sys)
+        b[i] = cₚ(sys.panels.x[i],sys)
     end; b
 end
 
@@ -93,9 +93,8 @@ See also: [`cₚ`](@ref)
 """
 steadyforce(sys;S=bodyarea(sys)) = surface_integral(cₚ,sys)/S
 @inline function surface_integral(f,sys)
-    body = sys.body
-    init = neutral = zero(eltype(body.n))
-    AK.mapreduce(+, body, AK.get_backend(body.q); init, neutral) do p
+    init = neutral = zero(eltype(sys.panels.n))
+    AK.mapreduce(+, sys.panels, AK.get_backend(sys.panels.q); init, neutral) do p
         f(p.x,sys) * p.n * p.dA
     end
 end
@@ -118,8 +117,8 @@ addedmass(sys;V=bodyvol(sys)) = -surface_integral(Φ,sys)/norm(sys.U)/V
 
 Convenience function to fill in the full added mass matrix via direct solve.
 """
-function addedmass(panels::Table;sys=PanelSystem(panels),V=bodyvol(sys))
-    A = influence(sys)
+function addedmass(panels::Table;sys=BodyPanelSystem(panels),V=bodyvol(sys))
+    A = ∂ₙϕ.(panels,panels')
     B = panels.n |> stack # source _matrix_ over i=1,2,3
     Q = A\B'              # solution _matrix_ over i=1,2,3
     map(j->addedmass(set_q!(sys,view(Q,:,j));V),1:3) |>stack

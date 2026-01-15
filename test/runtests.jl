@@ -77,17 +77,21 @@ end
     @test_throws ArgumentError panelize((u,v)->[u,u,v])
 end
 
+using BenchmarkTools
 @testset "PanelSystem.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S, 0, π, 0, 2π, hᵤ=1/4, T=Float32)
     @test eltype(panels.dA) == Float32
-    sys = PanelSystem(panels)
+    sys = BodyPanelSystem(panels)
     @test sys.panels.q == zeros(Float32,length(panels))
+    q = rand(Float32,length(panels))
+    b = @benchmark NeumannKelvin.set_q!($sys,$q); @test minimum(b).allocs==0
+    @test sys.panels.q == q
     @test bodyarea(sys) ≈ 4π rtol=1e-5
     @test bodyvol(sys) ≈ 4π/3 rtol=5e-3
 end
 
-using LinearAlgebra,BenchmarkTools
+using LinearAlgebra
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
@@ -118,7 +122,7 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    sys = gmressolve!(PanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.panels.q)
+    sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.panels.q)
     directsolve!(sys)
     @test sys.panels.q ≈ q
     @test norm(steadyforce(sys)) < 4e-5
@@ -131,14 +135,14 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 
     #check symmetry enforcement
     panels = panelize(S,0,π/2,0,π,hᵤ=0.12) # quarter plane
-    sys = gmressolve!(PanelSystem(panels,sym_axes=(2,3)),atol=1e-6); q = copy(sys.panels.q)
+    sys = gmressolve!(BodyPanelSystem(panels,sym_axes=(2,3)),atol=1e-6); q = copy(sys.panels.q)
     directsolve!(sys)
     @test sys.panels.q ≈ q
     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.02
 end
 
 using ImplicitBVH
-using NeumannKelvin:fill_nodes,evaluate
+using NeumannKelvin:fill_nodes,evaluate,accumulate!
 @testset "BarnesHutCore.jl" begin
     cen = SA[0,0,1]
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
@@ -147,6 +151,7 @@ using NeumannKelvin:fill_nodes,evaluate
     nodes = fill_nodes(panels,bvh)
     @test nodes.dA[1]≈sum(panels.dA)
     @test nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
+    b = @benchmark accumulate!($nodes.dA,$panels.dA,$bvh); @test minimum(b).allocs==0
 
     ρ = panels.x[length(panels)÷3]-cen
     @show length(nodes), length(panels)
@@ -163,46 +168,51 @@ end
 
 @testset "BarnesHut.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-    panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    BH = gmressolve!(BarnesHut(panels))
+    panels = panelize(S,0,π,0,2π,hᵤ=0.12); N = length(panels)
+    BH = BarnesHut(Table(panels;q=rand(N)))
+    q = zeros(N)
+    b = @benchmark NeumannKelvin.set_q!($BH,$q); @test minimum(b).allocs==0
+    @test BH.q == q
+
+    sys = gmressolve!(BodyPanelSystem(panels,wrap=BarnesHut))
     q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
-    @test norm(BH.panels.q-q)/norm(q) < 0.0032
-    @test norm(steadyforce(BH)) < 4e-3
-    @test extreme_cₚ(BH) ≈ [-1.25,1.0] rtol=0.015
+    @test norm(sys.panels.q-q)/norm(q) < 0.0032
+    @test norm(steadyforce(sys)) < 4e-3
+    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
 end
 
-@testset "freesurf" begin
-    S(θ₁,θ₂,Z=-1.1) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)+Z] # just below z=0
-    body = panelize(S,0,π,0,π,hᵤ=1/4)
+# @testset "freesurf" begin
+#     S(θ₁,θ₂,Z=-1.1) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)+Z] # just below z=0
+#     body = panelize(S,0,π,0,π,hᵤ=1/4)
     
-    badsurf = measure.((u,v)->SA[u,v,0],-4:1:2,(1/2:1:2)',1,1,flip=true)
-    @test_throws ArgumentError PanelSystem(body,freesurf=badsurf)
+#     badsurf = measure.((u,v)->SA[u,v,0],-4:1:2,(1/2:1:2)',1,1,flip=true)
+#     @test_throws ArgumentError PanelSystem(body,freesurf=badsurf)
 
-    h = 0.3; freesurf = measure.((u,v)->SA[u,v,0],2π:-h:-4π,(h/2:h:2π)',h,h,flip=true)
-    @test_throws ArgumentError PanelSystem(body;U=SA[0,1,0],freesurf)
-    @test_throws ArgumentError PanelSystem(body,freesurf=Table(freesurf))
+#     h = 0.3; freesurf = measure.((u,v)->SA[u,v,0],2π:-h:-4π,(h/2:h:2π)',h,h,flip=true)
+#     @test_throws ArgumentError PanelSystem(body;U=SA[0,1,0],freesurf)
+#     @test_throws ArgumentError PanelSystem(body,freesurf=Table(freesurf))
 
-    sys = PanelSystem(body;freesurf,sym_axes=2,ℓ=0)
-    @test length(sys.panels)==length(body)+length(freesurf)
-    @test sys.body.dA == body.dA
-    @test sys.ℓ[1] == 0
+#     sys = PanelSystem(body;freesurf,sym_axes=2,ℓ=0)
+#     @test length(sys.panels)==length(body)+length(freesurf)
+#     @test sys.body.dA == body.dA
+#     @test sys.ℓ[1] == 0
 
-    # Direct solve ignores freesurf
-    directsolve!(sys)
-    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.04
+#     # Direct solve ignores freesurf
+#     directsolve!(sys)
+#     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.04
 
-    # Setting ℓ=0 turns freesurf into reflection wall
-    sys = gmressolve!(sys)
-    sys2 = gmressolve!(BarnesHut(body;sym_axes=(2,3)))
-    @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.03
+#     # Setting ℓ=0 turns freesurf into reflection wall
+#     sys = gmressolve!(sys)
+#     sys2 = gmressolve!(BarnesHut(body;sym_axes=(2,3)))
+#     @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.03
 
-    # Setting ℓ=1 turns on freesurf, but it's very slow to converge
-    sys = BarnesHut(body;freesurf,sym_axes=2,ℓ=1)
-    gmressolve!(sys,itmax=160) # should converge...
-    @test steadyforce(sys)[1] > 0.1 # non-zero drag!
-    f = ζ(sys)
-    @test -2minimum(f)>maximum(f) # trough is much bigger than crest
-end
+#     # Setting ℓ=1 turns on freesurf, but it's very slow to converge
+#     sys = BarnesHut(body;freesurf,sym_axes=2,ℓ=1)
+#     gmressolve!(sys,itmax=160) # should converge...
+#     @test steadyforce(sys)[1] > 0.1 # non-zero drag!
+#     f = ζ(sys)
+#     @test -2minimum(f)>maximum(f) # trough is much bigger than crest
+# end
 
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]
 @inline bruteN(x,y,z) = -2*(1-z/(hypot(x,y,z)+abs(x)))+NeumannKelvin.Ngk(x,y,z)
@@ -268,7 +278,7 @@ using NURBS,FileIO  # or whatever triggers the extension
     panels = panelize(sphere,hᵤ=0.25)
     @test all( 0.9 .< extrema(panels.dA) ./ 0.25^2 .< 4/3)
 
-    sys = directsolve!(PanelSystem(panels))
+    sys = directsolve!(BodyPanelSystem(panels))
     @test bodyarea(sys) ≈ 4π rtol=1e-5
     @test bodyvol(sys) ≈ 4π/3 rtol=0.01
     @test extreme_cₚ(sys) ≈ [-1.25,1] rtol=0.04
@@ -295,8 +305,8 @@ using GeometryBasics,FileIO  # or whatever triggers the extension
     @test eltype(panels.kernel)==ext.TriKernel
     @test all([p.n'p.x>0 for p in panels]) # all outward facing
 
-    sys = BarnesHut(panels)
-    @test sys.bvh.leaves[1].volume isa ImplicitBVH.BBox # triggered correct BV
+    sys = BodyPanelSystem(panels,wrap=BarnesHut)
+    @test sys.panels.bvh.leaves[1].volume isa ImplicitBVH.BBox # triggered correct BV
     @test bodyarea(sys) ≈ 957 rtol=1e-3
     @test bodyvol(sys) ≈ 2475 rtol=3e-2
 

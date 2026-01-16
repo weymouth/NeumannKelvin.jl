@@ -57,9 +57,23 @@ See also: [`Φ`](@ref)
 cₚ(x::SVector{3},sys) = 1-sum(abs2,sys.U+∇Φ(x,sys))/sum(abs2,sys.U)
 function cₚ(sys)
     b = similar(sys.body.q)
-    AK.foreachindex(b) do i
-        b[i] = cₚ(sys.body.x[i],sys)
-    end; b
+    AK.foreachindex(i-> b[i] = cₚ(sys.body.x[i],sys), b)
+    b
+end
+
+"""
+    u([x::SVector{3},] sys)
+
+Measure the velocity vector `u = U+∇Φ`. If no location `x` is given, a vector of 
+u at all body centers is calculated and is accelerated when Threads.nthreads()>1.
+
+See also: [`Φ`](@ref)
+"""
+u(x::SVector{3},sys) = sys.U+∇Φ(x,sys)
+function u(sys)
+    b = similar(sys.body.x)
+    AK.foreachindex(i-> b[i] = u(sys.body.x[i],sys),b)
+    b
 end
 
 """

@@ -20,7 +20,7 @@ export BodyPanelSystem,bodyarea,bodyvol
 
 import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
 include("panel_method.jl")
-export ∫G,∂ₙϕ,Φ,∇Φ,cₚ,steadyforce,addedmass
+export ∫G,∂ₙϕ,Φ,∇Φ,u,cₚ,steadyforce,addedmass
 
 # Direct and matrix-free solver
 include("solvers.jl")

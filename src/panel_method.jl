@@ -54,12 +54,9 @@ centers is calculated and is accelerated when Threads.nthreads()>1.
 
 See also: [`Φ`](@ref)
 """
-cₚ(x::SVector{3},sys) = 1-sum(abs2,sys.U+∇Φ(x,sys))/sum(abs2,sys.U)
-function cₚ(sys)
-    b = similar(sys.body.q)
-    AK.foreachindex(i-> b[i] = cₚ(sys.body.x[i],sys), b)
-    b
-end
+cₚ(x::SVector{3},sys) = 1-sum(abs2,u(x,sys))/sum(abs2,sys.U)
+cₚ(sys) = mapbody!(cₚ,similar(sys.body.q),sys)
+mapbody!(f,b,sys) = (AK.foreachindex(i-> b[i] = f(sys.body.x[i],sys), b); b)
 
 """
     u([x::SVector{3},] sys)
@@ -70,11 +67,7 @@ u at all body centers is calculated and is accelerated when Threads.nthreads()>1
 See also: [`Φ`](@ref)
 """
 u(x::SVector{3},sys) = sys.U+∇Φ(x,sys)
-function u(sys)
-    b = similar(sys.body.x)
-    AK.foreachindex(i-> b[i] = u(sys.body.x[i],sys),b)
-    b
-end
+u(sys) = mapbody!(u,similar(sys.body.x),sys)
 
 """
     steadyforce(sys; S=bodyarea(sys))
@@ -111,7 +104,7 @@ addedmass(sys;V=bodyvol(sys)) = -surface_integral(Φ,sys)/norm(sys.U)/V
 Convenience function to fill in the full added mass matrix via direct solve.
 """
 function addedmass(panels::Table;sys=BodyPanelSystem(panels),V=bodyvol(sys))
-    A = ∂ₙϕ.(panels,panels')
+    A = influence(sys)
     B = panels.n |> stack # source _matrix_ over i=1,2,3
     Q = A\B'              # solution _matrix_ over i=1,2,3
     map(j->addedmass(set_q!(sys,view(Q,:,j));V),1:3) |>stack

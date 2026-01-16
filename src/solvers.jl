@@ -39,7 +39,6 @@ function gmressolve!(sys;atol=1e-3,verbose=true,kwargs...)
 end
 @inline rhs(sys) = rhs(sys.body,sys.U)
 @inline rhs(panels,U) = -sum(components(panels.n) .* U)
-@inline get_q(sys) = sys.body.q
 @inline bc!(b,sys) = AK.foreachindex(i-> b[i] = Φₙ(sys.body[i],sys),b) # body: Φₙ = -Uₙ
 @inline precon!(z,sys,r) = z .= r # identity
 """
@@ -48,8 +47,11 @@ end
 Solve a panel system using a direct construction and solve such that the normal
 velocity boundary condition `∂ₙϕ(pᵢ,pⱼ)*qⱼ = -U⋅nᵢ` is satisfied on body panels.
 
+**Note**: This function does not apply the FSBC and therefore ignores body panels.
+
 *Note*: This function is memory (and therefore time) intensive for large number of
-panels N because it constructs the full N² matrix elements.
+panels N because it constructs the full N² matrix elements. It is *not* accelerated
+with a PanelTree, but *is* accelerated when Threads.nthreads()>1.
 
 # Arguments
 - `sys`: Pre-constructed panel system (modified in-place)
@@ -66,12 +68,12 @@ extrema(cₚ(sys))               # measure
 ```
 """
 function directsolve!(sys;verbose=true)
-    if verbose
+    q = if verbose
         @warn "This routine ignores free surface panels and is memory intensive. See help?>directsolve!."
-        @time sys.body.q .= influence(sys)\rhs(sys.body,sys.U)
+        @time influence(sys)\rhs(sys.body,sys.U)
     else
-        sys.body.q .= influence(sys)\rhs(sys.body,sys.U)
-    end;sys
+        influence(sys)\rhs(sys.body,sys.U)
+    end; set_q!(sys.body,q); sys
 end
 function influence((;body,mirrors)::AbstractPanelSystem)
     ϕ_sym(x,p) = sum(m->∫G(x .* m,p),mirrors)

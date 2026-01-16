@@ -43,7 +43,6 @@ Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da' = ∑ᵢqᵢ∫G(x,pᵢ)` induced by 
 Φ(x,sys) = sum(m->Φ_dom(x .* m,sys.body),sys.mirrors)
 @inline Φ_dom(x,panels) = sum(p->p.q*∫G(x,p),panels)
 Φₙ(p,sys) = derivative(t->Φ(p.x+t*p.n,sys),0) # WRT the panel normal
-Φₓ(x,sys) = derivative(t->Φ(x+t*SA[1,0,0],sys),0)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 
 """

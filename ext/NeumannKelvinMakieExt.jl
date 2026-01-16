@@ -5,13 +5,13 @@ import NeumannKelvin: viz,viz!,AbstractPanelSystem,QuadKernel
 
 # Default wrappers
 function viz(sys::BodyPanelSystem;vscale=1)
-    v = u(sys); U² = sum(abs2,sys.U); cp = @. 1-sum(abs2,v)/U²
-    viz(sys.body, cp; vectors=v, vscale, label="cₚ")
+    vectors = u(sys); U² = sum(abs2,sys.U); cp = @. 1-sum(abs2,vectors)/U²
+    viz(sys.body, cp; vectors, vscale, label="cₚ")
 end
 function viz(sys::FSPanelSystem)
     fig=Figure(); ax=Axis3(fig[1,1], aspect=:data)
-    v = u(sys); U² = sum(abs2,sys.U); cp = @. 1-sum(abs2,v)/U²
-    cpp = viz!(ax,sys.body, cp; vectors=v)
+    vectors = u(sys); U² = sum(abs2,sys.U); cp = @. 1-sum(abs2,vectors)/U²
+    cpp = viz!(ax,sys.body, cp; vectors)
     Colorbar(fig[1,2],cpp;label="cₚ")
     zeta = viz!(ax,sys,Val(ζ))
     Colorbar(fig[1,3],zeta;label="ζ")

@@ -181,14 +181,15 @@ end
     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
 end
 
+function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,kwargs...)
+    S(θ₁,θ₂) = SA[0.5L*cos(θ₁),-r*sin(θ₂)*sin(θ₁),r*cos(θ₂)*sin(θ₁)+Z]
+    panelize(S,0,π,0,π,hᵤ=h*√AR,hᵥ=h/√AR;kwargs...)
+end
+function halfplane(L::T,ℓ;hᵤ=0.3ℓ,hᵥ=hᵤ,s=L/2+2π*ℓ) where T
+    measure.((u,v)->SA[u,v,0],s:-hᵤ:-2s,(hᵥ/2:hᵥ:4s/3)',hᵤ,hᵥ,flip=true;T)
+end
 @testset "FSPanelSystem.jl" begin
-    S(θ₁,θ₂,Z=-1.1) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)+Z] # just below z=0
-    body = panelize(S,0,π,0,π,hᵤ=1/4)
-    
-    badsurf = measure.((u,v)->SA[u,v,0],-4:1:2,(1/2:1:2)',1,1,flip=true)
-    @test_throws ArgumentError FSPanelSystem(body,badsurf)
-
-    h = 0.3; freesurf = measure.((u,v)->SA[u,v,0],2π:-h:-4π,(h/2:h:2π)',h,h,flip=true)
+    ℓ = 0.45^2; freesurf = halfplane(1.,ℓ); body = spheroid(1/60)
     sys = FSPanelSystem(body,freesurf,sym_axes=2,ℓ=0,wrap=identity)
     q = NeumannKelvin.get_q(sys)
     @test length(q)==length(body)+length(freesurf)
@@ -196,19 +197,23 @@ end
     @test sys.ℓ == 0
     @test sys.U == SA[-1,0,0]
 
+    badsurf = measure.((u,v)->SA[u,v,0],-4:1:2,(1/2:1:2)',1,1,flip=true)
+    @test_throws ArgumentError FSPanelSystem(body,badsurf)
+
     # Direct solve ignores freesurf
-    directsolve!(sys)
-    @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.04
+    directsolve!(sys,verbose=false)
+    sys2 = directsolve!(BodyPanelSystem(body,sym_axes=2),verbose=false)
+    @test sys.body.q == sys2.body.q
 
     # Setting ℓ=0 turns freesurf into reflection wall
     gmressolve!(sys)
     sys2 = gmressolve!(BodyPanelSystem(body,sym_axes=(2,3),wrap=PanelTree))
     @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.03
 
-    # Setting ℓ=1 turns on freesurf, but it's slow to converge
-    sys = FSPanelSystem(body,freesurf,sym_axes=2,ℓ=1)
-    gmressolve!(sys,itmax=160) # should converge...
-    @test steadyforce(sys)[1] > 0.1 # non-zero drag!
+    # Setting ℓ>0 turns on freesurf, but it's slow to converge
+    sys = FSPanelSystem(body,freesurf;sym_axes=2,ℓ,θ²=16)
+    gmressolve!(sys,itmax=160)                      # should converge...
+    @test 2steadyforce(sys,S=1)[1] ≈ 6e-3 rtol=0.04 # Analytic Linear FSBC solution
     mn,mx = extrema(ζ(sys))
     @test -2mn > mx # trough is much bigger than crest
 end

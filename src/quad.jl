@@ -1,5 +1,6 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(4)
+const xg32,wg32 = gausslegendre(32)
 """
     quadgl(f,a=-1,b=1;x,w)
 
@@ -11,24 +12,26 @@ function quadgl(f;x,w)
         I += w[i]*f(x[i])
     end; I
 end
-quadgl(f,a,b;x=SA[-1/√3,1/√3],w=SA[1,1]) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
+quadgl(f,a,b;x=xg32,w=wg32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
     complex_path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))
 
-Estimate the integral `∫f(t)dt` from `t=[-∞,∞]` using a complex path.
-The finite phase ranges `rngs` are integrated along the real line
-with QuadGK. The range endpoints where `flag=true` are integrated to
-±∞ in the complex-plane using `±nsp(t₀,g,dg,γ)`.
+Estimate the integral `∫f(t)dt` from `t=[-∞,∞]` using a complex path, see Gibbs 2024. The 
+finite phase ranges `rngs` are integrated along the real line with QuadGK. The range end 
+points where `flag=true` are integrated to ±∞ in the complex-plane using `±nsp(t₀,g,dg,γ)`.
 """
-function complex_path(g,dg,rngs;atol=1e-3,γ=one,
+@inline function complex_path(g,dg,rngs;γ=one,
     f = t->((u,v)=reim(g(t)); @fastmath γ(t)*exp(-v)*sin(u)))
 
     # Sum the flagged endpoints and interval contributions
-    sum(Iterators.partition(rngs,2),init=zero(f(0.))) do ((t₁,∞₁),(t₂,∞₂))
-        ∫f = f==zero ? f(t₁) : quadgk(f,t₁,t₂;atol)[1]
-        (∞₁ ? -nsp(t₁,g,dg,γ) : zero(t₁)) + ∫f + (∞₂ ? nsp(t₂,g,dg,γ) : zero(t₂))
-    end
+    val = zero(rngs[1][1])
+    for i in 1:2:length(rngs)
+        (t₁,∞₁),(t₂,∞₂) = rngs[i],rngs[i+1]
+        ∞₁ && (val -= nsp(t₁,g,dg,γ))
+        val += quadgl(f,t₁,t₂)
+        ∞₂ && (val += nsp(t₂,g,dg,γ))
+    end; val
 end
 
 using Roots
@@ -51,32 +54,27 @@ slowly varying compared to `g` over `h`.
     end;s
 end
 
-using TupleTools
-import ForwardDiff: value
-value(t::Tuple) = value.(t)
 """
     finite_ranges(S,g,Δg,R;atol=0.1Δg)
 
 Return pairs of flagged ranges `(a₁,f₁),(a₂,f₂)` covering the points `a∈S∈[-R,R]`
-such that `|g(a)-g(aᵢ)|≈Δg`. Ranges are disjoint and limited to `±R`. "Unbounded" flag
+such that `|g(a)-g(aᵢ)|≈Δg`. Ranges do no overlap and limited to `±R`. "Unbounded" flag
 `fᵢ=false` if `aᵢ=±R`.
 """
-function finite_ranges(S,g,Δg,R;atol=0.1Δg)
-    function fz(a,b,check=true)
-        !isfinite(b) && return @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,a+copysign(1,b)),Order1();atol),true
-        check && abs(g(a)-g(b))≤Δg+atol && return b,false
-        @fastmath find_zero(t->abs(g(a)-g(t))-Δg,(a,b),Roots.Brent();atol),true
+function finite_ranges(S::NTuple{N}, g, Δg, R; atol=Δg/10) where N
+    Sv, Rv, gv = map(value,S), value(R), t->value(g(t)) # no Duals
+    function fz(a, b)
+        !isfinite(b) && return @fastmath find_zero(t->abs(gv(a)-gv(t))-Δg, (a,a+copysign(1,b)), Order1(); atol), true
+        abs(gv(a)-gv(b)) ≤ Δg+atol && return b, false
+        @fastmath find_zero(t->abs(gv(a)-gv(t))-Δg, (a,b), Order1(); atol), true
     end
-
-    # Sort the stationary point values (no Duals) and handle empty case
-    R = value(R); S = filter(s->-R<s<R,TupleTools.sort(value(S)))
-    length(S) == 0 && return ((-R,false),(R,false))
-
-    # Construct and concat disjoint range pairs
-    mids = mapreduce(TupleTools.vcat,zip(Base.front(S),Base.tail(S)),init=()) do (a,b)
-        abs(g(a)-g(b)) ≤ 2Δg && return () # skip if insufficient gap
-        p,q = fz(a,b,false),fz(b,a,false) # look from left & right
-        p[1] < q[1] ? (p,q) : ()          # return if disjoint
-    end
-    TupleTools.vcat((fz(first(S),-R),),mids,(fz(last(S),R),))
+    (fz(first(Sv), -Rv), mid_ranges(Val(N), Sv, fz, Δg, Rv, atol)..., fz(last(Sv), Rv))
 end
+using TupleTools
+mid_ranges(::Val{N}, S, fz, Δg, R, atol) where N = TupleTools.vcat(ntuple(N-1) do i
+    a, b = S[i], S[i+1]
+    p, q = fz(a, b), fz(b, a)
+    p[1] < q[1] && return p, q
+    c = ((p[1]+p[2])/2, false)
+    return c,c
+end...)

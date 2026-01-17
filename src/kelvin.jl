@@ -1,32 +1,62 @@
+# """
+#     NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
+
+# A PanelSystem which applies the Neumann-Kelvin Green's function on the `body`.
+
+# **Note**: The free surface is at `z=0` and the direction of the flow is `Û=[-1,0,0]`. 
+# Translate and rotate the body as needed relative to these reference points.
+
+# Keyword arguments:
+# - `Umag` Optional *magnitude* of the background flow
+# - `ℓ=Umag²/g` Optional Froude length
+# - `sym_axes` Optional symmetry axes
+
+# # Details 
+
+# The Green's function is accelerated using a Chebychev surrogate for `N`, Newman 1987, and 
+# using automated complex path integration for `W`, Gibbs 2024. The Neumann-Kelvin Green's 
+# function does not decay uniformly with distance. Therefore a simple relative distance cutoff 
+# θ won't maintain accuracy. Accelerating integrals over Neumann-Kelvin panels is an open problem.
+# """
+# struct NKPanelSystem{B,L,T,M} <: AbstractPanelSystem
+#     body::B      # body panels
+#     ℓ::L         # Froude-length
+#     U::SVector{3,T}
+#     mirrors::M
+# end
+# function NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
+#     any(body.x[3] .≥ 0) && throw(ArgumentError("NK panel must be below z=0"))
+#     NKPanelSystem(Table(body,q=zeros_like(body.dA)), ℓ, SA[-abs(Umag),0,0], mirrors(sym_axes...))
+# end
+# Base.show(io::IO, sys::NKPanelSystem) = println(io, "NKPanelSystem($(length(sys.body)) panels, ℓ=$(sys.ℓ))")
+# Base.show(io::IO, ::MIME"text/plain", sys::NKPanelSystem) = (
+#     println(io,"NKPanelSystem"); println(io,"  Froude length ℓ: $(sys.ℓ)"); abstract_show(io,sys))
+
+# # Overload with Neumann-Kelvin potential
+# Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,sys.ℓ),sys.body),sys.mirrors)
+# influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,sys.ℓ))
+# @inline ∫NK(x,p,ℓ) = ∫G(x,p)-∫G(x .* SA[1,1,-1],p)+p.dA*kelvin(x,p.x;ℓ)
+ 
 """
     kelvin(ξ,α;ℓ)
 
-Green Function `G(ξ)` for a traveling source at reflected position `α` with Froude length `ℓ ≡ U²/g`
-excluding the sink term. The free surface is at z=0, and the motion direction is Û=[1,0,0]. See Noblesse 1981.
+Nearfield and Wavelike Green Functions `N+W` for a traveling source at position `α` with Froude 
+length `ℓ ≡ U²/g`. The free surface is at z=0, and the flow direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;ℓ=1,z_max=-0.,ltol=-5log(10))
-    # Check inputs
-    α[3] < 0 && @warn "Source point placed above z=0" maxlog=2
-    ξ[3] > 0 && throw(DomainError(ξ[3],"kelvin: querying above z=0"))
-
+function kelvin(ξ,α;ℓ=1,z_max=-0.)
     # nearfield, and wavelike disturbance
-    x,y,z = (ξ-α)/ℓ; z = min(z,z_max/ℓ)
-    return (nearfield(x,y,z)+wavelike(x,y,z,ltol))/ℓ
+    x,y,z = (ξ-α .* SA[1,1,-1])/ℓ; z = min(z,z_max/ℓ)
+    return (nearfield(x,y,z)+wavelike(x,y,z))/ℓ
 end
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987
-function nearfield(x::T,y::T,z::T)::T where T
-    if Threads.atomic_xchg!(isfirstcall, false)
-        @warn "Creating Chebychev polynomials takes a moment"
-        global c1,c2,c3,c4 = makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R)
-    end
+function nearfield(x,y,z)
     S = X2S(x,y,z); R = S[1]
     l0 = -2*(1-z/(R+abs(x)))
-    R ≥ 10 ? l0+c4(r2R(S)) :
-    R ≥ 4  ? l0+c3(S) :
-    R ≥ 1  ? l0+c2(S) :
-    R > 0  ? l0+c1(S) : -4.0
+    R ≥ 10 ? l0+chebregions[][4](r2R(S)) :
+    R ≥ 4  ? l0+chebregions[][3](S) :
+    R ≥ 1  ? l0+chebregions[][2](S) :
+    R > 0  ? l0+chebregions[][1](S) : eltype(S)(-4.0)
 end
-isfirstcall = Threads.Atomic{Bool}(true)
 
 # Transformations to/from spherical (S) & Cartesian (X) coordinates
 S2X(S) = ((R,θ,α²)=S; α=√α²; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
@@ -35,6 +65,7 @@ r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1987
 
 # Create fast Chebychev interpolator for Ngk
 using FastChebInterp,QuadGK,SpecialFunctions
+const chebregions = Ref{NTuple{4,FastChebInterp.ChebPoly{3,Float64,Float64}}}()
 function makecheb(l,u;xfrm=identity,tol=1e-4)
     lb,ub = SA[l,0,0],SA[u,π/2-eps(),(π/2)^2];
     S = S2X.(xfrm.(chebpoints((16,16,8),lb,ub)))
@@ -53,13 +84,13 @@ end
 Ngk(X::SVector{3}) = Ngk(X...)
 
 # Wave-like disturbance
-function wavelike(x,y,z,ltol=-5log(10),atol=exp(ltol))
-    (x≥0 || z≤ltol) && return 0.
-    R = √(ltol/z-1)            # radius s.t. log₁₀(f(z,R))=ltol
-    S = stationary_points(x,y) # g'=0 points
-    rngs = finite_ranges(S,t->g(x,y,t),-0.5ltol,R) # finite phase ranges
-    4complex_path(t->g(x,y,t)-im*z*(1+t^2),        # complex phase
-                  t->dg(x,y,t)-2im*z*t,rngs;atol)  # it's derivative
+function wavelike(x,y,z)
+    (x≥0 || z≤-10) && return 0.
+    S = stationary_points(x,y)                       # g'=0 points
+    rngs = finite_ranges(S,t->g(x,y,t),6,√(-10/z-1)) # finite phase ranges
+    4complex_path(t->g(x,y,t)-im*z*(1+t^2),          # complex phase
+                  t->dg(x,y,t)-2im*z*t,rngs,         # it's derivative
+                  f=t->exp(z*(1+t^2))*sin(g(x,y,t))) # real function
 end
 g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative

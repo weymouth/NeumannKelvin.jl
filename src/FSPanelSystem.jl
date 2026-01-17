@@ -21,7 +21,7 @@ extrema(cₚ(sys))             # check solution quality
 ```
 """
 struct FSPanelSystem{B,F,D,L,T,M} <: AbstractPanelSystem
-    body::B      # PanelSystem
+    body::B      # body panels
     freesurf::F  # free surface panels
     fsm::D       # free-surface sized Matrix
     ℓ::L         # Froude-length
@@ -75,9 +75,9 @@ function bc!(b,sys::FSPanelSystem)
     end
 end
 function precon!(z,sys::FSPanelSystem,r)
-    # sweep resdual information downstream
-    z .= r # identity preconditioner
     Nᵢ,Nⱼ = size(sys.fsm); Nb = length(sys.body)
+    z .= r # identity preconditioner
+    # sweep resdual information downstream
     AK.foreachindex(view(z,1:Nⱼ)) do j
     for i in (2:Nᵢ) .+ (Nb+(j-1)*Nᵢ)
         @inbounds z[i] += z[i-1]

@@ -65,4 +65,5 @@ components(data::AbstractArray{S}) where {S<:SVector{n}} where n = components.(R
 extent(a) = (p = extrema(a); p[2]-p[1])
 export viz,components,extent
 
+__init__() = chebregions[] = (makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R))
 end

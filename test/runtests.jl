@@ -1,6 +1,7 @@
 using NeumannKelvin
-using Test
+using Test,BenchmarkTools
 TEST_ALLOCS = get(ENV, "CI", "false") == "true" ? 8 : 0
+BenchmarkTools.DEFAULT_PARAMETERS.seconds = 0.1
 
 using QuadGK
 @testset "quad.jl" begin
@@ -301,8 +302,8 @@ using GeometryBasics,FileIO  # or whatever triggers the extension
     @test ∫G(SA[0.5,1,0],panel)/4π ≈ −0.05806854 rtol=1e-6
     @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ −0.03856218 rtol=1e-6
     @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ −0.00495674 rtol=1e-6
-    @test @ballocations ∫G(panel.x,panel)
-    @test @ballocations gradient(x->∫G(x,panel),panel.x)
+    @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
+    @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
 
     ext = Base.get_extension(NeumannKelvin, :NeumannKelvinGeometryBasicsExt)
     panels = panelize(load("../examples/Icosahedron.stl"))

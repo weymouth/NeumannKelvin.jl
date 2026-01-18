@@ -1,52 +1,52 @@
-# """
-#     NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
+"""
+    NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
 
-# A PanelSystem which applies the Neumann-Kelvin Green's function on the `body`.
+A PanelSystem which applies the Neumann-Kelvin Green's function on the `body`.
 
-# **Note**: The free surface is at `z=0` and the direction of the flow is `Û=[-1,0,0]`. 
-# Translate and rotate the body as needed relative to these reference points.
+**Note**: The free surface is at `z=0` and the direction of the flow is `Û=[-1,0,0]`.
+Translate and rotate the body as needed relative to these reference points.
 
-# Keyword arguments:
-# - `Umag` Optional *magnitude* of the background flow
-# - `ℓ=Umag²/g` Optional Froude length
-# - `sym_axes` Optional symmetry axes
+Keyword arguments:
+- `Umag` Optional *magnitude* of the background flow
+- `ℓ=Umag²/g` Optional Froude length
+- `sym_axes` Optional symmetry axes
 
-# # Details 
+# Details
 
-# The Green's function is accelerated using a Chebychev surrogate for `N`, Newman 1987, and 
-# using automated complex path integration for `W`, Gibbs 2024. The Neumann-Kelvin Green's 
-# function does not decay uniformly with distance. Therefore a simple relative distance cutoff 
-# θ won't maintain accuracy. Accelerating integrals over Neumann-Kelvin panels is an open problem.
-# """
-# struct NKPanelSystem{B,L,T,M} <: AbstractPanelSystem
-#     body::B      # body panels
-#     ℓ::L         # Froude-length
-#     U::SVector{3,T}
-#     mirrors::M
-# end
-# function NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
-#     any(body.x[3] .≥ 0) && throw(ArgumentError("NK panel must be below z=0"))
-#     NKPanelSystem(Table(body,q=zeros_like(body.dA)), ℓ, SA[-abs(Umag),0,0], mirrors(sym_axes...))
-# end
-# Base.show(io::IO, sys::NKPanelSystem) = println(io, "NKPanelSystem($(length(sys.body)) panels, ℓ=$(sys.ℓ))")
-# Base.show(io::IO, ::MIME"text/plain", sys::NKPanelSystem) = (
-#     println(io,"NKPanelSystem"); println(io,"  Froude length ℓ: $(sys.ℓ)"); abstract_show(io,sys))
+The Green's function is accelerated using a Chebychev surrogate for `N`, Newman 1987, and
+using automated complex path integration for `W`, Gibbs 2024. The Neumann-Kelvin Green's
+function does not decay uniformly with distance. Therefore a simple relative distance cutoff
+θ won't maintain accuracy. Accelerating integrals over Neumann-Kelvin panels is an open problem.
+"""
+struct NKPanelSystem{B,L,T,M} <: AbstractPanelSystem
+    body::B      # body panels
+    ℓ::L         # Froude-length
+    U::SVector{3,T}
+    mirrors::M
+end
+function NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
+    any(components(body.x,3) .≥ 0) && throw(ArgumentError("NK panels must be below z=0"))
+    NKPanelSystem(Table(body,q=zeros_like(body.dA)), ℓ, SA[-abs(Umag),0,0], mirrors(sym_axes...))
+end
+Base.show(io::IO, sys::NKPanelSystem) = println(io, "NKPanelSystem($(length(sys.body)) panels, ℓ=$(sys.ℓ))")
+Base.show(io::IO, ::MIME"text/plain", sys::NKPanelSystem) = (
+    println(io,"NKPanelSystem"); println(io,"  Froude length ℓ: $(sys.ℓ)"); abstract_show(io,sys))
 
-# # Overload with Neumann-Kelvin potential
-# Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,sys.ℓ),sys.body),sys.mirrors)
-# influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,sys.ℓ))
-# @inline ∫NK(x,p,ℓ) = ∫G(x,p)-∫G(x .* SA[1,1,-1],p)+p.dA*kelvin(x,p.x;ℓ)
- 
+# Overload with Neumann-Kelvin potential
+Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,sys.ℓ),sys.body),sys.mirrors)
+influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,sys.ℓ))
+@inline ∫NK(x,p,ℓ) = ∫G(x,p)-∫G(x .* SA[1,1,-1],p)+p.dA*kelvin(x,p.x;ℓ)
+
 """
     kelvin(ξ,α;ℓ)
 
-Nearfield and Wavelike Green Functions `N+W` for a traveling source at position `α` with Froude 
+Nearfield and Wavelike Green Functions `N+W` for a traveling source at position `α` with Froude
 length `ℓ ≡ U²/g`. The free surface is at z=0, and the flow direction is Û=[-1,0,0]. See Noblesse 1981.
 """
 function kelvin(ξ,α;ℓ=1,z_max=-0.)
     # nearfield, and wavelike disturbance
     x,y,z = (ξ-α .* SA[1,1,-1])/ℓ; z = min(z,z_max/ℓ)
-    return (nearfield(x,y,z)+wavelike(x,y,z))/ℓ
+    return (nearfield(x,y,z)+wavelike(x,abs(y),z))/ℓ
 end
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987
 function nearfield(x,y,z)

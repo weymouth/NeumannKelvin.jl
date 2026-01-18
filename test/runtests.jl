@@ -1,5 +1,6 @@
 using NeumannKelvin
 using Test
+TEST_ALLOCS = get(ENV, "CI", "false") == "true" ? 8 : 0
 
 using QuadGK
 @testset "quad.jl" begin
@@ -85,7 +86,7 @@ using BenchmarkTools
     sys = BodyPanelSystem(panels)
     @test sys.body.q == zeros(Float32,length(panels))
     q = rand(Float32,length(panels))
-    b = @benchmark NeumannKelvin.set_q!($sys,$q); @test minimum(b).allocs==0
+    @test @ballocations(NeumannKelvin.set_q!($sys,$q)) ≤ TEST_ALLOCS
     @test sys.body.q == q
     @test bodyarea(sys) ≈ 4π rtol=1e-5
     @test bodyvol(sys) ≈ 4π/3 rtol=5e-3
@@ -101,9 +102,9 @@ using LinearAlgebra
 
     # Check that ∫G is non-allocating, including duals
     p = panels[1]
-    b = @benchmark ∫G($p.x,$p); @test minimum(b).allocs==0
-    b = @benchmark gradient(x->∫G(x,$p),$p.x); @test minimum(b).allocs==0
-    b = @benchmark ∂ₙϕ($p,$p); @test minimum(b).allocs==0
+    @test @ballocations(∫G($p.x,$p)) ≤ TEST_ALLOCS
+    @test @ballocations(gradient(x->∫G(x,$p),$p.x)) ≤ TEST_ALLOCS
+    @test @ballocations(∂ₙϕ($p,$p)) ≤ TEST_ALLOCS
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
     @test tr(A) ≈ 8*2π
@@ -130,8 +131,8 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 
     # Check allocations
     p = panels[1]
-    b = @benchmark Φ($p.x,$sys); @test minimum(b).allocs==0
-    b = @benchmark ∇Φ($p.x,$sys); @test minimum(b).allocs<16 # for ubuntu
+    @test @ballocations(Φ($p.x,$sys)) ≤ TEST_ALLOCS
+    @test @ballocations(∇Φ($p.x,$sys)) ≤ TEST_ALLOCS
 
     #check symmetry enforcement
     panels = panelize(S,0,π/2,0,π,hᵤ=0.12) # quarter plane
@@ -151,7 +152,7 @@ using NeumannKelvin:fill_nodes,treesum,aggregate!
     nodes = fill_nodes(panels,bvh)
     @test nodes.dA[1]≈sum(panels.dA)
     @test nodes.x[1]≈sum(panels.x .* panels.dA)/sum(panels.dA)≈cen
-    b = @benchmark aggregate!($nodes.dA,$panels.dA,$bvh); @test minimum(b).allocs==0
+    @test @ballocations(aggregate!($nodes.dA,$panels.dA,$bvh)) ≤ TEST_ALLOCS
 
     ρ = panels.x[length(panels)÷3]-cen
     @show length(nodes), length(panels)
@@ -162,8 +163,8 @@ using NeumannKelvin:fill_nodes,treesum,aggregate!
     end
 
     x = panels.x[1]
-    b = @benchmark treesum(∫G,$x,$bvh,$nodes,$panels); @test minimum(b).allocs==0
-    b = @benchmark gradient(x->treesum(∫G,x,$bvh,$nodes,$panels),$x); @test minimum(b).allocs==0
+    @test @ballocations(treesum(∫G,$x,$bvh,$nodes,$panels)) ≤ TEST_ALLOCS
+    @test @ballocations(gradient(x′->treesum(∫G,x′,$bvh,$nodes,$panels),$x)) ≤ TEST_ALLOCS
 end
 
 @testset "PanelTree.jl" begin
@@ -171,7 +172,7 @@ end
     panels = panelize(S,0,π,0,2π,hᵤ=0.12); N = length(panels)
     BH = PanelTree(Table(panels;q=rand(N)))
     q = zeros(N)
-    b = @benchmark NeumannKelvin.set_q!($BH,$q); @test minimum(b).allocs==0
+    @test @ballocations(NeumannKelvin.set_q!($BH,$q)) ≤ TEST_ALLOCS
     @test BH.q == q
 
     sys = gmressolve!(BodyPanelSystem(panels,wrap=PanelTree))
@@ -179,6 +180,7 @@ end
     @test norm(sys.body.q-q)/norm(q) < 0.0032
     @test norm(steadyforce(sys)) < 4e-3
     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
+    @test @ballocations(Φ($panels.x[1],$sys)) ≤ TEST_ALLOCS
 end
 
 function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,kwargs...)
@@ -209,6 +211,7 @@ end
     gmressolve!(sys)
     sys2 = gmressolve!(BodyPanelSystem(body,sym_axes=(2,3),wrap=PanelTree))
     @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.03
+    @test @ballocations(Φ($body.x[1],$sys)) ≤ TEST_ALLOCS
 
     # Setting ℓ>0 turns on freesurf, but it's slow to converge
     sys = FSPanelSystem(body,freesurf;sym_axes=2,ℓ,θ²=16)
@@ -223,15 +226,8 @@ end
 using SpecialFunctions
 @testset "kelvin.jl" begin
     @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
-
     @test NeumannKelvin.wavelike(10.,0.,-0.)==NeumannKelvin.wavelike(0.,10.,-0.)==0.
-
     @test 4π*bessely1(10)≈NeumannKelvin.wavelike(-10.,0.,-0.) atol=1e-5
-
-    b = @benchmark NeumannKelvin.nearfield(-1.,0.,0.); @test minimum(b).allocs==0
-    b = @benchmark derivative(x->NeumannKelvin.nearfield(x,0.,0.),-1.); @test minimum(b).allocs==0
-    b = @benchmark NeumannKelvin.wavelike(-10.,1.,-1.); @test minimum(b).allocs==0
-    b = @benchmark derivative(x->NeumannKelvin.wavelike(x,1.,-1.),-10.); @test minimum(b).allocs==0
 
     for R = (0.1,0.5,2.0,8.0), a = (0.,0.1,0.3,1/sqrt(8),0.5,1.0), z = (-1.,-0.1,-0.01)
         x = -R*cos(atan(a))
@@ -241,37 +237,39 @@ using SpecialFunctions
         x==-0.1 && y==0 && z==-0.01 && continue # failing test
         @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-4 rtol=31e-5
     end
+
+    @test @ballocations(NeumannKelvin.nearfield(-1.,0.,0.)) ≤ TEST_ALLOCS
+    @test @ballocations(derivative(x->NeumannKelvin.nearfield(x,0.,0.),-1.)) ≤ TEST_ALLOCS
+    @test @ballocations(NeumannKelvin.wavelike(-10.,1.,-1.)) ≤ TEST_ALLOCS
+    @test @ballocations(derivative(x->NeumannKelvin.wavelike(x,1.,-1.),-10.)) ≤ TEST_ALLOCS
 end
 
-# Cw(panels;kwargs...) = steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
-# function spheroid(h;L=1,Z=-1/8,r=1/12,AR=2)
-#     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),r*cos(θ₂)*sin(θ₁),r*sin(θ₂)*sin(θ₁)+Z]
-#     panelize(S,0,π,0,2π,hᵤ=h*√AR,hᵥ=h/√AR)
-# end
-# function prism(h;q=0.2,Z=1)
-#     S(θ,z) = 0.5SA[cos(θ),q*sin(θ),z]
-#     dθ = π/round(π*0.5/h) # cosine sampling
-#     dz = Z/round(Z/h)
-#     measure_panel.(S,dθ:dθ:2π,-(0.5dz:dz:Z)',dθ,dz) |> Table
-# end
-# wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure_panel.(
-#     (u,v)->SA[u-0.5,2B*u*(1-u)*(v)*(2-v),D*(v-1)],
-#     0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) |> Table
+function prism(h;q=0.2,Z=1)
+    S(θ,z) = 0.5SA[cos(θ),q*sin(θ),z]
+    dθ = π/round(π*0.5/h) # cosine sampling
+    dz = Z/round(Z/h)
+    measure.(S,dθ:dθ:π,-(0.5dz:dz:Z)',dθ,dz) |> Table
+end
+wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure.(
+    (u,v)->SA[u-0.5,2B*u*(1-u)*(v)*(2-v),D*(v-1)],
+    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) |> Table
+@testset "NeumannKelvin.jl" begin
+    # Compare submerged spheroid drag to Farell/Baar
+    sys = directsolve!(NKPanelSystem(spheroid(0.04),sym_axes=2,ℓ=0.5^2))
+    @test @ballocations(Φ($sys.body.x[1],$sys)) ≤ TEST_ALLOCS
+    @test @ballocations(cₚ($sys.body.x[1],$sys)) ≤ TEST_ALLOCS
+    @test steadyforce(sys,S=1/2)[1] ≈ 6e-3 rtol=0.02
 
-# @testset "NeumannKelvin.jl" begin
-#     # Compare thin-ship wigley to Tuck 2008
-#     ∫kelvin₀(x,p;kwargs...) = ∫kelvin(x,reflect(p,SA[1,0,1]);kwargs...) # centerplane
-#     panels = wigley(0.05)
-#     q = components(panels.n,1)/2π # thin-ship source density
-#     d = steady_force(q,panels;ϕ=∫kelvin₀,ℓ=0.51^2)[1]/sum(panels.dA)
-#     @test d ≈ 0.0088-0.0036 rtol=0.02 # Remove ITTC Cf
-#     # Compare submerged spheroid drag to Farell/Baar
-#     d = Cw(spheroid(0.04,AR=6);ϕ=∫kelvin,ℓ=0.5^2)
-#     @test d ≈ 6e-3 rtol=0.02
-#     # Compare elliptical prism drag to Guevel/Baar
-#     d = Cw(prism(0.1);ϕ=∫kelvin,ℓ=0.55^2,contour=true)
-#     @test d ≈ 0.042 rtol=0.02
-# end
+    # Compare elliptical prism drag to Guevel/Baar
+    sys = directsolve!(NKPanelSystem(prism(0.1),sym_axes=2,ℓ=0.55^2))
+    @test steadyforce(sys,S=1/2)[1] ≈ 0.042 rtol=0.02 broken=true
+
+    # Compare thin-ship wigley to Tuck 2008
+    thinship(panels;Umag=1,ℓ=1) = NeumannKelvin.set_q!(
+        NKPanelSystem(panels;Umag,ℓ,sym_axes=2),Umag*components(panels.n,1)/2π)
+    sys = thinship(wigley(0.05),ℓ=0.51^2)
+    @test steadyforce(sys)[1] ≈ 0.0088-0.0036 rtol=0.02 broken=true # Remove ITTC Cf
+end
 
 using NURBS,FileIO  # or whatever triggers the extension
 @testset "NURBS" begin
@@ -303,8 +301,8 @@ using GeometryBasics,FileIO  # or whatever triggers the extension
     @test ∫G(SA[0.5,1,0],panel)/4π ≈ −0.05806854 rtol=1e-6
     @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ −0.03856218 rtol=1e-6
     @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ −0.00495674 rtol=1e-6
-    b = @benchmark ∫G($panel.x,$panel); @test minimum(b).allocs==0
-    b = @benchmark gradient(x->∫G(x,$panel),$panel.x); @test minimum(b).allocs==0
+    @test @ballocations ∫G(panel.x,panel)
+    @test @ballocations gradient(x->∫G(x,panel),panel.x)
 
     ext = Base.get_extension(NeumannKelvin, :NeumannKelvinGeometryBasicsExt)
     panels = panelize(load("../examples/Icosahedron.stl"))

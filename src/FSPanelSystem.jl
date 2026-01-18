@@ -3,7 +3,7 @@
 
 A PanelSystem defined by `body` and `freesurf` source panels.
 
-**Note**: `freesurf` must be a matrix of quadralateral panels with the first index 
+**Note**: `freesurf` must be a matrix of quadralateral panels with the first index
 of the matrix aligned with -x. i.e. `freesurf[i+1,j].x-freesurf[i,j].x ≈ [-Δxᵢⱼ,0,0]`.
 Similarly, the direction of the flow will always be `Û=-x̂`. Relative flow vectoring
 (i.e. drift angle) must be acheived by rotating the body.
@@ -16,7 +16,7 @@ keyword arguments:
 # Usage
 ```julia
 sys = FSPanelSystem(body_panels,freesurf;ℓ=1/2π,wrap=PanelTree) # body + free surface
-gmressolve!(sys, atol=1e-6)  # approximate solve 
+gmressolve!(sys, atol=1e-6)  # approximate solve
 extrema(cₚ(sys))             # check solution quality
 ```
 """
@@ -52,7 +52,7 @@ end
 
 # Calculate the potential
 @inline domains(sys) = (sys.body,sys.freesurf)
-Φ(x,sys::FSPanelSystem) = sum(m->sum(dom->Φ_dom(x .* m,dom),domains(sys)),sys.mirrors)
+Φ(x,sys::FSPanelSystem) = sum(m->Φ_dom(x .* m,sys.body)+Φ_dom(x .* m,sys.freesurf),sys.mirrors)
 
 # Set/Get the strength
 @inline dviews(q,sys) = ((Nb,Nfs) = length.(domains(sys));view.(Ref(q),(1:Nb,Nb+1:Nb+Nfs)))
@@ -67,7 +67,7 @@ function bc!(b,sys::FSPanelSystem)
     AK.foreachindex(i-> b[i] = Φₙ(sys.body[i],sys),view(b,1:Nb))
     # freesurf: Φₙ-ℓΦₓₓ=0
     AK.foreachindex(i-> p[i] = Φ(sys.freesurf.x[i],sys), p) # fill p->Φ
-    AK.foreachindex(p) do i  
+    AK.foreachindex(p) do i
         b[i+Nb] = Φₙ(sys.freesurf[i],sys)
         (i-1)%Nᵢ<3 && return
         h = extent(view(sys.freesurf.x,i-1:i))[1]

@@ -36,8 +36,8 @@ include("FSPanelSystem.jl")
 export FSPanelSystem,ζ
 
 # Kelvin Green function definitions
-include("kelvin.jl")
-export kelvin
+include("NKPanelSystem.jl")
+export NKPanelSystem,kelvin
 
 # Plotting fallback
 """

@@ -75,6 +75,6 @@ mid_ranges(::Val{N}, S, fz, Δg, R, atol) where N = TupleTools.vcat(ntuple(N-1) 
     a, b = S[i], S[i+1]
     p, q = fz(a, b), fz(b, a)
     p[1] < q[1] && return p, q
-    c = ((p[1]+p[2])/2, false)
+    c = ((p[1]+q[1])/2, false)
     return c,c
 end...)

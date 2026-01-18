@@ -25,7 +25,7 @@ struct NKPanelSystem{B,L,T,M} <: AbstractPanelSystem
     mirrors::M
 end
 function NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
-    any(components(body.x,3) .≥ 0) && throw(ArgumentError("NK panels must be below z=0"))
+    any(x->x[3]≥0,body.x) && throw(ArgumentError("NK panels must be below z=0"))
     NKPanelSystem(Table(body,q=zeros_like(body.dA)), ℓ, SA[-abs(Umag),0,0], mirrors(sym_axes...))
 end
 Base.show(io::IO, sys::NKPanelSystem) = println(io, "NKPanelSystem($(length(sys.body)) panels, ℓ=$(sys.ℓ))")
@@ -33,9 +33,18 @@ Base.show(io::IO, ::MIME"text/plain", sys::NKPanelSystem) = (
     println(io,"NKPanelSystem"); println(io,"  Froude length ℓ: $(sys.ℓ)"); abstract_show(io,sys))
 
 # Overload with Neumann-Kelvin potential
-Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,sys.ℓ),sys.body),sys.mirrors)
-influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,sys.ℓ))
-@inline ∫NK(x,p,ℓ) = ∫G(x,p)-∫G(x .* SA[1,1,-1],p)+p.dA*kelvin(x,p.x;ℓ)
+Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,ℓ=sys.ℓ),sys.body),sys.mirrors)
+influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,ℓ=sys.ℓ))
+@inline function ∫NK(x,p;ℓ,filter=true,contour=false)
+    # Waterline contour factor ℓ∫n₁dy
+    dy = extent(components(p.verts,2)); dl = hypot(extent(components(p.verts,1)),dy)
+    c = contour && onwaterline(p) ? 1-ℓ*dy^2/(dl*p.dA) : one(dy)
+    c < 0 && @warn "Waterline ℓ∫n₁dy > ∫da" maxlog=2
+    # Evaluate potential with kelvin(x,y,z ≤ -dl) to filter unresolved waves
+    z_max = filter ? -dl : -0.
+    ∫G(x,p)-∫G(x .* SA[1,1,-1],p)+p.dA*kelvin(x,p.x;ℓ,z_max)*c
+end
+@inline onwaterline(p) = any(x->x[3]≥0,p.verts)
 
 """
     kelvin(ξ,α;ℓ)
@@ -84,8 +93,8 @@ end
 Ngk(X::SVector{3}) = Ngk(X...)
 
 # Wave-like disturbance
-function wavelike(x,y,z)
-    (x≥0 || z≤-10) && return 0.
+function wavelike(x::T,y::T,z::T)::T where T
+    (x≥0 || z≤-10) && return zero(T)
     S = stationary_points(x,y)                       # g'=0 points
     rngs = finite_ranges(S,t->g(x,y,t),6,√(-10/z-1)) # finite phase ranges
     4complex_path(t->g(x,y,t)-im*z*(1+t^2),          # complex phase

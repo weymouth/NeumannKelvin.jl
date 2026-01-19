@@ -1,5 +1,5 @@
 """
-    FSPanelSystem(body,freesurf::Matrix{QuadPanels}; Umag=1, ℓ=1, sym_axes=(), wrap=PanelTree)
+    FSPanelSystem(body,freesurf::Matrix{QuadPanels}; ℓ, Umag=1, sym_axes=(), wrap=PanelTree)
 
 A PanelSystem defined by `body` and `freesurf` source panels.
 
@@ -9,13 +9,21 @@ Similarly, the direction of the flow will always be `Û=-x̂`. Relative flow ve
 (i.e. drift angle) must be acheived by rotating the body.
 
 keyword arguments:
-- `Umag` sets the *magnitude* of the background flow
-- `ℓ=Umag²/g` sets the Froude length
+- `ℓ ≡ Umag²/g` Froude length
+- `Umag` Optional background flow magnitude
 - `sym_axes, wrap` see BodyPanelSystem
+
+# Details
+
+The convective derivative Φₓₓ in the FSBC is estimated by computing Φ at the FS panel
+centers and using a 2nd-order upwind finite difference in `i`. This maintains downwind
+wave propigation and adds (significant) numerical damping. A downwind flooding gmres
+preconditioner is used to accelerate convergence, but it still requires O(100) iterations.
+The accuracy of the solution depends on the free surface resolution; at minimum h<ℓ is required.
 
 # Usage
 ```julia
-sys = FSPanelSystem(body_panels,freesurf;ℓ=1/2π,wrap=PanelTree) # body + free surface
+sys = FSPanelSystem(body_panels,freesurf;ℓ=1/2π) # body + free surface
 gmressolve!(sys, atol=1e-6)  # approximate solve
 extrema(cₚ(sys))             # check solution quality
 ```
@@ -24,11 +32,11 @@ struct FSPanelSystem{B,F,D,L,T,M} <: AbstractPanelSystem
     body::B      # body panels
     freesurf::F  # free surface panels
     fsm::D       # free-surface sized Matrix
-    ℓ::L         # Froude-length
+    ℓ::Ref{L}    # Froude-length
     U::SVector{3,T}
     mirrors::M
 end
-function FSPanelSystem(body,freesurf::AbstractMatrix; Umag=1, ℓ=1, sym_axes=(), wrap=PanelTree, kwargs...)
+function FSPanelSystem(body,freesurf::AbstractMatrix; Umag=1, ℓ, sym_axes=(), wrap=PanelTree, kwargs...)
     # Lots of sanitary input checks...
     fsm = zeros(eltype(body.dA),size(freesurf)); freesurf = Table(freesurf)
     eltype(freesurf.dA) != eltype(fsm) && throw(ArgumentError("Floating point type of body and freesurf panels must match"))
@@ -36,17 +44,18 @@ function FSPanelSystem(body,freesurf::AbstractMatrix; Umag=1, ℓ=1, sym_axes=()
     dx = freesurf.x[2]-freesurf.x[1]
     (dx[1]>-abs(dx[2]) || dx[3]≠0) && throw(ArgumentError("first index of `freesurf` must align with -x."))
 
-    FSPanelSystem(snug(body,wrap;kwargs...), snug(freesurf,wrap;kwargs...), fsm, ℓ, SA[-abs(Umag),0,0], mirrors(sym_axes...))
+    FSPanelSystem(snug(body,wrap;kwargs...), snug(freesurf,wrap;kwargs...), fsm, Ref(ℓ), SA[-abs(Umag),0,0], mirrors(sym_axes...))
 end
+update!(sys::FSPanelSystem; ℓ) = (sys.ℓ[]=ℓ; gmressolve!(sys))
 
 # Pretty printing
-Base.show(io::IO, sys::FSPanelSystem) = println(io, "FSPanelSystem($(length.(domains(sys))) panels, ℓ=$(sys.ℓ)")
+Base.show(io::IO, sys::FSPanelSystem) = println(io, "FSPanelSystem($(length.(domains(sys))) panels, ℓ=$(sys.ℓ[])")
 function Base.show(io::IO, ::MIME"text/plain", sys::FSPanelSystem)
     println(io,"FSPanelSystem")
     print(  io, "  freesurf: "); show(io,sys.freesurf)
     println(io, "     size: $(size(sys.fsm))")
     println(io, "     panel type: $(eltype(sys.freesurf.kernel))")
-    println(io, "  Froude length ℓ: $(sys.ℓ)")
+    println(io, "  Froude length ℓ: $(sys.ℓ[])")
     abstract_show(io,sys)
 end
 
@@ -62,7 +71,7 @@ end
 # Set the rhs, solution, fsbc and preconditioner
 rhs(sys::FSPanelSystem) = [rhs(sys.body,sys.U); zeros_like(sys.freesurf.dA)]
 function bc!(b,sys::FSPanelSystem)
-    p = sys.fsm; Nᵢ = size(p,1); Nb = length(sys.body); ℓ = sys.ℓ
+    p = sys.fsm; Nᵢ = size(p,1); Nb = length(sys.body); ℓ = sys.ℓ[]
     # body: Φₙ = -Uₙ
     AK.foreachindex(i-> b[i] = Φₙ(sys.body[i],sys),view(b,1:Nb))
     # freesurf: Φₙ-ℓΦₓₓ=0

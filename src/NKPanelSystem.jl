@@ -1,5 +1,5 @@
 """
-    NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
+    NKPanelSystem(body; ℓ, Umag=1, sym_axes=(), filter=true, contour=false)
 
 A PanelSystem which applies the Neumann-Kelvin Green's function on the `body`.
 
@@ -7,35 +7,51 @@ A PanelSystem which applies the Neumann-Kelvin Green's function on the `body`.
 Translate and rotate the body as needed relative to these reference points.
 
 Keyword arguments:
-- `Umag` Optional *magnitude* of the background flow
-- `ℓ=Umag²/g` Optional Froude length
+- `ℓ=Umag²/g` Froude length
+- `Umag` Optional background flow magnitude
 - `sym_axes` Optional symmetry axes
+- `filter` Optional flag to filter waves shorter than the panel size
+- `contour` Optional flag to include the effect of the waterline contour
 
 # Details
 
 The Green's function is accelerated using a Chebychev surrogate for `N`, Newman 1987, and
-using automated complex path integration for `W`, Gibbs 2024. The Neumann-Kelvin Green's
+using a numerical stationary phase method for `W`, Gibbs 2024. The waterline contour integral
+`C` can be included as a factor multiplying panels touching `z=0`, Baar 1988, although the
+impact is small when the body is thin and destablizing when the body is very blunt. Finally,
+wave's smaller than the panel size can be filtered out by enforcing a minimum submergence level.
+
+**Note** You cannot use a PanelTree to accelerate Neumann-Kelvin panels because the Green's
 function does not decay uniformly with distance. Therefore a simple relative distance cutoff
 θ won't maintain accuracy. Accelerating integrals over Neumann-Kelvin panels is an open problem.
 """
-struct NKPanelSystem{B,L,T,M} <: AbstractPanelSystem
+struct NKPanelSystem{B,T,M,A} <: AbstractPanelSystem
     body::B      # body panels
-    ℓ::L         # Froude-length
     U::SVector{3,T}
     mirrors::M
+    args::A
 end
-function NKPanelSystem(body; Umag=1, ℓ=1, sym_axes=())
+@kwdef mutable struct NKargs{L}
+    ℓ::L         # Froude-length
+    filter::Bool=true
+    contour::Bool=false
+end
+function NKPanelSystem(body; ℓ, Umag=1, sym_axes=(), kwargs...)
     any(x->x[3]≥0,body.x) && throw(ArgumentError("NK panels must be below z=0"))
-    NKPanelSystem(Table(body,q=zeros_like(body.dA)), ℓ, SA[-abs(Umag),0,0], mirrors(sym_axes...))
+    NKPanelSystem(Table(body,q=zeros_like(body.dA)), SA[-abs(Umag),0,0], mirrors(sym_axes...), NKargs(;ℓ,kwargs...))
 end
-Base.show(io::IO, sys::NKPanelSystem) = println(io, "NKPanelSystem($(length(sys.body)) panels, ℓ=$(sys.ℓ))")
-Base.show(io::IO, ::MIME"text/plain", sys::NKPanelSystem) = (
-    println(io,"NKPanelSystem"); println(io,"  Froude length ℓ: $(sys.ℓ)"); abstract_show(io,sys))
+update!(sys::NKPanelSystem;kwargs...) = (update!(sys.args;kwargs...);directsolve!(sys))
+update!(a::NKargs;kwargs...) = foreach(((k,v),)->setproperty!(a,k,v), pairs(kwargs))
+
+Base.show(io::IO, sys::NKPanelSystem) = println(io, "NKPanelSystem($(length(sys.body)) panels, ℓ=$(sys.args.ℓ))")
+Base.show(io::IO, ::MIME"text/plain", sys::NKPanelSystem) = (println(io,"NKPanelSystem");
+    print(io,"  Neumann-Kelvin args: ",sys.args);abstract_show(io,sys))
+Base.show(io::IO, a::NKargs) = println(io, "ℓ=$(a.ℓ), filter=$(a.filter), contour=$(a.contour)")
 
 # Overload with Neumann-Kelvin potential
-Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,ℓ=sys.ℓ),sys.body),sys.mirrors)
-influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,ℓ=sys.ℓ))
-@inline function ∫NK(x,p;ℓ,filter=true,contour=false)
+Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,sys.args),sys.body),sys.mirrors)
+influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,sys.args))
+@inline function ∫NK(x,p,(;ℓ,filter,contour)::NKargs)
     # Waterline contour factor ℓ∫n₁dy
     dy = extent(components(p.verts,2)); dl = hypot(extent(components(p.verts,1)),dy)
     c = contour && onwaterline(p) ? 1-ℓ*dy^2/(dl*p.dA) : one(dy)
@@ -44,7 +60,7 @@ influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,
     z_max = filter ? -dl : -0.
     ∫G(x,p)-∫G(x .* SA[1,1,-1],p)+p.dA*kelvin(x,p.x;ℓ,z_max)*c
 end
-@inline onwaterline(p) = any(x->x[3]≥0,p.verts)
+@inline onwaterline(p) = any(x->x[3]≥-1e-4,p.verts)
 
 """
     kelvin(ξ,α;ℓ)

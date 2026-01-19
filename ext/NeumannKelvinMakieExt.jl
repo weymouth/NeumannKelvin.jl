@@ -32,7 +32,7 @@ function viz!(ax::Axis3, panels::Union{Table,PanelTree}, values=panels.dA; vecto
     obj = mesh!(ax, panelmesh.(panels,panels.kernel); color=values, colorrange=clims, shading=NoShading, kwargs...)
 
     # Normals & color bar
-    !isnothing(vectors) && arrows3d!(ax, components(panels.x)..., components(vectors)...; 
+    !isnothing(vectors) && arrows3d!(ax, components(panels.x)..., components(vectors)...;
         lengthscale=0.025vscale, color=values, colorrange=clims, kwargs...)
     obj
 end
@@ -42,7 +42,7 @@ panelmesh(p,ignore...) = GeometryBasics.Mesh(Point3f.(p.verts), [TriangleFace{GL
 
 # Free surface plot
 function viz!(ax::Axis3,sys,::Val{ζ}; kwargs...)
-    z = ζ(sys)*sys.ℓ # unscaled elevation
+    z = ζ(sys)*sys.ℓ[] # unscaled elevation
     x,y,_ = reshape.(components(sys.freesurf.x),Ref(size(z)))
     ζmax  = maximum(abs, z); @. z[abs(z)<ζmax/20] = 0
     surface!(ax,x,y,z;shading = NoShading, colormap = :balance, colorrange = (-ζmax,ζmax), kwargs...)

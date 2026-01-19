@@ -31,27 +31,19 @@ struct NKPanelSystem{B,T,M,A} <: AbstractPanelSystem
     mirrors::M
     args::A
 end
-@kwdef mutable struct NKargs{L}
-    ℓ::L         # Froude-length
-    filter::Bool=true
-    contour::Bool=false
-end
-function NKPanelSystem(body; ℓ, Umag=1, sym_axes=(), kwargs...)
+function NKPanelSystem(body; ℓ, Umag=1, sym_axes=(), filter=true, contour=false)
     any(x->x[3]≥0,body.x) && throw(ArgumentError("NK panels must be below z=0"))
-    NKPanelSystem(Table(body,q=zeros_like(body.dA)), SA[-abs(Umag),0,0], mirrors(sym_axes...), NKargs(;ℓ,kwargs...))
+    NKPanelSystem(Table(body,q=zeros_like(body.dA)), SA[-abs(Umag),0,0], mirrors(sym_axes...), (;ℓ,filter,contour))
 end
-update!(sys::NKPanelSystem;kwargs...) = (update!(sys.args;kwargs...);directsolve!(sys))
-update!(a::NKargs;kwargs...) = foreach(((k,v),)->setproperty!(a,k,v), pairs(kwargs))
 
 Base.show(io::IO, sys::NKPanelSystem) = println(io, "NKPanelSystem($(length(sys.body)) panels, ℓ=$(sys.args.ℓ))")
 Base.show(io::IO, ::MIME"text/plain", sys::NKPanelSystem) = (println(io,"NKPanelSystem");
-    print(io,"  Neumann-Kelvin args: ",sys.args);abstract_show(io,sys))
-Base.show(io::IO, a::NKargs) = println(io, "ℓ=$(a.ℓ), filter=$(a.filter), contour=$(a.contour)")
+    println(io,"  Neumann-Kelvin args: ",sys.args);abstract_show(io,sys))
 
 # Overload with Neumann-Kelvin potential
 Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,sys.args),sys.body),sys.mirrors)
 influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,sys.args))
-@inline function ∫NK(x,p,(;ℓ,filter,contour)::NKargs)
+@inline function ∫NK(x,p,(;ℓ,filter,contour)::A) where A
     # Waterline contour factor ℓ∫n₁dy
     dy = extent(components(p.verts,2)); dl = hypot(extent(components(p.verts,1)),dy)
     c = contour && onwaterline(p) ? 1-ℓ*dy^2/(dl*p.dA) : one(dy)

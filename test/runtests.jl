@@ -197,7 +197,7 @@ end
     q = NeumannKelvin.get_q(sys)
     @test length(q)==length(body)+length(freesurf)
     @test sys.body.dA == body.dA
-    @test sys.ℓ[] == 0
+    @test sys.ℓ == 0
     @test sys.U == SA[-1,0,0]
 
     badsurf = measure.((u,v)->SA[u,v,0],-4:1:2,(1/2:1:2)',1,1,flip=true)

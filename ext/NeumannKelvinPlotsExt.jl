@@ -47,4 +47,11 @@ function addtri!(x,y,z,i,j,k,verts,args...)
     base = length(x)-3
     push!(i, base); push!(j, base + 1); push!(k, base + 2)
 end
+function viz(sys,::Val{ζ})
+    x,y,_ = reshape.(components(sys.freesurf.x),Ref(sys.fssize))
+    z = reshape(ζ(sys),sys.fssize)
+    max = maximum(abs,z)
+    contour(reverse(view(x,:,1)),view(y,1,:),reverse(z',dims=2),
+        aspectratio=:equal,levels=10,clims=(-max,max))
+end
 end

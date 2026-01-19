@@ -32,7 +32,7 @@ struct FSPanelSystem{B,F,D,L,T,M} <: AbstractPanelSystem
     body::B      # body panels
     freesurf::F  # free surface panels
     fsm::D       # free-surface sized Matrix
-    ℓ::Ref{L}    # Froude-length
+    ℓ::L         # Froude-length
     U::SVector{3,T}
     mirrors::M
 end
@@ -44,18 +44,17 @@ function FSPanelSystem(body,freesurf::AbstractMatrix; Umag=1, ℓ, sym_axes=(), 
     dx = freesurf.x[2]-freesurf.x[1]
     (dx[1]>-abs(dx[2]) || dx[3]≠0) && throw(ArgumentError("first index of `freesurf` must align with -x."))
 
-    FSPanelSystem(snug(body,wrap;kwargs...), snug(freesurf,wrap;kwargs...), fsm, Ref(ℓ), SA[-abs(Umag),0,0], mirrors(sym_axes...))
+    FSPanelSystem(snug(body,wrap;kwargs...), snug(freesurf,wrap;kwargs...), fsm, ℓ, SA[-abs(Umag),0,0], mirrors(sym_axes...))
 end
-update!(sys::FSPanelSystem; ℓ) = (sys.ℓ[]=ℓ; gmressolve!(sys))
 
 # Pretty printing
-Base.show(io::IO, sys::FSPanelSystem) = println(io, "FSPanelSystem($(length.(domains(sys))) panels, ℓ=$(sys.ℓ[])")
+Base.show(io::IO, sys::FSPanelSystem) = println(io, "FSPanelSystem($(length.(domains(sys))) panels, ℓ=$(sys.ℓ)")
 function Base.show(io::IO, ::MIME"text/plain", sys::FSPanelSystem)
     println(io,"FSPanelSystem")
     print(  io, "  freesurf: "); show(io,sys.freesurf)
     println(io, "     size: $(size(sys.fsm))")
     println(io, "     panel type: $(eltype(sys.freesurf.kernel))")
-    println(io, "  Froude length ℓ: $(sys.ℓ[])")
+    println(io, "  Froude length ℓ: $(sys.ℓ)")
     abstract_show(io,sys)
 end
 
@@ -71,7 +70,7 @@ end
 # Set the rhs, solution, fsbc and preconditioner
 rhs(sys::FSPanelSystem) = [rhs(sys.body,sys.U); zeros_like(sys.freesurf.dA)]
 function bc!(b,sys::FSPanelSystem)
-    p = sys.fsm; Nᵢ = size(p,1); Nb = length(sys.body); ℓ = sys.ℓ[]
+    p = sys.fsm; Nᵢ = size(p,1); Nb = length(sys.body); ℓ = sys.ℓ
     # body: Φₙ = -Uₙ
     AK.foreachindex(i-> b[i] = Φₙ(sys.body[i],sys),view(b,1:Nb))
     # freesurf: Φₙ-ℓΦₓₓ=0
@@ -86,7 +85,7 @@ end
 function precon!(z,sys::FSPanelSystem,r)
     Nᵢ,Nⱼ = size(sys.fsm); Nb = length(sys.body)
     z .= r # identity preconditioner
-    # sweep resdual information downstream
+    # sweep residual information downstream
     AK.foreachindex(view(z,1:Nⱼ)) do j
     for i in (2:Nᵢ) .+ (Nb+(j-1)*Nᵢ)
         @inbounds z[i] += z[i-1]
@@ -94,17 +93,24 @@ function precon!(z,sys::FSPanelSystem,r)
 end
 
 """
-    ζ([x::SVector{3},] sys)
+    ζ(x::SVector{3},sys)        # one point
+    ζ(x::Vector,y::Vector,sys)  # evaluate on a regular grid (x,y') with z=0
+    ζ(sys::FSPanelSystem)       # evaluate on sys.freesurf.x
 
-Scaled linear free surface elevation `ζ/ℓ=Φₓ/|U|` induced by **solved** panel system `sys`.
-If no location `x` is given, a vector of ζ at all freesurf centers is returned.
+Scaled linear free surface elevation `ζ/ℓ=Φₓ/|U|` induced by panel system `sys`.
 
 See also: [`Φ`](@ref)
 """
 ζ(x::SVector{3},sys) = derivative(t->Φ(x+t*SA[1,0,0],sys),0)/norm(sys.U)
+function ζ(x::AbstractVector,y::AbstractVector,sys)
+    z = similar(sys.body.dA,length(x),length(y))
+    AK.foraxes(z,1) do i; for j in axes(z,2)
+        z[i,j] = ζ(SA[x[i],y[j],0],sys)
+    end; end; z
+end
 function ζ(sys::FSPanelSystem)
-    b = sys.fsm
-    AK.foreachindex(b) do i
-        b[i] = ζ(sys.freesurf.x[i],sys)
-    end; b
+    z = sys.fsm
+    AK.foreachindex(z) do i
+        z[i] = ζ(sys.freesurf.x[i],sys)
+    end; z
 end

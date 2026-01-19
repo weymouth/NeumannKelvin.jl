@@ -33,7 +33,7 @@ export PanelTree
 
 # Free-surface panel system
 include("FSPanelSystem.jl")
-export FSPanelSystem,ζ,update!
+export FSPanelSystem,ζ
 
 # Kelvin Green function definitions
 include("NKPanelSystem.jl")

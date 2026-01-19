@@ -1,5 +1,5 @@
 """
-    PanelTree(panels::Table;θ²=4)
+    PanelTree(panels::Table;θ²=9)
 
 Creates a tree structure from a set of `panels` that enables O(log N) evaluation of the 
 panel influence instead of O(N). This is a huge speed-up for N≥O(100). The node monopole 
@@ -24,8 +24,8 @@ struct PanelTree{T, P<:Table, B, N, D} <: AbstractVector{T}
     PanelTree(panels::P, bvh::B, nodes::N, θ²::D) where {P<:Table,B,N,D} = 
         new{eltype(panels), P, B, N, D}(panels, bvh, nodes, θ²)
 end
-function PanelTree(panels;θ²=4)
-    bvh = BVH(map(BoundingVolume,panels))
+function PanelTree(panels;θ²=9)
+    bvh = BVH(map(BoundingVolume,panels.verts))
     PanelTree(panels,bvh,fill_nodes(panels,bvh),θ²)
 end
 struct MonoKernel <: GreenKernel end

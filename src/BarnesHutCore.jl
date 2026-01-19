@@ -34,6 +34,10 @@ function reldist(x,bb::BBox)
     sum(abs2,max.(q,0))/sum(abs2,r)
 end
 reldist(x,bb::BoundingVolume) = reldist(x,bb.volume)
+function ImplicitBVH.BoundingVolume(verts::SVector{N,T}) where {N,T<:SVector{3}}
+    ext = extrema.(components(verts))
+    return BBox(first.(ext),last.(ext))
+end
 
 # Barnes-Hut kernel evaluation
 using ImplicitBVH: memory_index
@@ -63,12 +67,4 @@ function treesum(fnc, x, bvh, node_values, leaf_values; θ²=4,
     end
     verbose && println("evaluated: node count=$node_count, leaf count=$leaf_count")
     val
-end
-
-# panel bounding-box
-ImplicitBVH.BoundingVolume(panel::NamedTuple) = if hasproperty(panel,:verts)
-    ext = extrema.(components(panel.verts))
-    return BBox(first.(ext),last.(ext))
-else
-    return BSphere(panel.x,√panel.dA)
 end

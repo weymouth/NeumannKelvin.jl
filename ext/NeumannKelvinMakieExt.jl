@@ -12,7 +12,7 @@ function cₚu(sys;vscale=1)
     Colorbar(fig[1,2],obj;label="cₚ")
     return fig,ax
 end
-function viz(panels::Union{Table,PanelTree},values=panels.dA; vectors=collect(panels.n), vscale = 1, kwargs...)
+function viz(panels::Union{Table,PanelTree},values=panels.dA; vectors=panels.n, vscale = 1, kwargs...)
     fig=Figure(); ax=Axis3(fig[1,1], aspect=:data)
     obj = viz!(ax,panels,values;vectors,vscale,kwargs...)
     Colorbar(fig[1,2],obj;kwargs...)
@@ -20,7 +20,7 @@ function viz(panels::Union{Table,PanelTree},values=panels.dA; vectors=collect(pa
 end
 
 # Generate full mesh and color array
-function viz!(ax::Axis3, panels::Union{Table,PanelTree}, values=panels.dA; vectors=collect(panels.n), vscale = 1,
+function viz!(ax::Axis3, panels::Union{Table,PanelTree}, values=panels.dA; vectors=panels.n, vscale = 1,
     clims = extrema(values), kwargs...)
 
     # Mesh geometry (vertices, normals, and colors)

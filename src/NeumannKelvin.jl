@@ -39,7 +39,10 @@ export FSPanelSystem,ζ
 include("NKPanelSystem.jl")
 export NKPanelSystem,kelvin
 
-# Plotting fallback
+# General support functions
+components(data,i) = getindex.(data, i)
+components(data::AbstractArray{S}) where {S<:SVector{n}} where n = ntuple(i->components(data,i),n)
+extent(a) = (p = extrema(a); p[2]-p[1])
 """
     viz(panels::Table, values=panels.dA; vectors=0.3panels.n, kwargs...)
 
@@ -59,11 +62,22 @@ to the corners, and the vectors are colored 3D arrows.
     panels = panelize((u,v)->SA[cos(u),cos(v)*sin(u),sin(v)*sin(u)],0,pi,0,2pi)
     viz(panels)
 """
-viz(args...; kwargs...) = @warn "Pass a Table() of panels and load Plots or GLMakie (terminal/VSCode) or WGLMakie (browser/Pluto) for viz functionality."
-components(data,i) = getindex.(data, i)
-components(data::AbstractArray{S}) where {S<:SVector{n}} where n = ntuple(i->components(data,i),n)
-extent(a) = (p = extrema(a); p[2]-p[1])
+viz(sys::AbstractPanelSystem;vscale=1,kwargs...) = ((cp,vectors)=cₚu(sys);viz(sys.body,cp;vectors,vscale,label="cₚ",kwargs...))
+viz(args...; kwargs...) = @warn "Load Plots or GLMakie (terminal/VSCode) or WGLMakie (browser/Pluto) for viz functionality."
+function cₚu(sys)
+    vectors = u(sys); U² = sum(abs2,sys.U); cp = @. 1-sum(abs2,vectors)/U²
+    return cp,vectors
+end
+function xyζ(sys::NKPanelSystem,s=1/2+2π*sys.args.ℓ,h=sys.args.ℓ/3,half=true)
+    x,y=-2s:h:s,ifelse(half,0,-s):h:s
+    return x,y,ζ(x,y,sys) .* sys.args.ℓ
+end
+function xyζ(sys::FSPanelSystem)
+    x,y,_ = reshape.(components(sys.freesurf.x),Ref(size(sys.fsm)))
+    return x,y,ζ(sys) .* sys.ℓ
+end
 export viz,components,extent
 
+# Initialize chebregions on precompile instead of when `using NeumannKelvin`
 __init__() = chebregions[] = (makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R))
 end

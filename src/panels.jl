@@ -18,7 +18,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))
     (hᵤ≤0 || hᵥ≤0 || c≤0) && throw(ArgumentError("Need positive `hᵤ,hᵥ,c`. Got $hᵤ,$hᵥ,$c."))
     !(typeof(surface(u₀,v₀)) <: SVector) && throw(ArgumentError("`surface` function doesn't return an SVector."))
-    init = typeof(measure_panel(surface,0.5u₀+0.5u₁,0.5v₀+0.5v₁,u₁-u₀,v₁-v₀))[]
+    init = typeof(measure(surface,0.5u₀+0.5u₁,0.5v₀+0.5v₁,u₁-u₀,v₁-v₀))[]
 
     # Get arcslength and inverse along bottom & top edges
     S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)
@@ -40,12 +40,12 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
         verbose && @show i,S
         S ≤ 0.5hᵥ && return init               # not enough height
         ve = s⁻¹(range(0,S,round(Int,S/hᵥ)+1)) # panel endpoints
-        verbose && @show length(ve)
+        verbose && @show length(ve)-1
         v = 0.5*(ve[2:end]+ve[1:end-1])        # panel centers
         dv = ve[2:end]-ve[1:end-1]             # panel heights
 
         # Measure panels along strip
-        @. measure_panel(surface,u,v,du,dv;flip,kwargs...)
+        @. measure(surface,u,v,du,dv;flip,kwargs...)
     end
 
     # Check length and return as a Table
@@ -92,41 +92,37 @@ arcspeed(r) = u->norm(derivative(r,u))
 κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
 
+abstract type GreenKernel end
+struct QuadKernel <: GreenKernel end
 using HCubature
 """
-    measure_panel(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,x₄,w₄)
+    measure(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,xg,wg)
 
 Measures a parametric surface function `S(u,v)` for a `u,v ∈ [u±0.5du]×[v±0.5dv]` panel.
-Returns centroid point and normal `x,n`, the surface area `dA`, and the 2x2 Gauss-point
-locations and weights `x₄,w₄`. Panel corner data `xᵤᵥ,nᵤᵥ` is used only for plotting.
+Returns centroid point and normal `x,n`, the surface area `dA`, and the Gauss-point
+locations and weights `xg,wg`. Panel corner data `vertices,nvertices` is used only for plotting.
  - `flip=true` flips the panel to point the other way.
  - `cubature=true` uses an adaptive "h-cubature" for `dA,x,n`.
 """
-function measure_panel(S,u,v,du,dv;flip=false,cubature=false,Δg=SA[-1/√3,1/√3],wg=SA[1,1])
-    flip && return measure_panel((v,u)->S(u,v),v,u,dv,du;cubature)
+function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3],wg=SA[1,1],T=Float64)
+    flip && return measure((v,u)->S(u,v),v,u,dv,du;cubature,Δg,wg,T)
+    u,v,du,dv = T.((u,v,du,dv))
     # get Gauss-points
-    x₄ = S.(u .+ 0.5du*Δg, v .+ 0.5dv*Δg')
-    n₄ = normal.(S, u .+ 0.5du*Δg, v .+ 0.5dv*Δg')
+    x₄ = S.(u .+ du*Δg/2, v .+ dv*Δg'/2)
+    n₄ = normal.(S, u .+ du*Δg/2, v .+ dv*Δg'/2)
     dA₄ = norm.(n₄).*(wg*wg')*du*dv/4 # area-scaled weights
     # get area
-    cube(f) = hcubature(f,SA[u-0.5du,v-0.5dv],SA[u+0.5du,v+0.5dv],rtol=0.01)[1]
+    cube(f) = hcubature(f,SA[u-du/2,v-dv/2],SA[u+du/2,v+dv/2],rtol=0.01)[1]
     dA = cubature ? cube(uv->norm(normal(S,uv...))) : sum(dA₄)
     # get centroid
     x = cubature ? cube(uv->S(uv...)*norm(normal(S,uv...)))/dA : sum(x₄ .* dA₄)/dA
     n = cubature ? normalize(cube(uv->normal(S,uv...))) : normalize(sum(n₄.*(wg*wg')))
     # get corners (only for pretty plots)
-    xᵤᵥ = S.(u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]')
-    nᵤᵥ = normalize.(normal.(S, u .+ 0.5SA[-du,du], v .+ 0.5SA[-dv,dv]'))
+    xᵤᵥ = S.(u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2)
+    nᵤᵥ = normalize.(normal.(S, u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2))
     # combine everything into named tuple
-    (x=x, n=n, dA=dA, x₄=x₄, w₄=dA₄ .* dA/sum(dA₄), xᵤᵥ=xᵤᵥ, nᵤᵥ=nᵤᵥ)
+    (x=x, n=n, dA=dA, xg=x₄, wg=dA₄ .* dA/sum(dA₄), verts=unwrap(xᵤᵥ), nverts=unwrap(nᵤᵥ), kernel=QuadKernel())
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
-"""
-    deviation = distance from panel center to plane defined by the corners
-"""
-function deviation(p)
-    a =   0.5p.xᵤᵥ[1,1]+0.5p.xᵤᵥ[1,2] # plane base
-    l = a-0.5p.xᵤᵥ[2,1]-0.5p.xᵤᵥ[2,2] # vector to plane top
-    hypot((p.x-a-l*(p.x-a)'l/l'l...)) # distance from center
-end
+unwrap(a) = map(i->a[i],SA[1,2,4,3])

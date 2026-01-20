@@ -1,39 +1,70 @@
 module NeumannKelvinPlotsExt
 using NeumannKelvin,Plots
-function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=0.3panels.n, kwargs...)
-    @warn "Using fallback Plots-based panel plotting. Load GLMakie or WGLMakie instead for more functionality." maxlog=1
-    (xmn,xmx),(ymn,ymx),(zmn,zmx)=extrema.(components(panels.x))
-    xc,yc,zc = 0.5xmx+0.5xmn,0.5ymx+0.5ymn,0.5zmx+0.5zmn
-    h=1.05max(xmx-xc,ymx-yc,zmx-zc)
-    scatter(components(panels.x),marker_z=values;label="",kwargs...)
-    !isnothing(vectors) && quiver!(components(panels.x),quiver=components(vectors),
-            color=:grey,xlims=(xc-h,xc+h),ylims=(yc-h,yc+h),zlims=(zc-h,zc+h))
-    plot!()
+import NeumannKelvin: viz,cₚu,xyζ,QuadKernel
+
+# Free surface viz function
+function viz(sys::Union{FSPanelSystem,NKPanelSystem};kwargs...)
+    # same body plot
+    cp,vectors = cₚu(sys)
+    viz(sys.body,cp;vectors,label="cₚ",kwargs...)
+    # add free surface
+    x,y,z = xyζ(sys)
+    ζmax  = maximum(abs, z); @. z[abs(z)<ζmax/20] = 0
+    surface!(x,y,z';colormap = :balance, clims = (-ζmax,ζmax))
 end
-@recipe function f(table::Table)
-    cols = columns(table)
-    col_names = columnnames(table)
-    
-    if length(col_names) < 2
-        error("Table must have at least 2 columns (x-axis and at least one y-series)")
+
+# Generate mesh from Table data
+function viz(panels::Union{Table,PanelTree}, values=panels.dA; vectors=panels.n,
+                           vscale=1, label="", clims=extrema(values), colormap=:viridis, kwargs...)
+    # Get colors from colormap
+    cmap = cgrad(colormap)
+    color = [cmap[(v - clims[1]) / (clims[2] - clims[1])] for v in values]
+    tricolor = eltype(panels.kernel)==QuadKernel ? mapreduce(c->[c;c],vcat,color) : color
+
+    # Collect all vertices
+    xs = Float32[]
+    ys = Float32[]
+    zs = Float32[]
+    connections_i = Int[]
+    connections_j = Int[]
+    connections_k = Int[]
+
+    for panel in panels
+        addtri!(xs,ys,zs,connections_i,connections_j,connections_k,panel.verts,panel.kernel)
     end
-    
-    # First column as x-axis
-    x_data = cols[1]
-    x_name = string(col_names[1])
-    
-    # Set x-axis label
-    xlabel --> x_name
-    
-    # Plot each remaining column as a separate series
-    for i in 2:length(col_names)
-        y_data = cols[i]
-        y_name = string(col_names[i])
-        
-        @series begin
-            label --> y_name
-            x_data, y_data
-        end
+
+    # Invisible plot for colorbar
+    cx,cy,cz = components(panels.x)
+    scatter3d(cx,cy,cz;markersize=0,fill_z=values,clims,c=colormap,
+            colorbar=true,colorbar_title=label,legend=false)
+
+    # Main plot
+    mesh3d!(xs, ys, zs; color = tricolor, linewidth=0,
+            connections=(connections_i, connections_j, connections_k), kwargs...)
+
+    # Add normal vectors if provided
+    if !isnothing(vectors)
+        # Extract panel centers and normal vectors
+        nx,ny,nz = components(0.05vscale .* vectors)
+        quiver!(cx, cy, cz; color=:grey, quiver=(nx, ny, nz), arrow=:closed, linewidth=1.5)
     end
+
+    # set plot limits, labels
+    (xmin,xmax),(ymin,ymax),(zmin,zmax) = extrema.((xs,ys,zs))
+    cxm,cym,czm = (xmin+xmax)/2,(ymin+ymax)/2,(zmin+zmax)/2
+    Δ = maximum((xmax-xmin, ymax-ymin, zmax-zmin))
+    plot!(xlabel="x",ylabel="y",zlabel="z",
+        xlims=(cxm-Δ/2, cxm+Δ/2),ylims=(cym-Δ/2, cym+Δ/2),zlims=(czm-Δ/2, czm+Δ/2))
+end
+addtri!(x,y,z,i,j,k,verts,::QuadKernel) = (
+    addtri!(x,y,z,i,j,k,verts[1:3]); addtri!(x,y,z,i,j,k,verts[[1,3,4]]))
+function addtri!(x,y,z,i,j,k,verts,args...)
+    for v in verts
+        push!(x, v[1]); push!(y, v[2]); push!(z, v[3])
+    end
+
+    # Connections for this triangle (0-indexed)
+    base = length(x)-3
+    push!(i, base); push!(j, base + 1); push!(k, base + 2)
 end
 end

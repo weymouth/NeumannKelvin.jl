@@ -1,13 +1,25 @@
 module NeumannKelvinPlotsExt
 using NeumannKelvin,Plots
-using Plots
+import NeumannKelvin: viz,cₚu,xyζ,QuadKernel
 
-function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=panels.n,
-                           clims=extrema(values), colormap=:viridis, kwargs...)
+# Free surface viz function
+function viz(sys::Union{FSPanelSystem,NKPanelSystem};kwargs...)
+    # same body plot
+    cp,vectors = cₚu(sys)
+    viz(sys.body,cp;vectors,label="cₚ",kwargs...)
+    # add free surface
+    x,y,z = xyζ(sys)
+    ζmax  = maximum(abs, z); @. z[abs(z)<ζmax/20] = 0
+    surface!(x,y,z;shading = NoShading, colormap = :balance, colorrange = (-ζmax,ζmax))
+end
+
+# Generate mesh from Table data
+function viz(panels::Union{Table,PanelTree}, values=panels.dA; vectors=panels.n,
+                           vscale=1, label="", clims=extrema(values), colormap=:viridis, kwargs...)
     # Get colors from colormap
     cmap = cgrad(colormap)
     color = [cmap[(v - clims[1]) / (clims[2] - clims[1])] for v in values]
-    tricolor = eltype(panels.kernel)==NeumannKelvin.QuadKernel ? mapreduce(c->[c;c],vcat,color) : color
+    tricolor = eltype(panels.kernel)==QuadKernel ? mapreduce(c->[c;c],vcat,color) : color
     
     # Collect all vertices
     xs = Float32[]
@@ -21,22 +33,36 @@ function NeumannKelvin.viz(panels::Table, values=panels.dA; vectors=panels.n,
         addtri!(xs,ys,zs,connections_i,connections_j,connections_k,panel.verts,panel.kernel)
     end
     
-    # Main 3D plot
+    # Invisible plot for colorbar
     cx,cy,cz = components(panels.x)
-    p1 = scatter3d(cx,cy,cz;markersize=0,fill_z=values,clims,c=colormap,colorbar=true,legend=false,kwargs...)
-    mesh3d!(p1, xs, ys, zs; color = tricolor, linewidth=0,
-            connections=(connections_i, connections_j, connections_k))
-            
+    p1 = scatter3d(cx,cy,cz;markersize=0,fill_z=values,clims,c=colormap,
+            colorbar=true,colorbar_title=label,legend=false,xlabel="x",ylabel="y",zlabel="z",kwargs...)
+
     # Add normal vectors if provided
     if !isnothing(vectors)
         # Extract panel centers and normal vectors
-        nx,ny,nz = components(vectors)
-        quiver!(p1, cx, cy, cz; color,
-            quiver=(nx, ny, nz), arrow=:closed, linewidth=1.5)
+        nx,ny,nz = components(0.05vscale .* vectors)
+        quiver!(cx, cy, cz; color=:grey, quiver=(nx, ny, nz), arrow=:closed, linewidth=1.5)
     end
-    plot(p1)
+
+    # Main plot
+    mesh3d!(xs, ys, zs; color = tricolor, linewidth=0,
+            connections=(connections_i, connections_j, connections_k))
+            
+    # Data ranges
+    xmin,xmax = extrema(xs)
+    ymin,ymax = extrema(ys)
+    zmin,zmax = extrema(zs)
+    Δ = maximum((xmax-xmin, ymax-ymin, zmax-zmin))
+    cxm = (xmin+xmax)/2
+    cym = (ymin+ymax)/2
+    czm = (zmin+zmax)/2
+    xlims!(p1, cxm-Δ/2, cxm+Δ/2)
+    ylims!(p1, cym-Δ/2, cym+Δ/2)
+    zlims!(p1, czm-Δ/2, czm+Δ/2)
+    display(p1)
 end
-addtri!(x,y,z,i,j,k,verts,::NeumannKelvin.QuadKernel) = (
+addtri!(x,y,z,i,j,k,verts,::QuadKernel) = (
     addtri!(x,y,z,i,j,k,verts[1:3]); addtri!(x,y,z,i,j,k,verts[[1,3,4]]))
 function addtri!(x,y,z,i,j,k,verts,args...)
     for v in verts
@@ -46,12 +72,5 @@ function addtri!(x,y,z,i,j,k,verts,args...)
     # Connections for this triangle (0-indexed)
     base = length(x)-3
     push!(i, base); push!(j, base + 1); push!(k, base + 2)
-end
-function viz(sys,::Val{ζ})
-    x,y,_ = reshape.(components(sys.freesurf.x),Ref(sys.fssize))
-    z = reshape(ζ(sys),sys.fssize)
-    max = maximum(abs,z)
-    contour(reverse(view(x,:,1)),view(y,1,:),reverse(z',dims=2),
-        aspectratio=:equal,levels=10,clims=(-max,max))
 end
 end

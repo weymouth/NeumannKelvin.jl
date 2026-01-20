@@ -10,8 +10,10 @@ function viz(panels::Union{Table,PanelTree},values=panels.dA; vectors=panels.n, 
     return fig
 end
 function viz(sys::Union{FSPanelSystem,NKPanelSystem};kwargs...)
+    # same as BodyPanelSystem (but need the fig & ax data)
     fig=Figure(); ax=Axis3(fig[1,1], aspect=:data)
     cp,vectors = cₚu(sys); viz!(fig,ax,sys.body,cp;vectors,label="cₚ",kwargs...)
+    # add free surface
     x,y,z = xyζ(sys)
     ζmax  = maximum(abs, z); @. z[abs(z)<ζmax/20] = 0
     zeta = surface!(ax,x,y,z;shading = NoShading, colormap = :balance, colorrange = (-ζmax,ζmax))
@@ -19,7 +21,7 @@ function viz(sys::Union{FSPanelSystem,NKPanelSystem};kwargs...)
     return fig
 end
 
-# Generate full mesh and color array
+# Generate mesh from Table data
 function viz!(fig::Figure,ax::Axis3, panels::Union{Table,PanelTree}, values=panels.dA; vectors=panels.n, 
     vscale=1, label=nothing, clims=extrema(values), kwargs...)
 

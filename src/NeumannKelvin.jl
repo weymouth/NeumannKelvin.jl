@@ -20,7 +20,7 @@ export BodyPanelSystem,bodyarea,bodyvol
 
 import AcceleratedKernels as AK # multi-threaded mapreduce,foreachindex
 include("panel_method.jl")
-export ∫G,∂ₙϕ,Φ,∇Φ,u,cₚ,steadyforce,addedmass
+export source,∫G,Φ,∇Φ,u,cₚ,steadyforce,addedmass
 
 # Direct and matrix-free solver
 include("solvers.jl")
@@ -37,7 +37,7 @@ export FSPanelSystem,ζ
 
 # Kelvin Green function definitions
 include("NKPanelSystem.jl")
-export NKPanelSystem,kelvin
+export NKPanelSystem,∫NK,kelvin
 
 # General support functions
 components(data,i) = getindex.(data, i)

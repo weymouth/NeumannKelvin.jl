@@ -77,11 +77,8 @@ function directsolve!(sys;verbose=true)
 end
 influence((;body,mirrors)::AbstractPanelSystem) = influence(body,mirrors,∫G)
 function influence(body,mirrors,ϕ)
-    ϕ_sym(x,p) = sum(m->ϕ(x .* m,p),mirrors)
-    A = Array{eltype(body.dA)}(undef,length(body),length(body))
-    AK.foraxes(A,2) do j
-        @simd for i in axes(A,1)
-            @inbounds A[i,j] = ∂ₙϕ(body[i],body[j];ϕ=ϕ_sym)
-        end
-    end; A
+    A = zeros(length(body),length(body))
+    AK.foraxes(A,2) do j; for m in mirrors, i in axes(A,1)
+        @inbounds A[i,j] += derivative(t->ϕ(body.x[i] .* m + t*body.n[i], body[j]), 0)
+    end; end; A
 end

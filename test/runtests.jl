@@ -94,6 +94,7 @@ using BenchmarkTools
 end
 
 using LinearAlgebra
+using NeumannKelvin:∂ₙϕ
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table

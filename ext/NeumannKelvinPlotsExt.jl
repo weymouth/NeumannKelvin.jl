@@ -3,14 +3,11 @@ using NeumannKelvin,Plots
 import NeumannKelvin: viz,cₚu,xyζ,QuadKernel
 
 # Free surface viz function
-function viz(sys::Union{FSPanelSystem,NKPanelSystem};kwargs...)
-    # same body plot
-    cp,vectors = cₚu(sys)
-    viz(sys.body,cp;vectors,label="cₚ",kwargs...)
-    # add free surface
+function viz(sys::Union{FSPanelSystem,NKPanelSystem},::Val{ζ};kwargs...)
     x,y,z = xyζ(sys)
-    ζmax  = maximum(abs, z); @. z[abs(z)<ζmax/20] = 0
-    surface!(x,y,z';colormap = :balance, clims = (-ζmax,ζmax))
+    ζmax  = maximum(abs, z)
+    surface(x,y,z';colormap = :balance, clims = (-ζmax,ζmax), 
+        colorbar=true, colorbar_title="ζ")
 end
 
 # Generate mesh from Table data

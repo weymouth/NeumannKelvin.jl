@@ -63,15 +63,17 @@ such that `|g(a)-g(aᵢ)|≈Δg`. Ranges do no overlap and limited to `±R`. "Un
 """
 function finite_ranges(S::NTuple{N}, g, Δg, R; atol=Δg/10) where N
     Sv, Rv, gv = map(value,S), value(R), t->value(g(t)) # no Duals
-    function fz(a, b)
-        !isfinite(b) && return @fastmath find_zero(t->abs(gv(a)-gv(t))-Δg, (a,a+copysign(1,b)), Order1(); atol), true
-        abs(gv(a)-gv(b)) ≤ Δg+atol && return b, false
-        @fastmath find_zero(t->abs(gv(a)-gv(t))-Δg, (a,b), Order1(); atol), true
-    end
-    (fz(first(Sv), -Rv), mid_ranges(Val(N), Sv, fz, Δg, Rv, atol)..., fz(last(Sv), Rv))
+    # helper functions to offset the phase and flag if there's no root
+    dg(a) = t->abs(gv(a)-gv(t))-Δg
+    no(a,b) = abs(gv(a)-gv(b)) ≤ Δg+atol
+    # find roots of dg using brackets (Order0) or secant method (Order1)
+    fz0(a,b) = no(a,b) ? (return b, false) : (find_zero(dg(a), (a,b), Order0()), true)
+    fz1(a,b) = (isfinite(b) && no(a,b)) ? (return b, false) : (find_zero(dg(a), (a,a+copysign(1,b)), Order1(); atol), true)    
+    # return flagged sub-range
+    (fz1(first(Sv), -Rv), mid_ranges(Val(N), Sv, fz0)..., fz1(last(Sv), Rv))
 end
 using TupleTools
-mid_ranges(::Val{N}, S, fz, Δg, R, atol) where N = TupleTools.vcat(ntuple(N-1) do i
+mid_ranges(::Val{N}, S, fz) where N = TupleTools.vcat(ntuple(N-1) do i
     a, b = S[i], S[i+1]
     p, q = fz(a, b), fz(b, a)
     p[1] < q[1] && return p, q

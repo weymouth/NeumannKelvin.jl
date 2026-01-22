@@ -1,39 +1,49 @@
-# NeumannKelvin
+# NeumannKelvin.jl
 
 [![Build Status](https://github.com/weymouth/NeumannKelvin.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/weymouth/NeumannKelvin.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
-![Kelvin wave from a moving source](source-kelvin.png)
+![Kelvin wave from a moving source](examples//source-kelvin.png)
 
-Calculation of the linear free surface potential using source and Neumann-Kelvin Greens Functions.
+Calculation of the linear free-surface potential using Neumann boundary conditions on source panels and Kelvin Green's functions.
 
 ## Capabilities
 
 This package defines three `PanelSystem` structs:
 1. `BodyPanelSystem` for bodies in unbounded potential flow, defined using a set of source panels covering the solid body. The Neumann (flow tangency) condition is applied to each panel. 
-2. `FSPanelSystem` for free surface potential flows, defined using a set of source panels covering both the body and free surface interface. The linear FSBC (free-surface boundary condition) is applied to the free surface panels.
-3. `NKPanelSystem` for free surface potential flows, defined using a set of Kelvin panels on the body which automatically satisfy the linear FSBC on `z=0`. The Neumann condition is applied on each panel.
+2. `FSPanelSystem` for free-surface potential flows, defined using a set of source panels covering both the body and free-surface interface. The linear FSBC (free-surface boundary condition) is applied to the free-surface panels.
+3. `NKPanelSystem` for free-surface potential flows, defined using a set of Kelvin panels on the body which automatically satisfies the linear FSBC on `z=0`. The Neumann condition is applied on each panel.
 
 The package also defines:
- - `PanelTree` struct to accelerate the evaluation of the potential over a sets of panels using a Barnes-Hut style monopole approximation for panels far from the query point.
- - `directsolve!`,`gmresolve!` functions to solve for the system source strength.
- - Functions to measure the induced potential `Φ` and it's various "downstream" properties `∇Φ,u,cₚ,steadyforce,addedmass,ζ`, where all derivatives are computed using `ForwardDiff.jl`.
- 
+ - `PanelTree` struct to accelerate the evaluation of the potential over a set of panels using a Barnes-Hut style monopole approximation for panels far from the query point.
+ - `directsolve!`,`gmressolve!` functions to solve for the system source strength.
+ - Functions to measure the induced potential `Φ` and its various "downstream" properties `∇Φ,u,cₚ,steadyforce,addedmass,ζ`, where all derivatives are computed using `ForwardDiff.jl`.
+
+# Installation & version info
+
+The package is registered, so after installing Julia (version >1.5), you only need to open the REPL and type
+```julia
+] add NeumannKelvin
+```
+The first install will take a few seconds as a few functions precompile, but the following times should be immediate.
+
+The solver is still in development (v0.8), but the interface and methods are stablizing. We should be ready for v1.0 after feedback from users.
+
 ## Basic usage
 
-The panels themselves can either be defined by reading in a triangle Mesh object or by measuring a parametric surface. For example a spheroid under the free surface may be defined as:
+The panels themselves can either be defined by reading in a triangle-based Mesh object or by measuring a parametric surface. For example a spheroid under the free-surface may be defined as:
 ```julia
 using NeumannKelvin
 h = 0.1 # spacing
-freesurf = measure.((u,v)->SA[u,v,0],1:-h:-2,(1:-h:-1)',h,h)
+freesurf = measure.((u,v)->SA[u,v,0],2:-h:-4,(2:-h:-2)',h,h)
 S(θ₁,θ₂) = SA[0.5cos(θ₁),-0.1sin(θ₂)*sin(θ₁),0.1cos(θ₂)*sin(θ₁)-0.15]
 body = panelize(S,0,π,0,2π,hᵤ=h)
 ```
-The `measure` function measures a parametric surface into a panel given a center and extent in `u,v`. Here, we broadcast `measure` over a simple planar surface to define the free surface mesh `freesurf`. The `panelize` function generalizes this proceedure, adaptively sampling a parametric surface over a given `u,v` range to achieve a desired spacing and deviation tolerance between the panels and original surface. The `panelize` function returns a `Table` from TypedTables.jl since the method won't geneally form a structured grid. See the documentation for `measure`, `panelize` for details.
+The `measure` function measures a parametric surface into a single panel given a center and extent in `u,v`. Here, we broadcast `measure` over a simple planar surface to define the free-surface mesh `freesurf`. The `panelize` function generalizes this procedure, adaptively sampling a parametric surface over a given `u,v` range to achieve a desired spacing and deviation tolerance between the panels and original surface. The `panelize` function returns a `Table` from TypedTables.jl since the method won't generally form a structured grid. See the documentation for `measure`, `panelize` for details.
 
 Next the panel system can be defined and solved. For an unbounded potential flow solution with a small number of panels like this one, we can use
 ```julia
 julia> sys = BodyPanelSystem(body) |> directsolve!
-┌ Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
+┌ Warning: This routine ignores free-surface panels and is memory intensive. See help?>directsolve!.
 └ @ NeumannKelvin ~/Workspace/NeumannKelvin.jl/src/solvers.jl:72
   0.001468 seconds (53 allocations: 259.781 KiB)
 BodyPanelSystem
@@ -71,7 +81,7 @@ BodyPanelSystem
   mirrors: ([1, 1, 1],)
   strength extrema: (-0.0870901881812633, 0.08709074525159466)
 ```
-This body defined with 20k panels is fairly quick to solve using this approach. See the documentation for `PanelTree` and `gmressolve!` for details. Since this body is symmetric in y, we could further increase the speed by using a half of the body and applying the method of images on the symmetry axis. 
+This 20k panel body is fairly quick to solve using this approach. See the documentation for `PanelTree` and `gmressolve!` for details. Since this body is symmetric in y, we could further increase the speed by using a half of the body and applying the method of images on the symmetry axis.
 ```julia
 julia> halfbody = panelize(S,0,π,0,π,hᵤ=1/200,N_max=Inf); # half the θ₂ range
 
@@ -96,9 +106,9 @@ BodyPanelSystem
   mirrors: ([1, -1, 1], [1, 1, 1])
   strength extrema: (-0.08747539911219701, 0.08749685245478749)
 ```
-Where we see the half the panels and a reduced solve time, but also the new `mirror=[1,-1,1]` enforcing symmetry and therefore the same solution extrema. 
+Where we see half the number of panels and a reduced solve time, but also the new `mirror=[1,-1,1]` enforcing symmetry and therefore the same solution extrema.
 
-With the system solved, we can now measure any properties of interest. For example, the extreme values of the pressure coefficient and the added mass. 
+With the system solved, we can now measure any properties of interest. For example, the extreme values of the pressure coefficient and the added mass.
 ```julia
 julia> extrema(cₚ(sys))
 (-0.12323837497458068, 0.977864810013905)
@@ -109,10 +119,10 @@ julia> addedmass(sys)
  7.054090093897268e-5
  3.247604894181291e-5
 ```
-The max cₚ=1 because of the stagnation point, but the added mass is small because the flow direction was aligned with the long axis of the spheriod. We can check the other added mass coefficient by rotating the body or (easier) the background flow:
+The max cₚ=1 because of the stagnation point, but the added mass is small because the flow direction was aligned with the long axis of the spheroid. We can compute the other added mass coefficient by rotating the body or (easier) the background flow:
 ```julia
 julia> BodyPanelSystem(body,U=SA[0,1,0]) |> directsolve! |> addedmass
-┌ Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
+┌ Warning: This routine ignores free-surface panels and is memory intensive. See help?>directsolve!.
 └ @ NeumannKelvin ~/Workspace/NeumannKelvin.jl/src/solvers.jl:72
   0.005645 seconds (53 allocations: 163.781 KiB)
 3-element SVector{3, Float64} with indices SOneTo(3):
@@ -121,30 +131,21 @@ julia> BodyPanelSystem(body,U=SA[0,1,0]) |> directsolve! |> addedmass
  -7.463625667299426e-17
 ```
 
+>**Note:** You may use any length-units you want to define the body, but you must then use the same length-scale within `U`. Body volumes and areas will also be given in those units (squared & cubed). Measurements such as `cₚ`, `addedmass`, `steadyforce` and the free-surface elevation `ζ` all return dimenionless values (scaled by `|U|`, body area, volume, etc). See the documentation for each function.
+
 ## Free surface panel systems
 
-We've already defined the free surface panels, so we can easily define an `FSPanelSystem` covering both `body` and `freesurf`
+For our first free-surface simulation, we can define a `FSPanelSystem` with panels on both `body` and `freesurf`. We also **must** define the Froude length ℓ≡U²/g to apply the FSBC.
 ```julia
-ulia> FSsys = FSPanelSystem(body,freesurf, ℓ=0.3, θ²=16)
-FSPanelSystem
-  freesurf: PanelTree(651 panels, 11 levels, θ²: 16)
-     size: (31, 21)
-     panel type: NeumannKelvin.QuadKernel
-  Froude length ℓ: 0.3
-  body: PanelTree(96 panels, 8 levels, θ²: 16)
-     area & volume: 0.5019560344511921, 0.02079102608493166
-     panel type: NeumannKelvin.QuadKernel
-  background flow U: [-1, 0, 0]
-  mirrors: ([1, 1, 1],)
-  strength extrema: (0.0, 0.0)
+ℓ = 1/4; h = 0.3ℓ # Froude-length and spacing
+freesurf = measure.((u,v)->SA[u,v,0],2:-h:-4,(-h/2:-h:-2.5)',h,h)
+body = panelize(S,0,π,0,π,hᵤ=h)
 ```
-Note that we **must** define the Froude length ℓ≡U²/g to apply the FSBC. The panels are automatically wrapped in a `FSPanelSystem` for `FSPanelSystems` (because they tend to be much bigger) but you can disable this by using `wrap=identity` or adjust the Barnes-Hut cutoff using the `θ²` keyword argument. 
-
-Currently, you **must** use the matrix-free `gmressolve!` to solve the `FSPanelSystem` because the FSBC influence matrix hasn't been implemented. The preconditioner is also fairly basic, and this might be worth optimizing in the future to reduce the number of GMRES iterations:
 ```julia
-julia> gmressolve!(FSsys);
+julia> FSsys = FSPanelSystem(body,freesurf;
+                  ℓ,sym_axes=2,θ²=16) |> gmressolve!
 SimpleStats
- niter: 39
+ niter: 108
  solved: true
  inconsistent: false
  indefinite: false
@@ -152,83 +153,109 @@ SimpleStats
  residuals: []
  Aresiduals: []
  κ₂(A): []
- timer: 922.19ms
+ timer: 2.29s
  status: solution good enough given atol and rtol
+
+FSPanelSystem
+  freesurf: PanelTree(2905 panels, 13 levels, θ²: 16)
+     size: (83, 35)
+     panel type: NeumannKelvin.QuadKernel
+  Froude length ℓ: 0.25
+  body: PanelTree(72 panels, 8 levels, θ²: 16)
+     area & volume: 0.25097206316403453, 0.010422384595950109
+     panel type: NeumannKelvin.QuadKernel
+  background flow U: [-1, 0, 0]
+  mirrors: ([1, -1, 1], [1, 1, 1])
+  strength extrema: (-0.09644307446593116, 0.07721147067548449)
 ```
-But the reduced solution speed is worth it, since we now can predict non-zero steady forces in potential flow
+Both the body and freesurf panels are wrapped in a `PanelTree` by default for `FSPanelSystems` (because the free-surface meshes are unavoidably large) but you can disable this using `wrap=identity` or adjust the Barnes-Hut cutoff using the `θ²` keyword argument.
+
+Currently, you **must** use the matrix-free `gmressolve!` for a `FSPanelSystem` because the FSBC influence matrix hasn't been implemented. The preconditioner is also fairly basic, and this might be worth optimizing in the future to reduce the number of GMRES iterations.
+
+Despite the large number of panels and increased iterations, the solve is still fast and we can now measure the steady wave force
 ```julia
 julia> steadyforce(FSsys)
 3-element SVector{3, Float64} with indices SOneTo(3):
-  0.0008095526294914972
- -1.1023608147049574e-5
-  0.004378899512179288
+  0.019685476370198615
+  0.0957268703375495
+ -0.009320776968417262
 ```
-The dynamic vertical force is much larger than the drag force because the body is very close to the free surface. 
+Note that we've used y-symmetry, and integrating over the half-body artificially produced a non-zero side force. However, the dynamic drag and vertical forces coefficients have been appropriately scaled by the (half) body surface area.
 
-We can also solve flows around surface peircing bodies. As a fun illustration of a Mesh-defined body, we can use a dolphin geometry!
-```
+We can also solve flows around surface piercing bodies. As a fun illustration of a Mesh-defined body, we can use a dolphin geometry!
+```julia
 using GeometryBasics,FileIO
 function affine(mesh, A, b)  # rotate, scale, and shift the mesh
     position = [Point3f(A * p + b) for p in mesh.position]
     GeometryBasics.Mesh(position, mesh.faces)
 end
-dolphin = affine(load("examples/LowPolyDolphin.stl"), SA[0 -1 0;1 0 0;0 0 1]/65,SA[0.043,0,-0.08])
-ℓ=0.4^2; h = 0.05; # define the Froude length and grid size
+dolphin = affine(load("examples//LowPolyDolphin.stl"), SA[0 -1 0;1 0 0;0 0 1]/65,SA[0.043,0,-0.08])
+ℓ=0.09; h = 0.04; # define the Froude length and grid size
 freesurf = measure.((u,v)->SA[u,v,0],2/3:-h:-4/3,(2/3:-h:-2/3)',h,h,T=Float32); # Float32 to match the Mesh
+sys = FSPanelSystem(panelize(dolphin),freesurf;ℓ)
 ```
-```juia
-julia> sys = gmressolve!(FSPanelSystem(panelize(dolphin),freesurf;ℓ),itmax=150) # set itmax in case something went wrong
-SimpleStats
- niter: 73
- solved: true
- inconsistent: false
- indefinite: false
- npcCount: 0
- residuals: []
- Aresiduals: []
- κ₂(A): []
- timer: 9.02s
- status: solution good enough given atol and rtol
-
+```julia
+julia> gmressolve!(sys,verbose=false) # skip the solver message
 FSPanelSystem
-  freesurf: PanelTree(1107 panels, 12 levels, θ²: 9)
-     size: (41, 27)
+  freesurf: PanelTree(1734 panels, 12 levels, θ²: 16)
+     size: (51, 34)
      panel type: NeumannKelvin.QuadKernel
-  Froude length ℓ: 0.16000000000000003
-  body: PanelTree(1456 panels, 12 levels, θ²: 9)
+  Froude length ℓ: 0.09
+  body: PanelTree(1456 panels, 12 levels, θ²: 16)
      area & volume: 0.4646912, 0.013457678
      panel type: NeumannKelvinGeometryBasicsExt.TriKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, 1, 1],)
-  strength extrema: (-0.21055607f0, 0.18832724f0)
+  strength extrema: (-0.21162972f0, 0.18662103f0)
 ```
-In this case, getting the steady force is underwhelming. Let's take a look!
+Note that the body panel type is now `TriKernel` because it is defined by the STL Mesh instead of a parametric surface.
+
+Let's take a look at the geometry and flow using Makie!
 ```julia
-using GLMakie # can also use Plots, or Web
+using GLMakie # can also use Plots, or WGLMakie (for browsers)
 viz(sys)
 ```
-The `viz` function defines a few default vizualizations for the body and free surface.
+![FSPanelSystem used a STL dolphin Mesh](examples//dolphin_waves.png)
+
+The `viz` function defines a few default visualizations for body and free-surface panel systems.
 
 ## Neumann-Kelvin system
 
-We can avoid the need for free surface panels by applying the Kelvin potential which satifies the linear FSBC by construction. This method is much faster, but more fragile. See the docs for `NKPanelSystem`, `kelvin`, and the cited references for details. 
+We can satify the linear FSBC by construction if we switch from source panels to Kelvin panels. This has the huge advantage of perfectly resolving the linear wavefield with no free-surface panels and (after lots of optimized integral methods) much faster solve times!
+
+Here's the same submerged spheroid example
 ```julia
-julia> NKsys = NKPanelSystem(body;ℓ=0.3) |> directsolve!
-┌ Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
-└ @ NeumannKelvin ~/Workspace/NeumannKelvin.jl/src/solvers.jl:72
-  0.054494 seconds (53 allocations: 188.406 KiB)
+julia> NKsys = NKPanelSystem(body;ℓ,sym_axes=2) |> directsolve!
+┌ Warning: This routine ignores free-surface panels and is memory intensive. See help?>directsolve!.
+└ @ NeumannKelvin c:\Users\gweymouth\Documents\GitHub\NeumannKelvin.jl\src\solvers.jl:72
+  0.04295 seconds (132 allocations: 107.078 KiB)
 NKPanelSystem
-  Neumann-Kelvin args: (ℓ = 0.3, filter = true, contour = false)
-  body: Table with 9 columns and 96 rows
-     area & volume: 0.5019560344511921, 0.02079102608493166
+  Neumann-Kelvin args: (ℓ = 0.25, filter = true, contour = false)
+  body: Table with 9 columns and 72 rows
+     area & volume: 0.25097206316403453, 0.010422384595950107
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
-  mirrors: ([1, 1, 1],)
-  strength extrema: (-0.08957114973152222, 0.07384042832146091)
+  mirrors: ([1, -1, 1], [1, 1, 1])
+  strength extrema: (-0.09838568886715646, 0.0772067740097456)
 
 julia> steadyforce(NKsys)
 3-element SVector{3, Float64} with indices SOneTo(3):
-  0.019403909013166906
- -4.00966309927463e-8
- -0.0034661615796913996
+  0.02188382689421088
+  0.0961015016623305
+ -0.009347630235111046
 ```
+You can see the results are much faster than `FSPanelSystem` - in fact this is only around 30x slower than a double body flow computed using `BodyPanelSystem`. It is encouraging that the `FSPanelSystem` solution and forces match to within a few percent despite that method's finite free-surface quadrature, wave damping, and potential numerical reflections.
+
+However, a `NKPanelSystem` has limitations. The inhomogeneous Kelvin kernel means you can't use `PanelTrees` and the perfect wave resolution can produce waves too small for the body panels near the free-surface to resolve, leading to convergence issues. See the docs for `NKPanelSystem`, `kelvin`, and the cited references for details.
+
+As a final application, let's simulate the classic Wigley hull with `NKPanels`
+```julia
+wigley(hᵤ;B=1/8,D=1/16,hᵥ=0.5hᵤ/D) = measure.(
+    (u,v)->SA[u-0.5,-2B*u*(1-u)*(v)*(2-v),D*(v-1)],
+    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ)
+NKsys = NKPanelSystem(wigley(0.025);
+          ℓ=1/2π,sym_axes=2,contour=true) |> directsolve!
+viz(NKsys)
+```
+![NKPanelSystem Wigley hull](examples//wigley_waves.png)
+This is a fisheye view so you can see the pressure distribution and the high-resolution wave pattern. The `contour=true` flag turns on the waterline contour contribution to the potential, although this is a small contribution for the fine-bow of the Wigley hull.

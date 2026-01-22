@@ -1,8 +1,11 @@
 using NeumannKelvin,Plots,ColorSchemes
 # Hull
-wigley(hᵤ;B=1/8,D=1/16,hᵥ=hᵤ/D) = measure_panel.(
-    (u,v)->SA[u-0.5,2B*u*(1-u)*(v)*(2-v),D*(v-1)],
-    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) |> Table
+wigley(hᵤ;B=1/8,D=1/16,hᵥ=0.5hᵤ/D) = measure.(
+    (u,v)->SA[u-0.5,-2B*u*(1-u)*(v)*(2-v),D*(v-1)],
+    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ) |> Table
+
+NKsys = NKPanelSystem(wigley(0.025);ℓ=1/2π,sym_axes=2,contour=true) |> directsolve!
+viz(NKsys)
 
 # Get water line points
 function WL(panels;kwargs...)

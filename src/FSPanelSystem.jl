@@ -40,7 +40,7 @@ function FSPanelSystem(body,freesurf::AbstractMatrix; Umag=1, ℓ, sym_axes=(), 
     # Lots of sanitary input checks...
     fsm = zeros(eltype(body.dA),size(freesurf)); freesurf = Table(freesurf)
     eltype(freesurf.dA) != eltype(fsm) && throw(ArgumentError("Floating point type of body and freesurf panels must match"))
-    freesurf.n[1][3]>1 && throw(ArgumentError("`freesurf` panels must point down."))
+    freesurf.n[1][3]>0 && throw(ArgumentError("`freesurf` panels must point down."))
     dx = freesurf.x[2]-freesurf.x[1]
     (dx[1]>-abs(dx[2]) || dx[3]≠0) && throw(ArgumentError("first index of `freesurf` must align with -x."))
 

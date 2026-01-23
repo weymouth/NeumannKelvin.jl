@@ -33,6 +33,7 @@ struct NKPanelSystem{B,T,M,A} <: AbstractPanelSystem
 end
 function NKPanelSystem(body; ℓ, Umag=1, sym_axes=(), filter=true, contour=false)
     any(x->x[3]≥0,body.x) && throw(ArgumentError("NK panels must be below z=0"))
+    3 ∈ sym_axes && throw(ArgumentError("Cannot reflect NK panels above z=0"))
     NKPanelSystem(Table(body,q=zeros_like(body.dA)), SA[-abs(Umag),0,0], mirrors(sym_axes...), (;ℓ,filter,contour))
 end
 

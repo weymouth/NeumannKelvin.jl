@@ -18,7 +18,7 @@ The package also defines:
  - `directsolve!`,`gmressolve!` functions to solve for the system source strength.
  - Functions to measure the induced potential `Φ` and its various "downstream" properties `∇Φ,u,cₚ,steadyforce,addedmass,ζ`, where all derivatives are computed using `ForwardDiff.jl`.
 
-# Installation & version info
+## Installation & version info
 
 The package is registered, so after installing Julia (version >1.5), you only need to open the REPL and type
 ```julia
@@ -123,7 +123,7 @@ julia> addedmass(sys)
 ```
 The max cₚ=1 because of the stagnation point, but the added mass is small because the flow direction was aligned with the long axis of the spheroid. We can compute the other added mass coefficient by rotating the body or (easier) the background flow U:
 
->**Note:** You may use any length-units you want to define the body, but you must then use the same length-scale within `U`. Body volumes and areas will also be given in those units (squared & cubed). Measurements such as `cₚ`, `addedmass`, `steadyforce` and the free-surface elevation `ζ` all return dimenionless values (scaled by `|U|`, body area, volume, etc). See the documentation for each function.
+>**Note:** You may use any length-units you want to define the body, but you must then use the same length-scale within `U`. Body volumes and areas will also be given in those units (squared & cubed). Measurements such as `cₚ`, `addedmass`, `steadyforce` and the free-surface elevation `ζ` all return dimensionless values (scaled by `|U|`, body area, volume, etc). See the documentation for each function.
 
 ```julia
 julia> directsolve!(BodyPanelSystem(body,U=SA[0,-1,0]),verbose=false) |> addedmass
@@ -144,8 +144,7 @@ freesurf = measure.((u,v)->SA[u,-v,0],2:-h:-4,(h/2:h:2)',h,h)
 halfbody = panelize(S,0,π,0,π,hᵤ=h)
 ```
 ```julia
-julia> FSsys = FSPanelSystem(halfbody,freesurf;
-                  ℓ,sym_axes=2,θ²=16) |> gmressolve!
+julia> FSsys = FSPanelSystem(halfbody,freesurf;ℓ,sym_axes=2,θ²=16) |> gmressolve!
 SimpleStats
  niter: 100
  solved: true
@@ -200,7 +199,7 @@ end
 
 # The rest of the system matches the example above
 h = 0.04; freesurf = measure.((u,v)->SA[u,-v,0],2/3:-h:-4/3,(-2/3:h:2/3)',h,h,T=Float32); # Float32 to match the Mesh
-sys = FSPanelSystem(dolphin,freesurf;ℓ=0.09) |> gmressolve!
+sys = FSPanelSystem(dolphin,freesurf;ℓ=9f-2) |> gmressolve!
 ```
 ```julia
 FSPanelSystem
@@ -228,7 +227,7 @@ The `viz` function defines a few default visualizations for body and free-surfac
 
 ## Neumann-Kelvin system
 
-We can satify the linear FSBC by construction if we switch from source panels to Kelvin panels. This has the huge advantage of perfectly resolving the linear wavefield with no free-surface panels and (after lots of optimized integral methods) much faster solve times!
+We can satisfy the linear FSBC by construction if we switch from source panels to Kelvin panels. This has the huge advantage of perfectly resolving the linear wavefield with no free-surface panels and (after lots of optimized integral methods) much faster solve times!
 
 Here's the same submerged spheroid example solved using Kelvin panels.
 ```julia
@@ -257,7 +256,7 @@ julia> steadyforce(NKsys)
 ```
 It is encouraging that the `FSPanelSystem` solution and forces match to within a few percent of the `NKPanelSystem` solution despite that method's finite free-surface quadrature, numerical wave damping and (potentially) reflections.
 
-The `NKPanelSystem` solve is much faster than `FSPanelSystem` - in fact it is only around 10x slower than a double body flow computed using `BodyPanelSystem` which can't predict drag and get's the wrong vertical force as well!
+The `NKPanelSystem` solve is much faster than `FSPanelSystem` - in fact it is only around 10x slower than a double body flow computed using `BodyPanelSystem` which can't predict drag and gets the wrong vertical force as well!
 ```julia
 julia> BodyPanelSystem(halfbody;sym_axes=(2,3)) |> directsolve! |> steadyforce!
 ┌ Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
@@ -269,7 +268,7 @@ julia> BodyPanelSystem(halfbody;sym_axes=(2,3)) |> directsolve! |> steadyforce!
  -0.006076003552147477
 ```
 
-Despite many advantages, the `NKPanelSystem` does have it's own limitations:
+Despite many advantages, the `NKPanelSystem` does have its own limitations:
 
 - The inhomogeneous Kelvin Green's function means you can't use `PanelTrees` to accelerate Kelvin panels. 
 - The perfect wave resolution can produce waves too small for the body panels near the free-surface to resolve, leading to convergence issues unless these are `filter`ed.
@@ -282,8 +281,7 @@ As a final application, let's simulate the classic Wigley hull with `NKPanels`
 wigley(hᵤ;B=1/8,D=1/16,hᵥ=0.5hᵤ/D) = measure.(
     (u,v)->SA[u-0.5,-2B*u*(1-u)*(v)*(2-v),D*(v-1)],
     0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ)
-NKsys = NKPanelSystem(wigley(0.025);
-          ℓ=1/2π,sym_axes=2,contour=true) |> directsolve!
+NKsys = NKPanelSystem(wigley(0.025);ℓ=1/2π,sym_axes=2,contour=true) |> directsolve!
 viz(NKsys)
 ```
 ![NKPanelSystem Wigley hull](examples//wigley_waves.png)

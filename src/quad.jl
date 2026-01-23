@@ -17,15 +17,15 @@ quadgl(f,a,b;x=xg32,w=wg32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 """
     complex_path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))
 
-Estimate the integral `∫f(t)dt` from `t=[-∞,∞]` using a complex path, see Gibbs 2024. The 
-finite phase ranges `rngs` are integrated along the real line with QuadGK. The range end 
+Estimate the integral `∫f(t)dt` from `t=[-∞,∞]` using a complex path, see Gibbs 2024. The
+finite phase ranges `rngs` are integrated along the real line with QuadGK. The range end
 points where `flag=true` are integrated to ±∞ in the complex-plane using `±nsp(t₀,g,dg,γ)`.
 """
 @inline function complex_path(g,dg,rngs;γ=one,
     f = t->((u,v)=reim(g(t)); @fastmath γ(t)*exp(-v)*sin(u)))
 
     # Sum the flagged endpoints and interval contributions
-    val = zero(rngs[1][1])
+    val = zero(f(rngs[1][1]))
     for i in 1:2:length(rngs)
         (t₁,∞₁),(t₂,∞₂) = rngs[i],rngs[i+1]
         ∞₁ && (val -= nsp(t₁,g,dg,γ))
@@ -62,15 +62,14 @@ such that `|g(a)-g(aᵢ)|≈Δg`. Ranges do no overlap and limited to `±R`. "Un
 `fᵢ=false` if `aᵢ=±R`.
 """
 function finite_ranges(S::NTuple{N}, g, Δg, R; atol=Δg/10) where N
-    Sv, Rv, gv = map(value,S), value(R), t->value(g(t)) # no Duals
     # helper functions to offset the phase and flag if there's no root
-    dg(a) = t->abs(gv(a)-gv(t))-Δg
-    no(a,b) = abs(gv(a)-gv(b)) ≤ Δg+atol
+    dg(a) = t->abs(g(a)-g(t))-Δg
+    no(a,b) = abs(g(a)-g(b)) ≤ Δg+atol
     # find roots of dg using brackets (Order0) or secant method (Order1)
     fz0(a,b) = no(a,b) ? (return b, false) : (find_zero(dg(a), (a,b), Order0()), true)
-    fz1(a,b) = (isfinite(b) && no(a,b)) ? (return b, false) : (find_zero(dg(a), (a,a+copysign(1,b)), Order1(); atol), true)    
+    fz1(a,b) = (isfinite(b) && no(a,b)) ? (return b, false) : (find_zero(dg(a), (a,a+copysign(1,b)), Order1(); atol), true)
     # return flagged sub-range
-    (fz1(first(Sv), -Rv), mid_ranges(Val(N), Sv, fz0)..., fz1(last(Sv), Rv))
+    (fz1(first(S), -R), mid_ranges(Val(N), S, fz0)..., fz1(last(S), R))
 end
 using TupleTools
 mid_ranges(::Val{N}, S, fz) where N = TupleTools.vcat(ntuple(N-1) do i

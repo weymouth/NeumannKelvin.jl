@@ -226,8 +226,9 @@ end
 @inline bruteW(x,y,z) = 4quadgk(t->exp(z*(1+t^2))*sin((x+y*t)*hypot(1,t)),-Inf,Inf,atol=1e-10)[1]
 @inline bruteN(x,y,z) = -2*(1-z/(hypot(x,y,z)+abs(x)))+NeumannKelvin.Ngk(x,y,z)
 using SpecialFunctions
+using ForwardDiff: Dual
 @testset "kelvin.jl" begin
-    @test NeumannKelvin.stationary_points(-1,1/sqrt(8))[1]≈1/sqrt(2)
+    @test NeumannKelvin.stationary_points(-1.,1/sqrt(8))[1]≈1/sqrt(2)
     @test NeumannKelvin.wavelike(10.,0.,-0.)==NeumannKelvin.wavelike(0.,10.,-0.)==0.
     @test 4π*bessely1(10)≈NeumannKelvin.wavelike(-10.,0.,-0.) atol=1e-5
 
@@ -241,7 +242,11 @@ using SpecialFunctions
     end
 
     @test @ballocations(NeumannKelvin.nearfield(-1.,0.,0.)) ≤ TEST_ALLOCS
+    @test @ballocations(NeumannKelvin.nearfield(Dual(-1.,0),Dual(0.,0),Dual(0.,0))) ≤ TEST_ALLOCS
+    @test @ballocations(NeumannKelvin.nearfield(Dual(-1f0,0),Dual(0f0,0),Dual(0f0,0))) ≤ TEST_ALLOCS
     @test @ballocations(NeumannKelvin.wavelike(-10.,1.,-1.)) ≤ TEST_ALLOCS
+    @test @ballocations(NeumannKelvin.wavelike(Dual(-10.,1),Dual(1.,1),Dual(-1.,1))) ≤ TEST_ALLOCS
+    @test @ballocations(NeumannKelvin.wavelike(Dual(-10f0,1),Dual(1f0,1),Dual(-1f0,1))) ≤ TEST_ALLOCS
 end
 
 function prism(h;q=0.2,Z=1)

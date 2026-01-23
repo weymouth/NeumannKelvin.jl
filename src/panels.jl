@@ -9,16 +9,17 @@ The parameter `(hᵤ+hᵥ)*c` sets the max deviation of the panel from a flat pl
 panel size in regions of high curvature. Errors if the adaptive routine gives more than `N_max` panels.
 """
 function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.05,
-                  transpose=false,flip=false,N_max=1000,verbose=false,kwargs...)
+                  transpose=false,flip=false,N_max=1000,verbose=false,T=Float64,kwargs...)
     # Transpose arguments u,v -> v,u
     transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,
-                                 transpose=false,flip=!flip,N_max,verbose,kwargs...)
+                                 transpose=false,flip=!flip,N_max,verbose,T,kwargs...)
 
     # Check inputs and get output type
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))
     (hᵤ≤0 || hᵥ≤0 || c≤0) && throw(ArgumentError("Need positive `hᵤ,hᵥ,c`. Got $hᵤ,$hᵥ,$c."))
+    u₀,u₁,v₀,v₁ = T.((u₀,u₁,v₀,v₁))
     !(typeof(surface(u₀,v₀)) <: SVector) && throw(ArgumentError("`surface` function doesn't return an SVector."))
-    init = typeof(measure(surface,0.5u₀+0.5u₁,0.5v₀+0.5v₁,u₁-u₀,v₁-v₀))[]
+    init = typeof(measure(surface,(u₀+u₁)/2,(v₀+v₁)/2,u₁-u₀,v₁-v₀))[]
 
     # Get arcslength and inverse along bottom & top edges
     S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)
@@ -45,7 +46,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
         dv = ve[2:end]-ve[1:end-1]             # panel heights
 
         # Measure panels along strip
-        @. measure(surface,u,v,du,dv;flip,kwargs...)
+        @. measure(surface,u,v,du,dv;flip,T,kwargs...)
     end
 
     # Check length and return as a Table

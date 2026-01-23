@@ -34,7 +34,7 @@ The panels themselves can either be defined by reading in a triangle-based Mesh 
 ```julia
 using NeumannKelvin
 h = 0.1 # spacing
-freesurf = measure.((u,v)->SA[u,v,0],2:-h:-4,(2:-h:-2)',h,h)
+freesurf = measure.((u,v)->SA[u,-v,0],2:-h:-4,(-2:h:2)',h,h)
 S(θ₁,θ₂) = SA[0.5cos(θ₁),-0.1sin(θ₂)*sin(θ₁),0.1cos(θ₂)*sin(θ₁)-0.15]
 body = panelize(S,0,π,0,2π,hᵤ=h)
 ```
@@ -43,9 +43,9 @@ The `measure` function measures a parametric surface into a single panel given a
 Next the panel system can be defined and solved. For an unbounded potential flow solution with a small number of panels like this one, we can use
 ```julia
 julia> sys = BodyPanelSystem(body) |> directsolve!
-┌ Warning: This routine ignores free-surface panels and is memory intensive. See help?>directsolve!.
-└ @ NeumannKelvin ~/Workspace/NeumannKelvin.jl/src/solvers.jl:72
-  0.001468 seconds (53 allocations: 259.781 KiB)
+Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
+└ @ NeumannKelvin c:\Users\gweymouth\Documents\GitHub\NeumannKelvin.jl\src\solvers.jl:72
+  0.000332 seconds (132 allocations: 168.391 KiB)
 BodyPanelSystem
   body: Table with 9 columns and 96 rows
      area & volume: 0.5019560344511921, 0.02079102608493166
@@ -54,7 +54,7 @@ BodyPanelSystem
   mirrors: ([1, 1, 1],)
   strength extrema: (-0.07478205822184282, 0.07478205822184263)
 ```
-You can see that some basic properties of the panelized body, panel type, flow parameters, and solution are shown. You can also see the solution method is very fast, 1.5ms on an old laptop for this small 96 panel system. 
+You can see that some basic properties of the panelized body, panel type, flow parameters, and solution are shown. You can also see the solution method is very fast, 330μs on my laptop for this small 96 panel system.
 
 For larger systems, it's very helpful to accelerate the solution by wrapping the panels in a `PanelTree` and using the matrix-free iterative solver:
 ```julia
@@ -70,7 +70,7 @@ SimpleStats
  residuals: []
  Aresiduals: []
  κ₂(A): []
- timer: 5.21s
+ timer: 792.14ms
  status: solution good enough given atol and rtol
 
 BodyPanelSystem
@@ -79,9 +79,11 @@ BodyPanelSystem
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, 1, 1],)
-  strength extrema: (-0.0870901881812633, 0.08709074525159466)
+  strength extrema: (-0.0870901881812638, 0.08709074525159503)
 ```
-This 20k panel body is fairly quick to solve using this approach. See the documentation for `PanelTree` and `gmressolve!` for details. Since this body is symmetric in y, we could further increase the speed by using a half of the body and applying the method of images on the symmetry axis.
+This 20k panel system still takes less than a second to solve using this approach. See the documentation for `PanelTree` and `gmressolve!` for details. 
+
+Since this body is symmetric in y, we could further increase the speed by using a half of the body and applying the method of images on the symmetry axis.
 ```julia
 julia> halfbody = panelize(S,0,π,0,π,hᵤ=1/200,N_max=Inf); # half the θ₂ range
 
@@ -95,7 +97,7 @@ SimpleStats
  residuals: []
  Aresiduals: []
  κ₂(A): []
- timer: 3.66s
+ timer: 479.57ms
  status: solution good enough given atol and rtol
 
 BodyPanelSystem
@@ -104,9 +106,9 @@ BodyPanelSystem
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, -1, 1], [1, 1, 1])
-  strength extrema: (-0.08747539911219701, 0.08749685245478749)
+  strength extrema: (-0.08747539911219676, 0.08749685245478724)
 ```
-Where we see half the number of panels and a reduced solve time, but also the new `mirror=[1,-1,1]` enforcing symmetry and therefore the same solution extrema.
+Where we see half the number of panels and approximately half the solve time, but also the new `mirror=[1,-1,1]` enforcing symmetry and therefore nearly identical solution extrema.
 
 With the system solved, we can now measure any properties of interest. For example, the extreme values of the pressure coefficient and the added mass.
 ```julia
@@ -119,33 +121,33 @@ julia> addedmass(sys)
  7.054090093897268e-5
  3.247604894181291e-5
 ```
-The max cₚ=1 because of the stagnation point, but the added mass is small because the flow direction was aligned with the long axis of the spheroid. We can compute the other added mass coefficient by rotating the body or (easier) the background flow:
-```julia
-julia> BodyPanelSystem(body,U=SA[0,1,0]) |> directsolve! |> addedmass
-┌ Warning: This routine ignores free-surface panels and is memory intensive. See help?>directsolve!.
-└ @ NeumannKelvin ~/Workspace/NeumannKelvin.jl/src/solvers.jl:72
-  0.005645 seconds (53 allocations: 163.781 KiB)
-3-element SVector{3, Float64} with indices SOneTo(3):
-  1.3036900728907295e-18
- -0.8487489964044264
- -7.463625667299426e-17
-```
+The max cₚ=1 because of the stagnation point, but the added mass is small because the flow direction was aligned with the long axis of the spheroid. We can compute the other added mass coefficient by rotating the body or (easier) the background flow U:
 
 >**Note:** You may use any length-units you want to define the body, but you must then use the same length-scale within `U`. Body volumes and areas will also be given in those units (squared & cubed). Measurements such as `cₚ`, `addedmass`, `steadyforce` and the free-surface elevation `ζ` all return dimenionless values (scaled by `|U|`, body area, volume, etc). See the documentation for each function.
+
+```julia
+julia> directsolve!(BodyPanelSystem(body,U=SA[0,-1,0]),verbose=false) |> addedmass
+3-element SVector{3, Float64} with indices SOneTo(3):
+ 1.3036900728907295e-18
+ 0.8487489964044264
+ 7.117332991687825e-17
+```
+The added mass force is larger when the flow is broadside to the body, as expected.
 
 ## Free surface panel systems
 
 For our first free-surface simulation, we can define a `FSPanelSystem` with panels on both `body` and `freesurf`. We also **must** define the Froude length ℓ≡U²/g to apply the FSBC.
 ```julia
+# Make the free-surface grid and body panels using y-symmetry and resolving ℓ
 ℓ = 1/4; h = 0.3ℓ # Froude-length and spacing
-freesurf = measure.((u,v)->SA[u,v,0],2:-h:-4,(-h/2:-h:-2.5)',h,h)
-body = panelize(S,0,π,0,π,hᵤ=h)
+freesurf = measure.((u,v)->SA[u,-v,0],2:-h:-4,(h/2:h:2)',h,h)
+halfbody = panelize(S,0,π,0,π,hᵤ=h)
 ```
 ```julia
-julia> FSsys = FSPanelSystem(body,freesurf;
+julia> FSsys = FSPanelSystem(halfbody,freesurf;
                   ℓ,sym_axes=2,θ²=16) |> gmressolve!
 SimpleStats
- niter: 108
+ niter: 100
  solved: true
  inconsistent: false
  indefinite: false
@@ -153,20 +155,20 @@ SimpleStats
  residuals: []
  Aresiduals: []
  κ₂(A): []
- timer: 2.29s
+ timer: 1.53s
  status: solution good enough given atol and rtol
 
 FSPanelSystem
-  freesurf: PanelTree(2905 panels, 13 levels, θ²: 16)
-     size: (83, 35)
+  freesurf: PanelTree(2187 panels, 13 levels, θ²: 16)
+     size: (81, 27)
      panel type: NeumannKelvin.QuadKernel
   Froude length ℓ: 0.25
   body: PanelTree(72 panels, 8 levels, θ²: 16)
-     area & volume: 0.25097206316403453, 0.010422384595950109
+     area & volume: 0.25097206316403453, 0.010422384595950107
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, -1, 1], [1, 1, 1])
-  strength extrema: (-0.09644307446593116, 0.07721147067548449)
+  strength extrema: (-0.09670047456210028, 0.07706274641204487)
 ```
 Both the body and freesurf panels are wrapped in a `PanelTree` by default for `FSPanelSystems` (because the free-surface meshes are unavoidably large) but you can disable this using `wrap=identity` or adjust the Barnes-Hut cutoff using the `θ²` keyword argument.
 
@@ -176,37 +178,42 @@ Despite the large number of panels and increased iterations, the solve is still 
 ```julia
 julia> steadyforce(FSsys)
 3-element SVector{3, Float64} with indices SOneTo(3):
-  0.019685476370198615
-  0.0957268703375495
- -0.009320776968417262
+  0.020252107305114217
+  0.09698749907738831
+ -0.00966715094756456
 ```
 Note that we've used y-symmetry, and integrating over the half-body artificially produced a non-zero side force. However, the dynamic drag and vertical forces coefficients have been appropriately scaled by the (half) body surface area.
 
 We can also solve flows around surface piercing bodies. As a fun illustration of a Mesh-defined body, we can use a dolphin geometry!
 ```julia
+# Load the mesh, xform it, and filter out panels intersecting z=0
 using GeometryBasics,FileIO
 function affine(mesh, A, b)  # rotate, scale, and shift the mesh
     position = [Point3f(A * p + b) for p in mesh.position]
     GeometryBasics.Mesh(position, mesh.faces)
 end
-dolphin = affine(load("examples//LowPolyDolphin.stl"), SA[0 -1 0;1 0 0;0 0 1]/65,SA[0.043,0,-0.08])
-ℓ=0.09; h = 0.04; # define the Froude length and grid size
-freesurf = measure.((u,v)->SA[u,v,0],2/3:-h:-4/3,(2/3:-h:-2/3)',h,h,T=Float32); # Float32 to match the Mesh
-sys = FSPanelSystem(panelize(dolphin),freesurf;ℓ)
+dolphin = let 
+    mesh = load("examples//LowPolyDolphin.stl")
+    mesh = affine(mesh, SA[0 -1 0;1 0 0;0 0 1]/65,SA[0.043,0,-0.09])
+    filter(p->abs(p.x[3])>0.01, panelize(mesh))
+end
+
+# The rest of the system matches the example above
+h = 0.04; freesurf = measure.((u,v)->SA[u,-v,0],2/3:-h:-4/3,(-2/3:h:2/3)',h,h,T=Float32); # Float32 to match the Mesh
+sys = FSPanelSystem(dolphin,freesurf;ℓ=0.09) |> gmressolve!
 ```
 ```julia
-julia> gmressolve!(sys,verbose=false) # skip the solver message
 FSPanelSystem
-  freesurf: PanelTree(1734 panels, 12 levels, θ²: 16)
+  freesurf: PanelTree(1734 panels, 12 levels, θ²: 9)
      size: (51, 34)
      panel type: NeumannKelvin.QuadKernel
   Froude length ℓ: 0.09
-  body: PanelTree(1456 panels, 12 levels, θ²: 16)
-     area & volume: 0.4646912, 0.013457678
+  body: PanelTree(1373 panels, 12 levels, θ²: 9)
+     area & volume: 0.4362399, 0.013043594
      panel type: NeumannKelvinGeometryBasicsExt.TriKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, 1, 1],)
-  strength extrema: (-0.21162972f0, 0.18662103f0)
+  strength extrema: (-0.24399182f0, 0.19675535f0)
 ```
 Note that the body panel type is now `TriKernel` because it is defined by the STL Mesh instead of a parametric surface.
 
@@ -223,12 +230,16 @@ The `viz` function defines a few default visualizations for body and free-surfac
 
 We can satify the linear FSBC by construction if we switch from source panels to Kelvin panels. This has the huge advantage of perfectly resolving the linear wavefield with no free-surface panels and (after lots of optimized integral methods) much faster solve times!
 
-Here's the same submerged spheroid example
+Here's the same submerged spheroid example solved using Kelvin panels.
 ```julia
-julia> NKsys = NKPanelSystem(body;ℓ,sym_axes=2) |> directsolve!
-┌ Warning: This routine ignores free-surface panels and is memory intensive. See help?>directsolve!.
+ℓ = 1/4; h = 0.3ℓ # Froude-length and spacing
+halfbody = panelize(S,0,π,0,π,hᵤ=h)
+```
+```julia
+julia> NKsys = NKPanelSystem(halfbody;ℓ,sym_axes=2) |> directsolve!
+┌ Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
 └ @ NeumannKelvin c:\Users\gweymouth\Documents\GitHub\NeumannKelvin.jl\src\solvers.jl:72
-  0.04295 seconds (132 allocations: 107.078 KiB)
+  0.003006 seconds (132 allocations: 107.078 KiB)
 NKPanelSystem
   Neumann-Kelvin args: (ℓ = 0.25, filter = true, contour = false)
   body: Table with 9 columns and 72 rows
@@ -236,7 +247,7 @@ NKPanelSystem
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, -1, 1], [1, 1, 1])
-  strength extrema: (-0.09838568886715646, 0.0772067740097456)
+  strength extrema: (-0.09838582154859293, 0.07720677207281905)
 
 julia> steadyforce(NKsys)
 3-element SVector{3, Float64} with indices SOneTo(3):
@@ -244,9 +255,27 @@ julia> steadyforce(NKsys)
   0.0961015016623305
  -0.009347630235111046
 ```
-You can see the results are much faster than `FSPanelSystem` - in fact this is only around 30x slower than a double body flow computed using `BodyPanelSystem`. It is encouraging that the `FSPanelSystem` solution and forces match to within a few percent despite that method's finite free-surface quadrature, wave damping, and potential numerical reflections.
+It is encouraging that the `FSPanelSystem` solution and forces match to within a few percent of the `NKPanelSystem` solution despite that method's finite free-surface quadrature, numerical wave damping and (potentially) reflections.
 
-However, a `NKPanelSystem` has limitations. The inhomogeneous Kelvin kernel means you can't use `PanelTrees` and the perfect wave resolution can produce waves too small for the body panels near the free-surface to resolve, leading to convergence issues. See the docs for `NKPanelSystem`, `kelvin`, and the cited references for details.
+The `NKPanelSystem` solve is much faster than `FSPanelSystem` - in fact it is only around 10x slower than a double body flow computed using `BodyPanelSystem` which can't predict drag and get's the wrong vertical force as well!
+```julia
+julia> BodyPanelSystem(halfbody;sym_axes=(2,3)) |> directsolve! |> steadyforce!
+┌ Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
+└ @ NeumannKelvin c:\Users\gweymouth\Documents\GitHub\NeumannKelvin.jl\src\solvers.jl:72
+  0.000361 seconds (132 allocations: 104.891 KiB)
+3-element SVector{3, Float64} with indices SOneTo(3):
+ -2.2957434790946685e-12
+  0.0741385277429429
+ -0.006076003552147477
+```
+
+Despite many advantages, the `NKPanelSystem` does have it's own limitations:
+
+- The inhomogeneous Kelvin Green's function means you can't use `PanelTrees` to accelerate Kelvin panels. 
+- The perfect wave resolution can produce waves too small for the body panels near the free-surface to resolve, leading to convergence issues unless these are `filter`ed.
+- Kelvin panels can not be extended to inforce the Nonlinear FSBC, unlike `FSPanelSystem`s which could potentially do so in the future.
+
+See the docs for `NKPanelSystem`, `kelvin`, and the cited references for details.
 
 As a final application, let's simulate the classic Wigley hull with `NKPanels`
 ```julia

@@ -38,18 +38,19 @@ end
     @test NeumannKelvin.κₙ(ellip,0.) ≈ 1
     @test NeumannKelvin.κₙ(ellip,0.5pi) ≈ 3
 
-    for c in (1,0.1301,0.029165) # tuned s.t. S≈N-1
-        S,s⁻¹ = NeumannKelvin.arclength(ellip,1,c,0,pi)
+    for devlimit in (1,0.1301,0.029165) # tuned s.t. S≈N-1
+        S,s⁻¹ = NeumannKelvin.arclength(ellip,1,devlimit,0,pi)
         N = 2Int(round(S/2)); u = s⁻¹(range(0,S,N))
-        if c==1 # should be equal length
+        if devlimit==1 # should be equal length
             l = [quadgk(NeumannKelvin.arcspeed(ellip),u[i],u[i+1])[1] for i in 1:N-1]
             @test l ≈ [sum(l)/(N-1) for i in 1:N-1] rtol=0.03
         end
-        @test 3-ellip(u[N÷2])[1] ≤ 1.10c # should have bounded deviation
+        @test 3-ellip(u[N÷2])[1] ≤ 1.10devlimit # should have bounded deviation
     end
 
     torus(θ₁,θ₂;r=0.3,R=1) = SA[(R+r*cos(θ₂))*cos(θ₁),(R+r*cos(θ₂))*sin(θ₁),r*sin(θ₂)]
-    spheroid(θ₁,θ₂;a=1.,b=1.,c=1.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
+    spheroid(θ₁,θ₂;a=1.,b=1.,c=3.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
+    sphere(θ₁,θ₂) = spheroid(θ₁,θ₂; c=1.)
 
     # Equal areas sanity checks
     function area_checks(dA,goal)
@@ -57,25 +58,25 @@ end
         @test mdA ≈ goal rtol = 0.08
         @test maximum(abs,panels.dA .- mdA) < 0.16goal
     end
-    panels = panelize(spheroid,0,pi,0,2pi,hᵤ=0.5,c=Inf)
+    panels = panelize(sphere,0,pi,0,2pi,hᵤ=0.5,devlimit=Inf)
     area_checks(panels.dA,0.5^2)
     @test sum(panels.dA) ≈ 4π rtol=1e-4
-    panels = panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=1,hᵥ=0.5,c=Inf)
+    panels = panelize(spheroid,0,pi,0,2pi,hᵤ=1,hᵥ=0.5,devlimit=Inf)
     area_checks(panels.dA,0.5)
     @test sum(panels.dA) ≈ 30.894 rtol=1e-3
-    panels = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true,c=Inf)
+    panels = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true,devlimit=Inf)
     area_checks(panels.dA,0.18)
     @test sum(panels.dA) ≈ 4π^2*0.3
 
     # Check sign is correct when flipped
-    panels_bad = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,c=Inf)
+    panels_bad = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,devlimit=Inf)
     @test panels[1].n ⋅ panels_bad[1].n > 0.99
 
     # Check inputs
-    @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=0)
-    @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,0,hᵤ=0.2)
-    @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,0,0,2pi,hᵤ=0.2)
-    @test_throws ArgumentError panelize((u,v)->spheroid(u,v;c=3.),0,pi,0,2pi,hᵤ=0.1)
+    @test_throws ArgumentError panelize(spheroid,0,pi,0,2pi,hᵤ=0)
+    @test_throws ArgumentError panelize(spheroid,0,pi,0,0,hᵤ=0.2)
+    @test_throws ArgumentError panelize(spheroid,0,0,0,2pi,hᵤ=0.2)
+    @test_throws ArgumentError panelize(spheroid,0,pi,0,2pi,hᵤ=0.1)
     @test_throws ArgumentError panelize((u,v)->[u,u,v])
 end
 

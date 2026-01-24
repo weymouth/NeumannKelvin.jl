@@ -1,29 +1,29 @@
 """
-    panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,c=0.05,transpose=false,flip=false,N_max=1000,kwargs...)
+    panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,devlimit=0.05,transpose=false,flip=false,N_max=1000,kwargs...)
 
 Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]`, returning a `Table` of panels.
 
-The surface is split into strips roughly `hᵤ` wide, which are split into panels roughly `hᵥ` high.
+The surface is split into strips roughly `hᵤ` wide which are split into panels roughly `hᵥ` high which are then `measure`d.
 Use `transpose=true` to change the strip direction and `flip=true` to flip the normal direction.
-The parameter `(hᵤ+hᵥ)*c` sets the max deviation of the panel from a flat plane by reducing
-panel size in regions of high curvature. Errors if the adaptive routine gives more than `N_max` panels.
+The parameter `devlimit` sets the max deviation of the panel from a flat plane by reducing panel size in regions of high curvature. 
+This function throws an error if the adaptive routine gives more than `N_max` panels.
 """
-function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.05,
+function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,devlimit=0.05,
                   transpose=false,flip=false,N_max=1000,verbose=false,T=Float64,kwargs...)
     # Transpose arguments u,v -> v,u
-    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,c,
+    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,devlimit,
                                  transpose=false,flip=!flip,N_max,verbose,T,kwargs...)
 
     # Check inputs and get output type
     (u₀≥u₁ || v₀≥v₁) && throw(ArgumentError("Need `u₀<u₁` and `v₀<v₁`. Got [$u₀,$u₁],[$v₀,$v₁]."))
-    (hᵤ≤0 || hᵥ≤0 || c≤0) && throw(ArgumentError("Need positive `hᵤ,hᵥ,c`. Got $hᵤ,$hᵥ,$c."))
+    (hᵤ≤0 || hᵥ≤0 || devlimit≤0) && throw(ArgumentError("Need positive `hᵤ,hᵥ,devlimit`. Got $hᵤ,$hᵥ,$devlimit."))
     u₀,u₁,v₀,v₁ = T.((u₀,u₁,v₀,v₁))
     !(typeof(surface(u₀,v₀)) <: SVector) && throw(ArgumentError("`surface` function doesn't return an SVector."))
     init = typeof(measure(surface,(u₀+u₁)/2,(v₀+v₁)/2,u₁-u₀,v₁-v₀))[]
 
     # Get arcslength and inverse along bottom & top edges
-    S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,c,u₀,u₁)
-    S₁,s₁⁻¹ = arclength(u->surface(u,v₁),hᵤ,c,u₀,u₁)
+    S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,devlimit,u₀,u₁)
+    S₁,s₁⁻¹ = arclength(u->surface(u,v₁),hᵤ,devlimit,u₀,u₁)
     verbose && @show S₀,S₁
 
     # Define strips
@@ -37,7 +37,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
         u,du = 0.5uᵢ[i+1]+0.5uᵢ[i],uᵢ[i+1]-uᵢ[i] # Parametric center & width
 
         # Find equidistant points along strip
-        S,s⁻¹ = arclength(v->surface(u,v),hᵥ,c,v₀,v₁) # speed along strip center
+        S,s⁻¹ = arclength(v->surface(u,v),hᵥ,devlimit,v₀,v₁) # speed along strip center
         verbose && @show i,S
         S ≤ 0.5hᵥ && return init               # not enough height
         ve = s⁻¹(range(0,S,round(Int,S/hᵥ)+1)) # panel endpoints
@@ -51,15 +51,15 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,c=0.
 
     # Check length and return as a Table
     length(panels) ≤ N_max && return Table(panels)
-    throw(ArgumentError("length(panels)=$(length(panels))>$N_max. Increase hᵤ,hᵥ,c and/or N_max."))
+    throw(ArgumentError("length(panels)=$(length(panels))>$N_max. Increase hᵤ,hᵥ,devlimit and/or N_max."))
 end
 
 using QuadGK,DataInterpolations
 """
-    arclength(r, Δs, c, low, high) -> S, u(s)
+    arclength(r, Δs, devlimit, low, high) -> S, u(s)
 
 Find the pseudo-arclength `s` along a curve `r(u), u ∈ [low,high]`
-by integrating the pseudo-arcspeed `s' = max(l',√(Δs*κₙ/8c)))` where
+by integrating the pseudo-arcspeed `s' = max(l',√(Δs*κₙ/8devlimit)))` where
 `l' ≡ ∥r'∥` and `κₙ=√(∥r"∥²-l"²)` are the arcspeed and normal curvature.
 
 # Returns
@@ -70,15 +70,15 @@ by integrating the pseudo-arcspeed `s' = max(l',√(Δs*κₙ/8c)))` where
 # Details
 
 The speed `s'` is defined such that segments of length `Δs` along `r`
-deviate no more than `δ≤Δs*c` from the curve. Starting from the
+deviate no more than `δ≤Δs*devlimit` from the curve. Starting from the
 curvature-based deviation estimate `δ≈Δl²/8κ`, and using `Δl≈l'*Δu`
-and `Δs≈s'*Δu` gives the inequality `s'≥l'√(Δs*κ/8c)`. Demanding also
+and `Δs≈s'*Δu` gives the inequality `s'≥l'√(Δs*κ/8devlimit)`. Demanding also
 that `s'≥l'` such that `Δl≤Δs` and substituting `κₙ = l'² κ` leads to
 the rate equation above.
 """
-function arclength(r,Δs,c,low,high)
+function arclength(r,Δs,devlimit,low,high)
     # Use quadgk to adaptively sample ∫ds, returning S and subintervals Δᵢ
-    @inline speed(u) = max(arcspeed(r)(u),√(Δs*κₙ(r,u)/8c))
+    @inline speed(u) = max(arcspeed(r)(u),√(Δs*κₙ(r,u)/8devlimit))
     S,_,Δᵢ = quadgk_segbuf(speed,range(low,high,4),rtol=1e-5,order=3)
     # Order the subintervals and accumulate the arclength data s(uᵢ)=∑ⁱⱼ₌₀ Δsⱼ
     sort!(Δᵢ,by=Δ->Δ.a)

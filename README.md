@@ -20,7 +20,7 @@ The package also defines:
 
 ## Installation & version info
 
-The package is registered, so after installing Julia (version >1.5), you only need to open the REPL and type
+The package is registered, so after installing Julia (version ≥1.9), you only need to open the REPL and type
 ```julia
 ] add NeumannKelvin
 ```
@@ -218,7 +218,7 @@ Note that the body panel type is now `TriKernel` because it is defined by the ST
 
 Let's take a look at the geometry and flow using Makie!
 ```julia
-using GLMakie # can also use Plots, or WGLMakie (for browsers)
+using GLMakie # can also use WGLMakie for rendering in browsers
 viz(sys)
 ```
 ![FSPanelSystem used a STL dolphin Mesh](examples//dolphin_waves.png)

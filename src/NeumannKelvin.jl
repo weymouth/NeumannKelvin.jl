@@ -44,35 +44,37 @@ components(data,i) = getindex.(data, i)
 components(data::AbstractArray{S}) where {S<:SVector{n}} where n = ntuple(i->components(data,i),n)
 extent(a) = (p = extrema(a); p[2]-p[1])
 """
-    viz(panels::Table, values=panels.dA; vectors=0.3panels.n, kwargs...)
+    viz(panels::Table, values=panels.dA; vectors=panels.n, kwargs...)
+    viz(sys::BodyPanelSystem, values=cₚ(sys); vectors=u(sys), kwargs...)
+    viz(sys::FSPanelSystem, values=cₚ(sys); vectors=u(sys), freesurf=true, kwargs...)
+    viz(sys::NKPanelSystem, values=cₚ(sys); vectors=u(sys), freesurf=true, 
+        fsargs=(;s=1/2+2πℓ,h=ℓ/3,half=true), kwargs...)
 
-Vizualizes a table of `panels` in 3D. Panels are colored by the `value` array
-and the `vectors` are plotted extending from each panel center.
+Vizualizes a table of `panels` or a `PanelSystem` in 3D. Panels are colored by the `value` array
+and the `vectors` are plotted extending from each panel center. If `freesurf` is true (default) for
+a free-surface panel system, the free surface is also plotted. The `fsargs` keyword tuple allows 
+passing arguments to define the free surface extents and resolution for `NKPanelSystem`s.
 
-# Details
-
-If Plots is loaded, the panels are visualized with colored markers and the
-vectors are grey lines.
-
-If a Makie library is loaded, the panels are visualized as two triangles extending
-to the corners, and the vectors are colored 3D arrows.
+** Note ** you must load a Makie backend (GLMakie or WGLMakie) to use this function.
 
 # Example
-    using NeumannKelvin,Plots
-    panels = panelize((u,v)->SA[cos(u),cos(v)*sin(u),sin(v)*sin(u)],0,pi,0,2pi)
-    viz(panels)
+    using NeumannKelvin,WGLMakie
+    panels = panelize((u,v)->SA[cos(u),cos(v)*sin(u),sin(v)*sin(u)-1.5],0,pi,0,2pi)
+    viz(panels,vscale=3) # view panels, normals scaled by 3
+
+    sys = NKPanelSystem(panels,ℓ=1/4) |> directsolve!
+    viz(sys;fsargs=(s=2)) # view NK solution with free surface extent s=2
 """
-viz(sys::AbstractPanelSystem;vscale=1,kwargs...) = ((cp,vectors)=cₚu(sys);viz(sys.body,cp;vectors,vscale,label="cₚ",kwargs...))
-viz(args...; kwargs...) = @warn "Load Plots or GLMakie (terminal/VSCode) or WGLMakie (browser/Pluto) for viz functionality."
+viz(args...; kwargs...) = @warn "Load GLMakie or WGLMakie for viz functionality."
 function cₚu(sys)
     vectors = u(sys); U² = sum(abs2,sys.U); cp = @. 1-sum(abs2,vectors)/U²
     return cp,vectors
 end
-function xyζ(sys::NKPanelSystem,s=1/2+2π*sys.args.ℓ,h=sys.args.ℓ/3,half=true)
+function xyζ(sys::NKPanelSystem;s=1/2+2π*sys.args.ℓ,h=sys.args.ℓ/3,half=true)
     x,y=-2s:h:s,ifelse(half,0,-s):h:s
     return x,y,ζ(x,y,sys) .* sys.args.ℓ
 end
-function xyζ(sys::FSPanelSystem)
+function xyζ(sys::FSPanelSystem; ignore...)
     x,y,_ = reshape.(components(sys.freesurf.x),Ref(size(sys.fsm)))
     return x,y,ζ(sys) .* sys.ℓ
 end

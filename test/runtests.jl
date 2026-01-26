@@ -34,9 +34,9 @@ end
 @testset "panels.jl" begin
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
-    @test NeumannKelvin.κₙ(circ,0.) ≈ NeumannKelvin.κₙ(circ,0.5pi) ≈ 4
-    @test NeumannKelvin.κₙ(ellip,0.) ≈ 1
-    @test NeumannKelvin.κₙ(ellip,0.5pi) ≈ 3
+    @test NeumannKelvin.aₙ(circ,0.) ≈ NeumannKelvin.aₙ(circ,0.5pi) ≈ 4
+    @test NeumannKelvin.aₙ(ellip,0.) ≈ 1
+    @test NeumannKelvin.aₙ(ellip,0.5pi) ≈ 3
 
     for devlimit in (1,0.1301,0.029165) # tuned s.t. S≈N-1
         S,s⁻¹ = NeumannKelvin.arclength(ellip,1,devlimit,0,pi)

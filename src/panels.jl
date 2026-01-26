@@ -5,7 +5,7 @@ Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]`, retu
 
 The surface is split into strips roughly `hᵤ` wide which are split into panels roughly `hᵥ` high which are then `measure`d.
 Use `transpose=true` to change the strip direction and `flip=true` to flip the normal direction.
-The parameter `devlimit` sets the max deviation of the panel from a flat plane by reducing panel size in regions of high curvature. 
+The parameter `devlimit` sets the max deviation of a flat panel from the surface by reducing panel size in regions of high curvature.
 This function throws an error if the adaptive routine gives more than `N_max` panels.
 """
 function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,devlimit=0.05,
@@ -21,7 +21,7 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,devl
     !(typeof(surface(u₀,v₀)) <: SVector) && throw(ArgumentError("`surface` function doesn't return an SVector."))
     init = typeof(measure(surface,(u₀+u₁)/2,(v₀+v₁)/2,u₁-u₀,v₁-v₀))[]
 
-    # Get arcslength and inverse along bottom & top edges
+    # Get arclength and inverse function along bottom & top edges
     S₀,s₀⁻¹ = arclength(u->surface(u,v₀),hᵤ,devlimit,u₀,u₁)
     S₁,s₁⁻¹ = arclength(u->surface(u,v₁),hᵤ,devlimit,u₀,u₁)
     verbose && @show S₀,S₁
@@ -36,8 +36,8 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,devl
     panels = mapreduce(vcat,1:N; init) do i
         u,du = 0.5uᵢ[i+1]+0.5uᵢ[i],uᵢ[i+1]-uᵢ[i] # Parametric center & width
 
-        # Find equidistant points along strip
-        S,s⁻¹ = arclength(v->surface(u,v),hᵥ,devlimit,v₀,v₁) # speed along strip center
+        # Find equidistant points along strip center
+        S,s⁻¹ = arclength(v->surface(u,v),hᵥ,devlimit,v₀,v₁)
         verbose && @show i,S
         S ≤ 0.5hᵥ && return init               # not enough height
         ve = s⁻¹(range(0,S,round(Int,S/hᵥ)+1)) # panel endpoints
@@ -59,8 +59,8 @@ using QuadGK,DataInterpolations
     arclength(r, Δs, devlimit, low, high) -> S, u(s)
 
 Find the pseudo-arclength `s` along a curve `r(u), u ∈ [low,high]`
-by integrating the pseudo-arcspeed `s' = max(l',√(Δs*κₙ/8devlimit)))` where
-`l' ≡ ∥r'∥` and `κₙ=√(∥r"∥²-l"²)` are the arcspeed and normal curvature.
+by integrating the pseudo-arcspeed `s' = max(l',√(Δs*aₙ/8devlimit)))` where
+`l' ≡ ∥r'∥` and `aₙ=√(∥r"∥²-l"²)` are the arcspeed and normal acceleration.
 
 # Returns
 
@@ -73,24 +73,24 @@ The speed `s'` is defined such that segments of length `Δs` along `r`
 deviate no more than `δ≤Δs*devlimit` from the curve. Starting from the
 curvature-based deviation estimate `δ≈Δl²/8κ`, and using `Δl≈l'*Δu`
 and `Δs≈s'*Δu` gives the inequality `s'≥l'√(Δs*κ/8devlimit)`. Demanding also
-that `s'≥l'` such that `Δl≤Δs` and substituting `κₙ = l'² κ` leads to
+that `s'≥l'` such that `Δl≤Δs` and substituting `aₙ = l'² κ` leads to
 the rate equation above.
 """
 function arclength(r,Δs,devlimit,low,high)
     # Use quadgk to adaptively sample ∫ds, returning S and subintervals Δᵢ
-    @inline speed(u) = max(arcspeed(r)(u),√(Δs*κₙ(r,u)/8devlimit))
+    @inline speed(u) = max(arcspeed(r)(u),√(Δs*aₙ(r,u)/8devlimit))
     S,_,Δᵢ = quadgk_segbuf(speed,range(low,high,4),rtol=1e-5,order=3)
     # Order the subintervals and accumulate the arclength data s(uᵢ)=∑ⁱⱼ₌₀ Δsⱼ
     sort!(Δᵢ,by=Δ->Δ.a)
     uᵢ,sᵢ = [low; map(Δ->Δ.b,Δᵢ)],[zero(S); cumsum(map(Δ->Δ.I,Δᵢ))]
     # Construct a Monotonic Hermite Cubic Spline for u(s) using bounded duᵢ/ds
     duᵢ = map(eachindex(uᵢ)) do i
-        min(3secant(Δᵢ[max(1,i-1)]),3secant(Δᵢ[min(i,length(Δᵢ))]),inv(speed(i==1 ? Δᵢ[1].a : Δᵢ[i-1].b)))
+        min(3secant(Δᵢ[max(1,i-1)]),3secant(Δᵢ[min(i,length(Δᵢ))]),inv(speed(uᵢ[i])))
     end
     S,CubicHermiteSpline(duᵢ,uᵢ,sᵢ,extrapolation = ExtrapolationType.Constant)
 end
 arcspeed(r) = u->norm(derivative(r,u))
-κₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
+aₙ(r,u) = √max(0,sum(abs2,derivative(u->derivative(r,u),u))-derivative(arcspeed(r),u)^2)
 secant(Δ)=(Δ.b-Δ.a)/Δ.I
 
 abstract type GreenKernel end

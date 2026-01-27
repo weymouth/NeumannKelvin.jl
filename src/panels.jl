@@ -71,7 +71,7 @@ by integrating the pseudo-arcspeed `s' = max(l',√(Δs*aₙ/8devlimit)))` where
 
 The speed `s'` is defined such that segments of length `Δs` along `r`
 deviate no more than `δ≤Δs*devlimit` from the curve. Starting from the
-curvature-based deviation estimate `δ≈Δl²/8κ`, and using `Δl≈l'*Δu`
+curvature-based deviation estimate `δ≈Δl²κ/8`, and using `Δl≈l'*Δu`
 and `Δs≈s'*Δu` gives the inequality `s'≥l'√(Δs*κ/8devlimit)`. Demanding also
 that `s'≥l'` such that `Δl≤Δs` and substituting `aₙ = l'² κ` leads to
 the rate equation above.

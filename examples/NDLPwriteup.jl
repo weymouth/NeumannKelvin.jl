@@ -16,18 +16,15 @@ md"""
 
 ## Motivation: Efficient one-shot curve sampling with tight deviation bounds
 
-Many numerical methods require representing smooth curves by piecewise-linear segments. Examples include panel methods, filament methods, and boundary integral discretizations. The goal is typically to place points along a curve such that:
- - geometric error is controlled,
- - unnecessary points are avoided,
- - and refinement behaves predictably.
+Many numerical methods require representing smooth curves by points sampled along the curve. Examples include panel methods, filament methods, and boundary integral discretizations. The goal is typically to place points along a curve such that geometric error is controlled, unnecessary points are avoided, and refinement behaves predictably.
 
-The most common approach in practice is recursive subdivision: split segments until local error criteria are satisfied. While robust, subdivision is inefficient in the number of segments required and highly sensitive to small changes in curve definition and segmentation parameters.
+The most common approach in practice is recursive subdivision which splits segments until local error criteria are satisfied. While robust, subdivision is prone to oversample points and is sensitive to small changes in curve and segmentation parameters.
 
-The most common alternative is to construct a re-parameterization for the curve to heuristically control accuracy. These methods typically weight the arc-speed with local curvature in some manner, but such methods lack guarantees and must be tuned iteratively *for each case* to achieve any required error limit.
+The most common alternative is to construct a re-parameterization for the curve to heuristically control accuracy. Curvature-weighted reparameterizations produce smooth segmentations but offer no direct control over maximum deviation and therefore require iterative tuning.
 
-In this notebook we explore an alternative: Normal-Deviation–Limited Parameterization (NDLP). NDLP  hard-codes a pointwise geometric deviation bound directly into a parameterization using the curve's normal acceleration. We will show that the resulting segmentation has smoothly varying density and exhibits a maximum deviation from the curve which is tightly bound to a prescribed tolerance, enforcing the bound while minimizing the number of segments. This is achieved without iteration or heuristic tuning - a true one-shot method.
+In this notebook we propose Normal-Deviation–Limited Parameterization (NDLP) which embeds a pointwise geometric deviation bound in the parameterization using the curve's normal acceleration. The resulting segmentation has smoothly varying density and exhibits a maximum deviation from the curve which is tightly bound to a prescribed tolerance, enforcing the bound while minimizing the number of segments. This is achieved without iteration or heuristic tuning - a true one-shot method.
 
-All results below are fully reproducible.
+All results below are fully reproducible. Click the "Download as Pluto notebook" button at the top right to run locally.
 
 ## Key idea
 
@@ -43,7 +40,7 @@ where $\Delta s$ is the maximum segment length and $d_n$ is a specified normal d
 
 ## Illustration
 
-We give an initial illustration of the the performance over the new approach using a cubic spline geometry and a coarse sampling $\Delta s=1/4$ and $d_n=9$% to highlight the differences. The new NDLP sampling is tight to the prescribed deviation limit and uses the fewest number of points.
+We give an initial illustration of the the performance over the new approach using a cubic spline geometry and a coarse sampling $\Delta s=1/4$ and $d_n=9\%$ to highlight the differences. The new NDLP sampling is tight to the prescribed deviation limit and uses the fewest number of points.
 """
 
 # ╔═╡ e1bc7e76-a497-41db-8f91-b8912e359e0e
@@ -58,7 +55,7 @@ We begin by defining a small set of representative curves:
 1. a three-dimensional helix with varying pitch and radius,
 1. and a V-shaped "curve" with a corner that violates smoothness assumptions.
 
-These are deliberately chosen to expose both strengths and failure modes of the methods. The final example (the V-shape) is included as a negative control as local curvature-based methods can not handle curvature discontinuities gracefully.
+These are deliberately chosen to expose both strengths and failure modes of the methods. The final example (the V-shape) is included as a negative control as local curvature-based methods cannot handle curvature discontinuities gracefully.
 """
 
 # ╔═╡ 28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
@@ -107,11 +104,11 @@ We begin by defining three segmentation methods: 1. adaptive subdivision, 2. cur
 
 The adaptive subdivision method recursively splits segments until local deviation and length criteria are met. For each segment $[u_i,u_{i+1}]$, we approximate the segment curve length $\Delta l$ and the maximum deviation $\delta$ by sampling points along the segment. If either limit is exceeded the segment is bisected at $u_m = (u_i + u_{i+1})/2$. This process continues until all segments satisfy the criteria.
 
-The limitation of this method is that it is inherently binary: segments are either split or not based on local criteria. Therefore, any violation of the tolerance, no matter how small, forces a full bisection, resulting in up to 50% local oversampling. The discrete nature of the approach also makes the final segmentation sensitive to small changes in the curve are limits, adding discretization noise to methods using the segmentation, such as convergence and optimization studies.
+The limitation of this method is that it is inherently binary: segments are either split or not based on local criteria. Therefore, any violation of the tolerance, no matter how small, forces a full bisection, resulting in up to 50% local oversampling. The discrete nature of the approach also makes the final segmentation sensitive to small changes in the curve or limits, adding discretization noise to methods using the segmentation, such as convergence and optimization studies.
 
-### 2. Curvature-weighted sampling
+### 2. Curvature weighted sampling
 
-A common method to smoothly control the deviation is to reparameterize the curve with the local curvature $\kappa$ to increase sampling density in high-curvature regions. A simple choice is to define a reparameterized speed function $s' = l'\sqrt{1 + \tilde C \kappa}$, where $\tilde C$ is a tunable constant. This results in smooth segmentations, but there is no direct control over the maximum deviation from the curve, and the method requires iterative tuning of $\tilde C$ to achieve any required deviation limits.
+A common method to smoothly control the deviation is to reparameterize the curve with the local curvature $\kappa$ to increase sampling density in high-curvature regions. A simple choice is to define a reparameterized speed function $s' = l'\sqrt{1 + \tilde C \kappa}$, where $l' = \lVert r'(u) \rVert$ is the arc-speed and $\tilde C$ is a tunable constant. This results in smooth segmentations, but there is no direct control over the maximum deviation from the curve, and the method requires iterative tuning of $\tilde C$ to achieve any required deviation limits.
 
 Note that the units of $\tilde C$ are length, so it is sensible to set $\tilde C = C \Delta s$ for some dimensionless $C$. However, this parameter still must be tuned and won't generalize across curves or sampling densities, as demonstrated here.
 
@@ -123,8 +120,8 @@ Starting from the curvature-based deviation estimate $\delta\approx \frac 1 8 \D
 
 $s' \geq l' \sqrt{\frac{\Delta s \kappa}{8d_n}}.$
 
-Defining the geometric normal arc-acceleration $a_n = \sqrt{|r''|^2-l''^2} = l'^2 \kappa$, and
-demanding also that $s' \geq l'$ such that $\Delta l \leq \Delta s$ implies that the tightest speed parameterization to the two bounds is:
+Defining the curve's geometric normal acceleration $a_n \equiv \sqrt{\lVert r'' \rVert^2-l''^2} = l'^2 \kappa$, and
+demanding also that $s' \geq l'$ such that $\Delta l \leq \Delta s$ yields the speed parameterization which is tight to both limits:
 
 $s' = \max\left(l', \sqrt{\frac{\Delta s a_n}{8 d_n}}\right)$
 
@@ -137,15 +134,13 @@ Note that while the deviation estimate that is the basis of this parameterizatio
 md"""
 ### Results
 
-We evaluate each method on the test curves defined above, using a maximum segment length of $\Delta s=L/20$ and a deviation limit of $d_n=1/100$. The results are summarized in the tables below, reporting the following metrics:
- - `δ∞`=$\max(\delta)/(d_n\Delta s)$: the scaled normal deviation,
+We evaluate each method on the test curves defined above, using a maximum segment length of $\Delta s=L/33$ and a deviation limit of $d_n=1/100$. The results are summarized in the tables below, reporting the following metrics:
+ - `δ∞`=$\max(\delta)/(d_n\Delta s)$: the scaled normal deviation (target is 1),
  - `σ`=$N\Delta s/L-1$: the scaled number of extra segments needed to hit the deviation limit (lower is better),
  - `Rₜᵥ`=$\sum(R)/L$ where $R_i=|Δl_{i+1}-Δl_i|$: the scaled total variation of segment lengths (lower is better),
  - `R∞`=$\max(R)/\Delta s$: the scaled maximum variation of segment lengths (lower is better).
 
-The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in with minimal excess segments, outperforming both adaptive subdivision and curvature-weighted sampling. In particular the measured deviation is within ±4% of the deviation limit, while the curvature weighted method has a ±15% variation **even after tuning**, and the subdivision method can be up to 50% oversampled.
-
-Adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, indicating Lipschitz-continuous spacing adaptation with respect to arclength. Moreover, for fixed deviation limit, the parameterization converges to uniform arclength as $\Delta s\rightarrow 0$ by construction, so both the total variation and the maximum local spacing variation vanish under refinement.
+The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in minimal excess segments, outperforming both adaptive subdivision and curvature-weighted sampling. In particular the deviation from NDLP sampling is within 4% of the deviation limit, while the curvature weighted method has a ±20% variation **even after tuning**, and the subdivision method can be up to 50% oversampled. Adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, indicating Lipschitz-continuous spacing adaptation with respect to arclength. 
 """
 
 # ╔═╡ b38c2b1c-a48c-4f1f-954b-95faaba680d7
@@ -185,23 +180,23 @@ begin
 			rseg = (u₀=um, u₁=s.u₁, dl=seg_len(r,um,s.u₁), δ=seg_dev(r,um,s.u₁))
 			segments[i] = lseg; insert!(segments, i+1, rseg)
 		end
-		[getfield.(segments,:u₀);u₁]
+		[map(s->s.u₀,segments); u₁]
 	end
 	function κ_weighted(r, u₀, u₁, Δs, dₙ)
-		C = 11 # Hand tuned to work on the test_curves! 🤢
+		C = 10.5 # Hand tuned for these test_curves! 🤢
 		speed(u) = √(arcspeed(r)(u)^2+C*Δs*aₙ(r,u))
 		S,s⁻¹ = ∫speed(speed, u₀, u₁)
 		return s⁻¹.(range(0, S, round(Int,S/Δs)+1))
 	end
-	function NDLP(r, u₀, u₁, Δs, dₙ) # so nice 🤓
+	function NDLP(r, u₀, u₁, Δs, dₙ) # one-shot sampling! 🤓
 		speed(u) = max(arcspeed(r)(u),√(Δs*aₙ(r,u)/8dₙ))
 		rtol = 1e-6Δs # only needed since convergence study lets Δs→0
 		S,s⁻¹ = ∫speed(speed, u₀, u₁; rtol)
 		return s⁻¹.(range(0, S, round(Int,S/Δs)+1))
 	end
-	function ∫speed(speed, u₀, u₁; rtol=1e-5,order=3)
+	function ∫speed(speed, u₀, u₁; rtol=1e-5)
 		# Adaptive speed(u) integration
-		S,_,Δᵢ = quadgk_segbuf(speed,range(u₀, u₁,4);rtol,order) # approx is ok
+		S,_,Δᵢ = quadgk_segbuf(speed,range(u₀, u₁,4);rtol,order=3) # approx is ok
 		# Get values and derivatives
 		sort!(Δᵢ,by=Δ->Δ.a)
 		uᵢ,sᵢ = [u₀; map(Δ->Δ.b,Δᵢ)],[zero(S); cumsum(map(Δ->Δ.I,Δᵢ))]
@@ -224,7 +219,7 @@ plot(); let
 end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 
 # ╔═╡ 0394397a-1198-444b-9340-b3b737e1b638
-Δs = 1/20; dₙ = 1/100;
+Δs = 1/33; dₙ = 1/100;
 
 # ╔═╡ f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 map(test_curves) do (name, r, range, _)
@@ -247,7 +242,7 @@ md"""
 
 We also evaluate the convergence of the NDLP segmentation metrics as the $\Delta s$ and $d_n$ limits vary. We use the cubic spline fish as a representative curve.
 
-Holding $d_n=1$% constant and *reducing* $\Delta s$ shows two distance phases.
+Holding $d_n=1\%$ constant and *reducing* $\Delta s$ shows two distance phases.
  - In the first phase, the deviation $\max(\delta)$ goes rapidly to the limit $d_n\Delta s$ and holds steady while the excess number of segments and total variation in the panel lengths drops to zero with $\Delta s$.
  - In the second phase the deviation limit is no longer active, so $\max(\delta)$ goes to zero without any additional segments or any length variation.
 """
@@ -270,12 +265,12 @@ end
 # ╔═╡ 67eba604-640b-4388-bc08-928f4e5e62ca
 md"""
 Holding $\Delta s=L/100$ and _increasing_ $d_n$ shows a similar trend.
- - Again, in the first phase, the deviation limit is honored while the excess segments and total variation in segment lengths drop to zero. The key difference is that the $\max(R)$ remains roughly constant through this range; approximately $\Delta s/3$ for this example. Again, this indicates Lipschitz-continuous spacing, even for finite $\Delta s$ and large $d_n$.
+ - Again, in the first phase, the deviation limit is honored while the excess segments and total variation in segment lengths drop to zero. The key difference is that the $\max(R)/\Delta s$ remains roughly constant through this range; approximately $1/3$ for this example. Again, this indicates Lipschitz-continuous spacing, even for finite $\Delta s$.
  - In the second phase, the $d_n$ limit deactivates, letting $\max(\delta)$ scaled by $d_n$ and $\max(R)$ both drop to zero as the sampling becomes uniformly spaced.
 """
 
 # ╔═╡ 260406ec-97ff-49fc-bb17-4f28fe12b8b6
-convergedₙ = map(logrange(1,6e-4,70)) do dₙ
+convergedₙ = map(logrange(1,5e-4,100)) do dₙ
 		(;dₙ,metrics(NDLP,test_curves[3].r,test_curves[3].range...,1e-2,dₙ)...)
 end |> Table;
 
@@ -1796,7 +1791,7 @@ version = "1.13.0+0"
 # ╟─28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
 # ╟─957d0951-2070-4d64-8fc9-58b5121bdfc1
 # ╟─10b2e0b0-f373-4a02-b6dc-fd1085b1f34a
-# ╠═cc1fa09e-21da-425d-bb6c-a8c906a65e98
+# ╟─cc1fa09e-21da-425d-bb6c-a8c906a65e98
 # ╟─219826fb-5362-46f2-bf51-84465e614269
 # ╠═b38c2b1c-a48c-4f1f-954b-95faaba680d7
 # ╠═0394397a-1198-444b-9340-b3b737e1b638

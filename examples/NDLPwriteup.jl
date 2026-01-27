@@ -8,7 +8,7 @@ using InteractiveUtils
 using Plots, QuadGK, DataInterpolations, LinearAlgebra, StaticArrays, TypedTables
 
 # ╔═╡ ad7b8fa0-e966-4c3b-8163-02d2817b1c9d
-using ForwardDiff:derivative as D # AD derivatives
+using ForwardDiff:derivative as D # Automatic derivatives
 
 # ╔═╡ 4e8f4214-f9b3-4dbf-9507-eea0504a6933
 md"""
@@ -137,11 +137,11 @@ Note that while the deviation estimate that is the basis of this parameterizatio
 md"""
 ### Results
 
-We evaluate each method on the test curves defined above, using a maximum segment length of `Δs=1/20` and a deviation limit of $d_n$=`devlimit=1/100`. The results are summarized in the tables below, reporting the following metrics:
- - `L∞δ`: the maximum deviation scaled by the allowed deviation (should be close to 1),
- - `σ`: the stretching/efficiency, defined as the excess percentage of segments needed to hit the deviation limit (lower is better),
- - `Rₜᵥ`: the total variation of segment lengths scaled by total curve length (lower is better),
- - `R∞`: the maximum variation of segment lengths scaled by $\Delta s$ (lower is better).
+We evaluate each method on the test curves defined above, using a maximum segment length of $\Delta s=L/20$ and a deviation limit of $d_n=1/100$. The results are summarized in the tables below, reporting the following metrics:
+ - `δ∞`=$\max(\delta)/(d_n\Delta s)$: the scaled normal deviation,
+ - `σ`=$N\Delta s/L-1$: the scaled number of extra segments needed to hit the deviation limit (lower is better),
+ - `Rₜᵥ`=$\sum(R)/L$ where $R_i=|Δl_{i+1}-Δl_i|$: the scale total variation of segment lengths (lower is better),
+ - `R∞`=$\max(R)/\Delta s$: the scale maximum variation of segment lengths (lower is better).
 
 The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in with minimal excess segments, outperforming both adaptive subdivision and curvature-weighted sampling. In particular the measured deviation is within ±4% of the deviation limit, while the curvature weighted method has a ±15% variation **even after tuning**, and the subdivision method can be up to 50% oversampled.
 
@@ -150,13 +150,13 @@ Adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, in
 
 # ╔═╡ b38c2b1c-a48c-4f1f-954b-95faaba680d7
 begin # sample `r` using `method`, and report metrics
-	function metrics(method, r, u₀, u₁, Δs, devlimit)
+	function metrics(method, r, u₀, u₁, Δs, dₙ)
 		L = quadgk(arcspeed(r), u₀, u₁)[1]; Δs *= L
-		u = method(r, u₀, u₁, Δs, devlimit); N = 
+		u = method(r, u₀, u₁, Δs, dₙ); N = 
 		dl,δ = seg_len(r,u),seg_dev(r,u)
-		(;L∞δ = maximum(δ)/(Δs*devlimit), # scaled max deviation, should => 1!
-		  σ = length(δ)*Δs/L-1,           # extra segments needed to hit devlimit
-		  Rₜᵥ = sum(abs,diff(dl))/L,      # total variation of segment length
+		(;δ∞ = maximum(δ)/(Δs*dₙ), # scaled max deviation, should => 1!
+		  σ = length(δ)*Δs/L-1,           # extra segments needed to hit dₙ
+		  Rₜᵥ = sum(abs,diff(dl))/L,       # total variation of segment length
 		  R∞ = maximum(abs,diff(dl))/Δs   # max variation of segment length
 		)
 	end
@@ -176,11 +176,11 @@ end
 
 # ╔═╡ cc1fa09e-21da-425d-bb6c-a8c906a65e98
 begin
-	function subdivision(r, u₀, u₁, Δs, devlimit)
+	function subdivision(r, u₀, u₁, Δs, dₙ)
 		u₀, u₁ = Float64.((u₀, u₁))
 		segments = [(; u₀, u₁, dl=seg_len(r,u₀,u₁), δ=seg_dev(r,u₀,u₁))]
 		while true
-			i = findfirst(s -> s.dl > Δs || s.δ > Δs*devlimit, segments)
+			i = findfirst(s -> s.dl > Δs || s.δ > Δs*dₙ, segments)
 			i === nothing && break
 			s = segments[i]; um = (s.u₀ + s.u₁)/2
 			# we need to keep checking the length and deviation! 🤢
@@ -190,15 +190,16 @@ begin
 		end
 		[getfield.(segments,:u₀);u₁]
 	end
-	function κ_weighted(r, u₀, u₁, Δs, devlimit)
+	function κ_weighted(r, u₀, u₁, Δs, dₙ)
 		C = 11 # Hand tuned to work on the test_curves! 🤢
 		speed(u) = √(arcspeed(r)(u)^2+C*Δs*aₙ(r,u))
 		S,s⁻¹ = ∫speed(speed, u₀, u₁)
 		return s⁻¹.(range(0, S, round(Int,S/Δs)+1))
 	end
-	function NDLP(r, u₀, u₁, Δs, devlimit) # so nice 🤓
-		speed(u) = max(arcspeed(r)(u),√(Δs*aₙ(r,u)/8devlimit))
-		S,s⁻¹ = ∫speed(speed, u₀, u₁)
+	function NDLP(r, u₀, u₁, Δs, dₙ) # so nice 🤓
+		speed(u) = max(arcspeed(r)(u),√(Δs*aₙ(r,u)/8dₙ))
+		rtol = 1e-6Δs # only needed since convergence study lets Δs→0
+		S,s⁻¹ = ∫speed(speed, u₀, u₁; rtol) 
 		return s⁻¹.(range(0, S, round(Int,S/Δs)+1))
 	end
 	function ∫speed(speed, u₀, u₁; rtol=1e-5,order=3)
@@ -226,22 +227,70 @@ plot(); let
 end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 
 # ╔═╡ 0394397a-1198-444b-9340-b3b737e1b638
-Δs = 1/20; devlimit = 1/100
+Δs = 1/20; dₙ = 1/100;
 
 # ╔═╡ f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 map(test_curves) do (name, r, range, _)
-	(;name,metrics(subdivision,r,range...,1/21,devlimit)...)
+	(;name,metrics(subdivision,r,range...,Δs,dₙ)...)
 end |> Table |> display
 
 # ╔═╡ 11a078e6-0eca-49c2-84d6-829b4b9351f8
 map(test_curves) do (name, r, range, _)
-	(;name,metrics(κ_weighted,r,range...,Δs,devlimit)...)
+	(;name,metrics(κ_weighted,r,range...,Δs,dₙ)...)
 end |> Table |> display
 
 # ╔═╡ 30dbf23a-1ac7-47f3-9a8f-11fb1712366c
 map(test_curves) do (name, r, range, _)
-	(;name,metrics(NDLP,r,range...,Δs,devlimit)...)
+	(;name,metrics(NDLP,r,range...,Δs,dₙ)...)
 end |> Table |> display
+
+# ╔═╡ 561a1373-57a4-4b67-be5a-9d94c9496360
+md""" 
+## Convergence study
+
+We also evaluate the convergence of the NDLP segmentation metrics as the $\Delta s$ and $d_n$ limits vary. We use the cubic spline fish as a representative curve.
+
+Holding $d_n=1$% constant and *reducing* $\Delta s$ shows two distance phases. 
+ - In the first phase, the deviation $\max(\delta)$ goes rapidly to the limit $d_n\Delta s$ and holds steady while the excess number of segments and total variation in the panel lengths drops to zero quadratically with $\Delta s$. (Note the scaling of $\max(R)$ by $\Delta s$ makes this look linear in the plot.) 
+ - In the second phase the deviation limit is no longer active, so $\max(\delta)$ goes to zero without any additional segments or any length variation.
+"""
+
+# ╔═╡ 1273c8c7-20b9-42c0-9b0d-d9bb8db57ec2
+convergeΔs = map(logrange(1e-1,1e-4,70)) do Δs
+		(;Δs,metrics(NDLP,test_curves[3].r,test_curves[3].range...,Δs,1e-2)...)
+end |> Table;
+
+# ╔═╡ dcb68886-2771-4b37-91b6-9c983e118728
+begin
+	plot(convergeΔs.Δs,convergeΔs.δ∞,label="max(δ)/dₙΔs")
+	plot!(convergeΔs.Δs,convergeΔs.σ,label="NΔs/L-1")
+	plot!(convergeΔs.Δs,convergeΔs.Rₜᵥ,label="sum(R)/L")
+	plot!(convergeΔs.Δs,convergeΔs.R∞,label="max(R)/Δs")
+	plot!(ylabel="scaled metrics",xlabel="Δs",xscale=:log10,xflip=true)
+	plot!(title="NDLP segmentation metrics with fixed dₙ=1%")
+end
+
+# ╔═╡ 67eba604-640b-4388-bc08-928f4e5e62ca
+md"""
+Holding $\Delta s=L/100$ and _increasing_ $d_n$ shows a similar trend. 
+ - Again, in the first phase, the deviation limit is honored while the excess segments and total variation in segment lengths drop to zero. The key difference is that the $\max(R)$ remains roughly constant through this range; approximately $\Delta s/3$ for this example. Again, this indicates Lipschitz-continuous spacing, even for finite $\Delta s$ and large $d_n$.
+ - In the second phase, the $d_n$ limit deactivates, letting $\max(\delta)$ scaled by $d_n$ and $\max(R)$ both drop to zero as the sampling becomes uniformly spaced.
+"""
+
+# ╔═╡ 260406ec-97ff-49fc-bb17-4f28fe12b8b6
+convergedₙ = map(logrange(1,6e-4,70)) do dₙ
+		(;dₙ,metrics(NDLP,test_curves[3].r,test_curves[3].range...,1e-2,dₙ)...)
+end |> Table;
+
+# ╔═╡ f67fc432-8031-4230-899b-b24fcb7b44f4
+begin
+	plot(convergedₙ.dₙ,convergedₙ.δ∞,label="max(δ)/dₙΔs")
+	plot!(convergedₙ.dₙ,convergedₙ.σ,label="NΔs/L-1")
+	plot!(convergedₙ.dₙ,convergedₙ.Rₜᵥ,label="sum(R)/L")
+	plot!(convergedₙ.dₙ,convergedₙ.R∞,label="max(R)/Δs")
+	plot!(ylabel="scaled metrics",xlabel="dₙ",xscale=:log10)
+	plot!(title="NDLP segmentation metrics with fixed Δs=L/100")
+end
 
 # ╔═╡ 6094d19e-e64a-4434-b6db-e5647fd71e78
 md"""
@@ -1554,7 +1603,7 @@ version = "1.13.0+0"
 # ╠═ad7b8fa0-e966-4c3b-8163-02d2817b1c9d
 # ╟─60fc45b3-8cea-4cae-83f4-9c05011b1dee
 # ╟─e1bc7e76-a497-41db-8f91-b8912e359e0e
-# ╠═28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
+# ╟─28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
 # ╟─957d0951-2070-4d64-8fc9-58b5121bdfc1
 # ╟─10b2e0b0-f373-4a02-b6dc-fd1085b1f34a
 # ╠═cc1fa09e-21da-425d-bb6c-a8c906a65e98
@@ -1564,6 +1613,12 @@ version = "1.13.0+0"
 # ╠═f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 # ╠═11a078e6-0eca-49c2-84d6-829b4b9351f8
 # ╠═30dbf23a-1ac7-47f3-9a8f-11fb1712366c
+# ╟─561a1373-57a4-4b67-be5a-9d94c9496360
+# ╠═1273c8c7-20b9-42c0-9b0d-d9bb8db57ec2
+# ╟─dcb68886-2771-4b37-91b6-9c983e118728
+# ╟─67eba604-640b-4388-bc08-928f4e5e62ca
+# ╠═260406ec-97ff-49fc-bb17-4f28fe12b8b6
+# ╟─f67fc432-8031-4230-899b-b24fcb7b44f4
 # ╟─6094d19e-e64a-4434-b6db-e5647fd71e78
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

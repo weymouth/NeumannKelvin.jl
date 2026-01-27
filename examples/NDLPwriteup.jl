@@ -5,14 +5,14 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 805e7c4a-f9f5-11f0-1430-43f2ae01e9f4
-using NeumannKelvin,Plots, QuadGK, DataInterpolations
+using Plots, QuadGK, DataInterpolations, LinearAlgebra, StaticArrays, TypedTables
 
-# ╔═╡ 447c08bf-780b-4e41-a48c-1a391e5343cc
-using NeumannKelvin:arclength,arcspeed
+# ╔═╡ ad7b8fa0-e966-4c3b-8163-02d2817b1c9d
+using ForwardDiff:derivative as D # AD derivatives
 
 # ╔═╡ 4e8f4214-f9b3-4dbf-9507-eea0504a6933
 md"""
-# Normal-Deviation-Limited Parameterization (NLDP)
+# Normal-Deviation-Limited Parameterization (NDLP)
 
 ## Motivation: Efficient one-shot curve sampling with tight deviation bounds
 
@@ -43,7 +43,7 @@ where $\Delta s$ is the maximum segment length and $d_n$ is a specified normal d
 
 ## Illustration
 
-We give an initial illustration of the the performance over the new approach using a cublic spline geometry and a coarse sampling $\Delta s=1/4$ and $d_n=9$% to highlight the differences. The new NDLP sampling is tight to the prescribed deviation limit and uses the fewest number of points.
+We give an initial illustration of the the performance over the new approach using a cubic spline geometry and a coarse sampling $\Delta s=1/4$ and $d_n=9$% to highlight the differences. The new NDLP sampling is tight to the prescribed deviation limit and uses the fewest number of points.
 """
 
 # ╔═╡ e1bc7e76-a497-41db-8f91-b8912e359e0e
@@ -53,7 +53,7 @@ md"""
 We begin by defining a small set of representative curves:
 
 1. A circle with constant curvature,
-1. an ellipse with smothly varying curvature,
+1. an ellipse with smoothly varying curvature,
 1. a spline with highly nonuniform curvature (“spline fish”),
 1. a three-dimensional helix with varying pitch and radius,
 1. and a V-shaped "curve" with a corner that violates smoothness assumptions.
@@ -87,8 +87,7 @@ begin
 		# C⁰ continuous, C¹ discontinuous (corner)
 	    (;name="V-shape", r=u->u<1 ? SA[u, u] : SA[u, 2-u], range=(0, 2.25),
 	     notes="Corner at u=1, violates smoothness assumption")
-	] |> Table
-	display(test_curves)
+	]
 end
 
 # ╔═╡ 957d0951-2070-4d64-8fc9-58b5121bdfc1
@@ -108,13 +107,11 @@ We begin by defining three segmentation methods: 1. adaptive subdivision, 2. cur
 
 The adaptive subdivision method recursively splits segments until local deviation and length criteria are met. For each segment $[u_i,u_{i+1}]$, we approximate the segment curve length $\Delta l$ and the maximum deviation $\delta$ by sampling points along the segment. If either limit is exceeded the segment is bisected at $u_m = (u_i + u_{i+1})/2$. This process continues until all segments satisfy the criteria.
 
-The limitation of this method is that it is inherently greedy and binary: segments are either split or not based on local criteria. Because adaptive subdivision is binary, any violation of the tolerance—no matter how small—forces a full bisection, resulting in up to 50% local oversampling. The binary nature also makes the final segmentation sensitive to small changes in the curve or limiting parameters, potentially adding discretization noise to downstream convergence and optimization studies.
+The limitation of this method is that it is inherently binary: segments are either split or not based on local criteria. Therefore, any violation of the tolerance, no matter how small, forces a full bisection, resulting in up to 50% local oversampling. The discrete nature of the approach also makes the final segmentation sensitive to small changes in the curve are limits, adding discretization noise to methods using the segmentation, such as convergence and optimization studies.
 
 ### 2. Curvature-weighted sampling
 
-A common heuristic method to reduce segmentation error the arc-speed $l' = |r'|$ with a the local curvature $\kappa$ to produce a density function for point placement.
-
-A simple choice is to define a reparameterized speed function $s' = l'\sqrt{1 + \tilde C \kappa}$, where $\tilde C$ is a tunable constant. This speed function places points more densely in high-curvature regions, as desired. However, there is no direct control over the maximum deviation from the curve, and the method requires iterative tuning of $\tilde C$ to achieve any required deviation limits.
+A common method to smoothly control the deviation is to reparameterize the curve with the local curvature $\kappa$ to increase sampling density in high-curvature regions. A simple choice is to define a reparameterized speed function $s' = l'\sqrt{1 + \tilde C \kappa}$, where $\tilde C$ is a tunable constant. This results in smooth segmentations, but there is no direct control over the maximum deviation from the curve, and the method requires iterative tuning of $\tilde C$ to achieve any required deviation limits.
 
 Note that the units of $\tilde C$ are length, so it is sensible to set $\tilde C = C \Delta s$ for some dimensionless $C$. However, this parameter still must be tuned and won't generalize across curves or sampling densities, as demonstrated here.
 
@@ -136,9 +133,6 @@ This speed function is integrated over the curve's $u$-range and sampled at equa
 Note that while the deviation estimate that is the basis of this parameterization is only second order in $\Delta l$, we show below that this is sufficient to saturate to the bound for all smooth curves considered, even at fairly low sampling density. 
 """
 
-# ╔═╡ a1320abc-d7f5-4213-9179-81a1e06cf254
-aₙ = NeumannKelvin.κₙ
-
 # ╔═╡ 219826fb-5362-46f2-bf51-84465e614269
 md"""
 ### Results
@@ -158,44 +152,43 @@ Adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, in
 begin # sample `r` using `method`, and report metrics
 	function metrics(method, r, u₀, u₁, Δs, devlimit)
 		L = quadgk(arcspeed(r), u₀, u₁)[1]; Δs *= L
-		u = method(r, u₀, u₁, Δs, devlimit); N = length(u)-1
-		segs = segment_props(r,u)
-		L∞δ = maximum(segs.δ)/(Δs*devlimit) # scaled max deviation should => 1!
-		# lower is better for all other metrics
-		σ = N*Δs/L-1 # "stretching/efficiency": extra panels needed to hit devlimit
-		Rₜᵥ = sum(abs,diff(segs.dl))/L # total variation of segment length
-		R∞ = maximum(abs,diff(segs.dl))/Δs # max variation of segment length
-		(;L∞δ, σ, Rₜᵥ, R∞)
+		u = method(r, u₀, u₁, Δs, devlimit); N = 
+		dl,δ = seg_len(r,u),seg_dev(r,u)
+		(;L∞δ = maximum(δ)/(Δs*devlimit), # scaled max deviation, should => 1!
+		  σ = length(δ)*Δs/L-1,           # extra segments needed to hit devlimit
+		  Rₜᵥ = sum(abs,diff(dl))/L,      # total variation of segment length
+		  R∞ = maximum(abs,diff(dl))/Δs   # max variation of segment length
+		)
 	end
-	function segment_props(r, u₀, u₁; n=100)
-		r₀,r₁ = r.((u₀, u₁))
-		dr = r₁-r₀; h² = dr'dr
-		dl = quadgk(arcspeed(r),u₀,u₁)[1] # segment length
-		δ = maximum(range(u₀, u₁, n)) do u
+
+	# segment metrics
+	seg_len(r,u₀,u₁) = quadgk(arcspeed(r),u₀,u₁)[1]
+	seg_len(r, u::Array) = [seg_len(r,u[i],u[i+1]) for i in 1:length(u)-1]
+	function seg_dev(r, u₀, u₁; n=100)
+		r₀ = r(u₀); dr = r(u₁)-r₀; h² = dr'dr
+		maximum(range(u₀, u₁, n)) do u
 	        v = r(u)-r₀
-	        norm(v - dr * v'dr/h²) # curve deviation from line-segment
+	        norm(v - dr * v'dr/h²) # segment deviation from curve
 	    end
-		(;dl,δ)
 	end
-	segment_props(r, u::Array) = map(1:length(u)-1) do i
-		segment_props(r,u[i],u[i+1])
-	end |> Table
+	seg_dev(r, u::Array) = [seg_dev(r,u[i],u[i+1]) for i in 1:length(u)-1]
 end
 
 # ╔═╡ cc1fa09e-21da-425d-bb6c-a8c906a65e98
 begin
 	function subdivision(r, u₀, u₁, Δs, devlimit)
 		u₀, u₁ = Float64.((u₀, u₁))
-		segments = [(; u₀, u₁, segment_props(r,u₀,u₁)...)]
+		segments = [(; u₀, u₁, dl=seg_len(r,u₀,u₁), δ=seg_dev(r,u₀,u₁))]
 		while true
 			i = findfirst(s -> s.dl > Δs || s.δ > Δs*devlimit, segments)
 			i === nothing && break
 			s = segments[i]; um = (s.u₀ + s.u₁)/2
 			# we need to keep checking the length and deviation! 🤢
-			segments[i] = (u₀=s.u₀, u₁=um, segment_props(r,s.u₀,um)...)
-			insert!(segments, i+1, (u₀=um, u₁=s.u₁, segment_props(r,um,s.u₁)...))
+			lseg = (u₀=s.u₀, u₁=um, dl=seg_len(r,s.u₀,um), δ=seg_dev(r,s.u₀,um))
+			rseg = (u₀=um, u₁=s.u₁, dl=seg_len(r,um,s.u₁), δ=seg_dev(r,um,s.u₁))
+			segments[i] = lseg; insert!(segments, i+1, rseg)
 		end
-		[Table(segments).u₀;u₁]
+		[getfield.(segments,:u₀);u₁]
 	end
 	function κ_weighted(r, u₀, u₁, Δs, devlimit)
 		C = 11 # Hand tuned to work on the test_curves! 🤢
@@ -218,6 +211,8 @@ begin
 		# Return interpolator for u(s)
 		return S, CubicHermiteSpline(duᵢ,uᵢ,sᵢ,extrapolation = ExtrapolationType.Constant)
 	end
+	aₙ(r,u) = √max(0,sum(abs2,D(v->D(r,v),u))-D(arcspeed(r),u)^2)
+	arcspeed(r) = u->norm(D(r,u))
 end
 
 # ╔═╡ 60fc45b3-8cea-4cae-83f4-9c05011b1dee
@@ -225,8 +220,8 @@ plot(); let
 	c = test_curves[3]; x(u) = c.r(u)[1]; y(u) = c.r(u)[2]
 	for f in (κ_weighted,subdivision,NDLP)
 		u = f(c.r,c.range...,1/4,0.09)
-		segs = segment_props(c.r,u)
-		plot!(x.(u),y.(u),label="$f, N=$(length(u)), max dev=$(round(maximum(segs.δ),sigdigits=2))",marker=:circle)
+		δ = maximum(seg_dev(c.r,u))
+		plot!(x.(u),y.(u),label="$f, N=$(length(u)), max dev=$(round(δ,sigdigits=2))",marker=:circle)
 	end
 end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 
@@ -236,17 +231,17 @@ end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 # ╔═╡ f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 map(test_curves) do (name, r, range, _)
 	(;name,metrics(subdivision,r,range...,1/21,devlimit)...)
-end |> display
+end |> Table |> display
 
 # ╔═╡ 11a078e6-0eca-49c2-84d6-829b4b9351f8
 map(test_curves) do (name, r, range, _)
 	(;name,metrics(κ_weighted,r,range...,Δs,devlimit)...)
-end |> display
+end |> Table |> display
 
 # ╔═╡ 30dbf23a-1ac7-47f3-9a8f-11fb1712366c
 map(test_curves) do (name, r, range, _)
 	(;name,metrics(NDLP,r,range...,Δs,devlimit)...)
-end |> display
+end |> Table |> display
 
 # ╔═╡ 6094d19e-e64a-4434-b6db-e5647fd71e78
 md"""
@@ -259,71 +254,29 @@ This notebook shows the NDLP method achieves tight bounds to a deviation limit b
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
-NeumannKelvin = "7f078b06-e5c4-4cf8-bb56-b92882a0ad03"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [compat]
 DataInterpolations = "~8.9.0"
-NeumannKelvin = "~0.8.1"
+ForwardDiff = "0.10"
 Plots = "~1.41.4"
 QuadGK = "~2.11.2"
+StaticArrays = "~1.9.16"
+TypedTables = "~1.4.6"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.5"
+julia_version = "1.11.2"
 manifest_format = "2.0"
-project_hash = "14ece001bc57344329a5c08ba6a7a437d0829057"
-
-[[deps.AbstractFFTs]]
-deps = ["LinearAlgebra"]
-git-tree-sha1 = "d92ad398961a3ed262d8bf04a1a2b8340f915fef"
-uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
-version = "1.5.0"
-weakdeps = ["ChainRulesCore", "Test"]
-
-    [deps.AbstractFFTs.extensions]
-    AbstractFFTsChainRulesCoreExt = "ChainRulesCore"
-    AbstractFFTsTestExt = "Test"
-
-[[deps.AcceleratedKernels]]
-deps = ["ArgCheck", "GPUArraysCore", "KernelAbstractions", "Markdown", "UnsafeAtomics"]
-git-tree-sha1 = "0de01460ed11e90b42ce666c8ed0265bad59aa6a"
-uuid = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
-version = "0.4.3"
-
-    [deps.AcceleratedKernels.extensions]
-    AcceleratedKernelsoneAPIExt = "oneAPI"
-
-    [deps.AcceleratedKernels.weakdeps]
-    oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
-
-[[deps.Accessors]]
-deps = ["CompositionsBase", "ConstructionBase", "Dates", "InverseFunctions", "MacroTools"]
-git-tree-sha1 = "856ecd7cebb68e5fc87abecd2326ad59f0f911f3"
-uuid = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
-version = "0.1.43"
-
-    [deps.Accessors.extensions]
-    AxisKeysExt = "AxisKeys"
-    IntervalSetsExt = "IntervalSets"
-    LinearAlgebraExt = "LinearAlgebra"
-    StaticArraysExt = "StaticArrays"
-    StructArraysExt = "StructArrays"
-    TestExt = "Test"
-    UnitfulExt = "Unitful"
-
-    [deps.Accessors.weakdeps]
-    AxisKeys = "94b1ba4f-4ee9-5380-92f1-94cde586c3c5"
-    IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
-    LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
-    StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
-    Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-    Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+project_hash = "44d2c0bd017c06c27a64de760db5514a31adc94c"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -342,11 +295,6 @@ git-tree-sha1 = "9876e1e164b144ca45e9e3198d0b689cadfed9ff"
 uuid = "66dad0bd-aa9a-41b7-9441-69ab47430ed8"
 version = "1.1.3"
 
-[[deps.ArgCheck]]
-git-tree-sha1 = "f9e9a66c9b7be1ad7372bbd9b062d9230c30c5ce"
-uuid = "dce04be8-c92d-5529-be00-80e4d2c0e197"
-version = "2.5.0"
-
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 version = "1.1.2"
@@ -354,24 +302,6 @@ version = "1.1.2"
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 version = "1.11.0"
-
-[[deps.Atomix]]
-deps = ["UnsafeAtomics"]
-git-tree-sha1 = "29bb0eb6f578a587a49da16564705968667f5fa8"
-uuid = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
-version = "1.1.2"
-
-    [deps.Atomix.extensions]
-    AtomixCUDAExt = "CUDA"
-    AtomixMetalExt = "Metal"
-    AtomixOpenCLExt = "OpenCL"
-    AtomixoneAPIExt = "oneAPI"
-
-    [deps.Atomix.weakdeps]
-    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
-    OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2"
-    oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
@@ -393,16 +323,6 @@ deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jl
 git-tree-sha1 = "fde3bf89aead2e723284a8ff9cdf5b551ed700e8"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.18.5+0"
-
-[[deps.ChainRulesCore]]
-deps = ["Compat", "LinearAlgebra"]
-git-tree-sha1 = "e4c6a16e77171a5f5e25e9646617ab1c276c5607"
-uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-version = "1.26.0"
-weakdeps = ["SparseArrays"]
-
-    [deps.ChainRulesCore.extensions]
-    ChainRulesCoreSparseArraysExt = "SparseArrays"
 
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
@@ -442,66 +362,22 @@ git-tree-sha1 = "37ea44092930b1811e666c3bc38065d7d87fcc74"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.13.1"
 
-[[deps.Combinatorics]]
-git-tree-sha1 = "c761b00e7755700f9cdf5b02039939d1359330e1"
-uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
-version = "1.1.0"
-
-[[deps.CommonSolve]]
-git-tree-sha1 = "78ea4ddbcf9c241827e7035c3a03e2e456711470"
-uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
-version = "0.2.6"
-
 [[deps.CommonSubexpressions]]
 deps = ["MacroTools"]
 git-tree-sha1 = "cda2cfaebb4be89c9084adaca7dd7333369715c5"
 uuid = "bbf7d656-a473-5ed7-a52c-81e309532950"
 version = "0.3.1"
 
-[[deps.Compat]]
-deps = ["TOML", "UUIDs"]
-git-tree-sha1 = "9d8a54ce4b17aa5bdce0ea5c34bc5e7c340d16ad"
-uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "4.18.1"
-weakdeps = ["Dates", "LinearAlgebra"]
-
-    [deps.Compat.extensions]
-    CompatLinearAlgebraExt = "LinearAlgebra"
-
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
 version = "1.1.1+0"
-
-[[deps.CompositionsBase]]
-git-tree-sha1 = "802bb88cd69dfd1509f6670416bd4434015693ad"
-uuid = "a33af91c-f02d-484b-be07-31d278c5ca2b"
-version = "0.1.2"
-weakdeps = ["InverseFunctions"]
-
-    [deps.CompositionsBase.extensions]
-    CompositionsBaseInverseFunctionsExt = "InverseFunctions"
 
 [[deps.ConcurrentUtilities]]
 deps = ["Serialization", "Sockets"]
 git-tree-sha1 = "d9d26935a0bcffc87d2613ce14c527c99fc543fd"
 uuid = "f0e56b4a-5159-44fe-b623-3e5288b988bb"
 version = "2.5.0"
-
-[[deps.ConstructionBase]]
-git-tree-sha1 = "b4b092499347b18a015186eae3042f72267106cb"
-uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
-version = "1.6.0"
-
-    [deps.ConstructionBase.extensions]
-    ConstructionBaseIntervalSetsExt = "IntervalSets"
-    ConstructionBaseLinearAlgebraExt = "LinearAlgebra"
-    ConstructionBaseStaticArraysExt = "StaticArrays"
-
-    [deps.ConstructionBase.weakdeps]
-    IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
-    LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [[deps.Contour]]
 git-tree-sha1 = "439e35b0b36e2e5881738abc8857bd92ad6ff9a8"
@@ -621,11 +497,6 @@ git-tree-sha1 = "27af30de8b5445644e8ffe3bcb0d72049c089cf1"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
 version = "2.7.3+0"
 
-[[deps.ExprTools]]
-git-tree-sha1 = "27415f162e6028e81c72b82ef756bf321213b6ec"
-uuid = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
-version = "0.1.10"
-
 [[deps.FFMPEG]]
 deps = ["FFMPEG_jll"]
 git-tree-sha1 = "95ecf07c2eea562b5adbd0696af6db62c0f52560"
@@ -637,35 +508,6 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "01ba9d15e9eae375dc1eb9589df76b3572acd3f2"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "8.0.1+0"
-
-[[deps.FFTW]]
-deps = ["AbstractFFTs", "FFTW_jll", "Libdl", "LinearAlgebra", "MKL_jll", "Preferences", "Reexport"]
-git-tree-sha1 = "97f08406df914023af55ade2f843c39e99c5d969"
-uuid = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
-version = "1.10.0"
-
-[[deps.FFTW_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "6d6219a004b8cf1e0b4dbe27a2860b8e04eba0be"
-uuid = "f5851436-0d7a-5f13-b9de-f02708fd171a"
-version = "3.3.11+0"
-
-[[deps.FastChebInterp]]
-deps = ["ChainRulesCore", "FFTW", "StaticArrays"]
-git-tree-sha1 = "5b59bdc6f9517bf659ac173dac84c577fe48b0c1"
-uuid = "cf66c380-9a80-432c-aff8-4f9c79c0bdde"
-version = "1.2.0"
-
-[[deps.FastClosures]]
-git-tree-sha1 = "acebe244d53ee1b461970f8910c235b259e772ef"
-uuid = "9aa1b823-49e4-5ca5-8b0f-3971ec8bab6a"
-version = "0.3.2"
-
-[[deps.FastGaussQuadrature]]
-deps = ["LinearAlgebra", "SpecialFunctions", "StaticArrays"]
-git-tree-sha1 = "0044e9f5e49a57e88205e8f30ab73928b05fe5b6"
-uuid = "442a2c76-b920-505d-bb47-c5924d526838"
-version = "1.1.0"
 
 [[deps.FileWatching]]
 uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
@@ -722,12 +564,6 @@ git-tree-sha1 = "b7bfd56fa66616138dfe5237da4dc13bbd83c67f"
 uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
 version = "3.4.1+0"
 
-[[deps.GPUArraysCore]]
-deps = ["Adapt"]
-git-tree-sha1 = "83cf05ab16a73219e5f6bd1bdfa9848fa24ac627"
-uuid = "46192b85-c4d5-4398-a991-12ede77f4527"
-version = "0.2.0"
-
 [[deps.GR]]
 deps = ["Artifacts", "Base64", "DelimitedFiles", "Downloads", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Preferences", "Printf", "Qt6Wayland_jll", "Random", "Serialization", "Sockets", "TOML", "Tar", "Test", "p7zip_jll"]
 git-tree-sha1 = "6949039c4db076a5967228bf9d7b6f32f2324328"
@@ -775,12 +611,6 @@ git-tree-sha1 = "53bb909d1151e57e2484c3d1b53e19552b887fb2"
 uuid = "42e2da0e-8278-4e71-bc24-59509adca0fe"
 version = "1.0.2"
 
-[[deps.HCubature]]
-deps = ["Combinatorics", "DataStructures", "LinearAlgebra", "QuadGK", "StaticArrays"]
-git-tree-sha1 = "8ee627fb73ecba0b5254158b04d4745611b404a1"
-uuid = "19dc6840-f33b-545b-b366-655c7e3ffd49"
-version = "1.8.0"
-
 [[deps.HTTP]]
 deps = ["Base64", "CodecZlib", "ConcurrentUtilities", "Dates", "ExceptionUnwrapping", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "PrecompileTools", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
 git-tree-sha1 = "5e6fe50ae7f23d171f44e311c2960294aaa0beb5"
@@ -793,37 +623,15 @@ git-tree-sha1 = "f923f9a774fcf3f5cb761bfa43aeadd689714813"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "8.5.1+0"
 
-[[deps.ImplicitBVH]]
-deps = ["AcceleratedKernels", "Adapt", "ArgCheck", "Atomix", "DocStringExtensions", "GPUArraysCore", "KernelAbstractions", "LinearAlgebra"]
-git-tree-sha1 = "23ab86c4458e35f0e38e5af0095f84990c25b1d8"
-uuid = "932a18dc-bb55-4cd5-bdd6-1368ec9cea29"
-version = "0.7.0"
-
 [[deps.Indexing]]
 git-tree-sha1 = "ce1566720fd6b19ff3411404d4b977acd4814f9f"
 uuid = "313cdc1a-70c2-5d6a-ae34-0150d3930a38"
 version = "1.1.1"
 
-[[deps.IntelOpenMP_jll]]
-deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl"]
-git-tree-sha1 = "ec1debd61c300961f98064cfb21287613ad7f303"
-uuid = "1d5cc7b8-4909-519e-a0f8-d0f5ad9712d0"
-version = "2025.2.0+0"
-
 [[deps.InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 version = "1.11.0"
-
-[[deps.InverseFunctions]]
-git-tree-sha1 = "a779299d77cd080bf77b97535acecd73e1c5e5cb"
-uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
-version = "0.1.17"
-weakdeps = ["Dates", "Test"]
-
-    [deps.InverseFunctions.extensions]
-    InverseFunctionsDatesExt = "Dates"
-    InverseFunctionsTestExt = "Test"
 
 [[deps.IrrationalConstants]]
 git-tree-sha1 = "b2d91fe939cae05960e760110b328288867b5758"
@@ -864,28 +672,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "b6893345fd6658c8e475d40155789f4860ac3b21"
 uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
 version = "3.1.4+0"
-
-[[deps.KernelAbstractions]]
-deps = ["Adapt", "Atomix", "InteractiveUtils", "MacroTools", "PrecompileTools", "Requires", "StaticArrays", "UUIDs"]
-git-tree-sha1 = "b5a371fcd1d989d844a4354127365611ae1e305f"
-uuid = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
-version = "0.9.39"
-
-    [deps.KernelAbstractions.extensions]
-    EnzymeExt = "EnzymeCore"
-    LinearAlgebraExt = "LinearAlgebra"
-    SparseArraysExt = "SparseArrays"
-
-    [deps.KernelAbstractions.weakdeps]
-    EnzymeCore = "f151be2c-9106-41f4-ab19-57ee4f262869"
-    LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-
-[[deps.Krylov]]
-deps = ["LinearAlgebra", "Printf", "SparseArrays"]
-git-tree-sha1 = "fd0812fa5d58edfa2948342adca9b0a175b17d8a"
-uuid = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
-version = "0.10.4"
 
 [[deps.LAME_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -933,11 +719,6 @@ version = "0.16.10"
     SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
     SymEngine = "123dc426-2d89-5057-bbad-38513e3affd8"
     tectonic_jll = "d7dd28d6-a5e6-559c-9131-7eb760cdacc5"
-
-[[deps.LazyArtifacts]]
-deps = ["Artifacts", "Pkg"]
-uuid = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
-version = "1.11.0"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
@@ -1009,28 +790,6 @@ deps = ["Libdl", "OpenBLAS_jll", "libblastrampoline_jll"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 version = "1.11.0"
 
-[[deps.LinearOperators]]
-deps = ["FastClosures", "LinearAlgebra", "Printf", "Requires", "SparseArrays", "TimerOutputs"]
-git-tree-sha1 = "db137007d2c4ed948aa5f2518a2b451851ea8bda"
-uuid = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
-version = "2.11.0"
-
-    [deps.LinearOperators.extensions]
-    LinearOperatorsAMDGPUExt = "AMDGPU"
-    LinearOperatorsCUDAExt = "CUDA"
-    LinearOperatorsChainRulesCoreExt = "ChainRulesCore"
-    LinearOperatorsJLArraysExt = "JLArrays"
-    LinearOperatorsLDLFactorizationsExt = "LDLFactorizations"
-    LinearOperatorsMetalExt = "Metal"
-
-    [deps.LinearOperators.weakdeps]
-    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
-    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-    JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
-    LDLFactorizations = "40e66cde-538c-5869-a4ad-c39174c6795b"
-    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
-
 [[deps.LogExpFunctions]]
 deps = ["DocStringExtensions", "IrrationalConstants", "LinearAlgebra"]
 git-tree-sha1 = "13ca9e2586b89836fd20cccf56e57e2b9ae7f38f"
@@ -1056,12 +815,6 @@ deps = ["Dates", "Logging"]
 git-tree-sha1 = "f00544d95982ea270145636c181ceda21c4e2575"
 uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
 version = "1.2.0"
-
-[[deps.MKL_jll]]
-deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "oneTBB_jll"]
-git-tree-sha1 = "282cadc186e7b2ae0eeadbd7a4dffed4196ae2aa"
-uuid = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
-version = "2025.2.0+0"
 
 [[deps.MacroTools]]
 git-tree-sha1 = "1e0228a030642014fe5cfe68c2c0a818f9e3f522"
@@ -1113,24 +866,6 @@ version = "1.1.3"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
 
-[[deps.NeumannKelvin]]
-deps = ["AcceleratedKernels", "DataInterpolations", "FastChebInterp", "FastGaussQuadrature", "ForwardDiff", "HCubature", "ImplicitBVH", "Krylov", "LinearAlgebra", "LinearOperators", "QuadGK", "Reexport", "Roots", "SpecialFunctions", "StaticArrays", "TupleTools", "TypedTables"]
-git-tree-sha1 = "ef87ef6dc9e081a84b83b0a17fa29a7bcff4930c"
-uuid = "7f078b06-e5c4-4cf8-bb56-b92882a0ad03"
-version = "0.8.1"
-
-    [deps.NeumannKelvin.extensions]
-    NeumannKelvinGeometryBasicsExt = "GeometryBasics"
-    NeumannKelvinMakieExt = "Makie"
-    NeumannKelvinNURBSExt = "NURBS"
-    NeumannKelvinPlotsExt = "Plots"
-
-    [deps.NeumannKelvin.weakdeps]
-    GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
-    Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-    NURBS = "dde13934-061e-461b-aa91-2c0fad390a0d"
-    Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-
 [[deps.Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "b6aa4566bb7ae78498a5e68943863fa8b5231b59"
@@ -1145,7 +880,7 @@ version = "0.3.27+1"
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
-version = "0.8.5+0"
+version = "0.8.1+2"
 
 [[deps.OpenSSL]]
 deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "NetworkOptions", "OpenSSL_jll", "Sockets"]
@@ -1343,28 +1078,6 @@ git-tree-sha1 = "62389eeff14780bfe55195b7204c0d8738436d64"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.3.1"
 
-[[deps.Roots]]
-deps = ["Accessors", "CommonSolve", "Printf"]
-git-tree-sha1 = "8a433b1ede5e9be9a7ba5b1cc6698daa8d718f1d"
-uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-version = "2.2.10"
-
-    [deps.Roots.extensions]
-    RootsChainRulesCoreExt = "ChainRulesCore"
-    RootsForwardDiffExt = "ForwardDiff"
-    RootsIntervalRootFindingExt = "IntervalRootFinding"
-    RootsSymPyExt = "SymPy"
-    RootsSymPyPythonCallExt = "SymPyPythonCall"
-    RootsUnitfulExt = "Unitful"
-
-    [deps.Roots.weakdeps]
-    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-    ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-    IntervalRootFinding = "d2bf35a9-74e0-55ec-b149-d360ff49b807"
-    SymPy = "24249f21-da20-56a4-8eb1-6a02cf4ae2e6"
-    SymPyPythonCall = "bc8888f7-b21e-4b7c-a06a-5d9c9496438c"
-    Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
-
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 version = "0.7.0"
@@ -1410,10 +1123,12 @@ deps = ["IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_j
 git-tree-sha1 = "f2685b435df2613e25fc10ad8c26dddb8640f547"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
 version = "2.6.1"
-weakdeps = ["ChainRulesCore"]
 
     [deps.SpecialFunctions.extensions]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
+
+    [deps.SpecialFunctions.weakdeps]
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 
 [[deps.SplitApplyCombine]]
 deps = ["Dictionaries", "Indexing"]
@@ -1432,11 +1147,14 @@ deps = ["LinearAlgebra", "PrecompileTools", "Random", "StaticArraysCore"]
 git-tree-sha1 = "eee1b9ad8b29ef0d936e3ec9838c7ec089620308"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
 version = "1.9.16"
-weakdeps = ["ChainRulesCore", "Statistics"]
 
     [deps.StaticArrays.extensions]
     StaticArraysChainRulesCoreExt = "ChainRulesCore"
     StaticArraysStatisticsExt = "Statistics"
+
+    [deps.StaticArrays.weakdeps]
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [[deps.StaticArraysCore]]
 git-tree-sha1 = "6ab403037779dae8c514bad259f32a447262455a"
@@ -1527,27 +1245,10 @@ deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 version = "1.11.0"
 
-[[deps.TimerOutputs]]
-deps = ["ExprTools", "Printf"]
-git-tree-sha1 = "3748bd928e68c7c346b52125cf41fff0de6937d0"
-uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
-version = "0.5.29"
-
-    [deps.TimerOutputs.extensions]
-    FlameGraphsExt = "FlameGraphs"
-
-    [deps.TimerOutputs.weakdeps]
-    FlameGraphs = "08572546-2f56-4bcf-ba4e-bab62c3a3f89"
-
 [[deps.TranscodingStreams]]
 git-tree-sha1 = "0c45878dcfdcfa8480052b6ab162cdd138781742"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
-
-[[deps.TupleTools]]
-git-tree-sha1 = "41e43b9dc950775eac654b9f845c839cd2f1821e"
-uuid = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
-version = "1.6.0"
 
 [[deps.TypedTables]]
 deps = ["Adapt", "Dictionaries", "Indexing", "SplitApplyCombine", "Tables", "Unicode"]
@@ -1574,17 +1275,6 @@ deps = ["REPL"]
 git-tree-sha1 = "53915e50200959667e78a92a418594b428dffddf"
 uuid = "1cfade01-22cf-5700-b092-accc4b62d6e1"
 version = "0.4.1"
-
-[[deps.UnsafeAtomics]]
-git-tree-sha1 = "b13c4edda90890e5b04ba24e20a310fbe6f249ff"
-uuid = "013be700-e6cd-48c3-b4a1-df204f14c38f"
-version = "0.3.0"
-
-    [deps.UnsafeAtomics.extensions]
-    UnsafeAtomicsLLVM = ["LLVM"]
-
-    [deps.UnsafeAtomics.weakdeps]
-    LLVM = "929cbde3-209d-540e-8aea-75f648917ca0"
 
 [[deps.Unzip]]
 git-tree-sha1 = "ca0969166a028236229f63514992fc073799bb78"
@@ -1834,12 +1524,6 @@ deps = ["Artifacts", "Libdl"]
 uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
 version = "1.59.0+0"
 
-[[deps.oneTBB_jll]]
-deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl"]
-git-tree-sha1 = "1350188a69a6e46f799d3945beef36435ed7262f"
-uuid = "1317d2d5-d96f-522e-a858-c73665f53c3e"
-version = "2022.0.0+1"
-
 [[deps.p7zip_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
@@ -1867,13 +1551,12 @@ version = "1.13.0+0"
 # ╔═╡ Cell order:
 # ╟─4e8f4214-f9b3-4dbf-9507-eea0504a6933
 # ╠═805e7c4a-f9f5-11f0-1430-43f2ae01e9f4
+# ╠═ad7b8fa0-e966-4c3b-8163-02d2817b1c9d
 # ╟─60fc45b3-8cea-4cae-83f4-9c05011b1dee
 # ╟─e1bc7e76-a497-41db-8f91-b8912e359e0e
-# ╟─28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
+# ╠═28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
 # ╟─957d0951-2070-4d64-8fc9-58b5121bdfc1
 # ╟─10b2e0b0-f373-4a02-b6dc-fd1085b1f34a
-# ╠═447c08bf-780b-4e41-a48c-1a391e5343cc
-# ╠═a1320abc-d7f5-4213-9179-81a1e06cf254
 # ╠═cc1fa09e-21da-425d-bb6c-a8c906a65e98
 # ╟─219826fb-5362-46f2-bf51-84465e614269
 # ╠═b38c2b1c-a48c-4f1f-954b-95faaba680d7

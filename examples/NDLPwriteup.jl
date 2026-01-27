@@ -5,7 +5,7 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 805e7c4a-f9f5-11f0-1430-43f2ae01e9f4
-using Plots, QuadGK, DataInterpolations, LinearAlgebra, StaticArrays, TypedTables
+using Plots, QuadGK, DataInterpolations, LinearAlgebra, StaticArrays, TypedTables, Optim
 
 # ╔═╡ ad7b8fa0-e966-4c3b-8163-02d2817b1c9d
 using ForwardDiff:derivative as D # Automatic derivatives
@@ -21,7 +21,7 @@ Many numerical methods require representing smooth curves by piecewise-linear se
  - unnecessary points are avoided,
  - and refinement behaves predictably.
 
-The most common approach in practice is recursive subdivision: split segments until local error criteria are satisfied. While robust, subdivision is inefficient in the number of segments required and highly sensitive to small changes in curve definition and segmentation parameters. 
+The most common approach in practice is recursive subdivision: split segments until local error criteria are satisfied. While robust, subdivision is inefficient in the number of segments required and highly sensitive to small changes in curve definition and segmentation parameters.
 
 The most common alternative is to construct a re-parameterization for the curve to heuristically control accuracy. These methods typically weight the arc-speed with local curvature in some manner, but such methods lack guarantees and must be tuned iteratively *for each case* to achieve any required error limit.
 
@@ -71,19 +71,19 @@ begin
 	    # C∞ smooth, constant curvature
 	    (;name="Circle", r=u->SA[2sin(u), 2cos(u)], range=(0, 2π),
 	     notes="Constant κ, perfect for circular arc assumption"),
-	
+
 	    # C∞ smooth, varying curvature
 	    (;name="Ellipse", r=u->SA[3sin(u), cos(u)], range=(0, π),
 	     notes="Smoothly varying κ"),
-	
+
 	    # cubic spline fish
 		(;name="Spline fish", r=r_spline, range=(0, 1),
 	 	notes="Highly uneven curvature and spacing distribution. Delicious"),
-	
+
 	    # 3D helix with varying pitch & radius
 		(;name="Variable Helix", r=u->(R=1+0.3sin(3u); SA[R*cos(u), R*sin(u), (u/2π)^2]), range=(0, 2π),
 	 	notes="3D curve, demonstrates dimension-independence"),
-	
+
 		# C⁰ continuous, C¹ discontinuous (corner)
 	    (;name="V-shape", r=u->u<1 ? SA[u, u] : SA[u, 2-u], range=(0, 2.25),
 	     notes="Corner at u=1, violates smoothness assumption")
@@ -115,11 +115,11 @@ A common method to smoothly control the deviation is to reparameterize the curve
 
 Note that the units of $\tilde C$ are length, so it is sensible to set $\tilde C = C \Delta s$ for some dimensionless $C$. However, this parameter still must be tuned and won't generalize across curves or sampling densities, as demonstrated here.
 
-### 3. NDLP derivation 
+### 3. NDLP derivation
 
 The Normal-Deviation–Limited Parameterization $s(u)$ is defined such that segments satisfy both the length and deviation constraints directly, with no recursive refinement or heuristic tuning required.
 
-Starting from the curvature-based deviation estimate $\delta\approx \frac 1 8 \Delta l^{2}\kappa$ and the limit $\delta\le d_n\Delta s$, we use the approximations $\Delta l \approx l'\Delta u$ and $\Delta s \approx  s'\Delta u$ to give the inequality 
+Starting from the curvature-based deviation estimate $\delta\approx \frac 1 8 \Delta l^{2}\kappa$ and the limit $\delta\le d_n\Delta s$, we use the approximations $\Delta l \approx l'\Delta u$ and $\Delta s \approx  s'\Delta u$ to give the inequality
 
 $s' \geq l' \sqrt{\frac{\Delta s \kappa}{8d_n}}.$
 
@@ -130,7 +130,7 @@ $s' = \max\left(l', \sqrt{\frac{\Delta s a_n}{8 d_n}}\right)$
 
 This speed function is integrated over the curve's $u$-range and sampled at equal $s$-intervals to produce the final segmentation points, exactly the same as for the curvature weighting method.
 
-Note that while the deviation estimate that is the basis of this parameterization is only second order in $\Delta l$, we show below that this is sufficient to saturate to the bound for all smooth curves considered, even at fairly low sampling density. 
+Note that while the deviation estimate that is the basis of this parameterization is only second order in $\Delta l$, we show below that this is sufficient to saturate to the bound for all smooth curves considered, even at fairly low sampling density.
 """
 
 # ╔═╡ 219826fb-5362-46f2-bf51-84465e614269
@@ -140,8 +140,8 @@ md"""
 We evaluate each method on the test curves defined above, using a maximum segment length of $\Delta s=L/20$ and a deviation limit of $d_n=1/100$. The results are summarized in the tables below, reporting the following metrics:
  - `δ∞`=$\max(\delta)/(d_n\Delta s)$: the scaled normal deviation,
  - `σ`=$N\Delta s/L-1$: the scaled number of extra segments needed to hit the deviation limit (lower is better),
- - `Rₜᵥ`=$\sum(R)/L$ where $R_i=|Δl_{i+1}-Δl_i|$: the scale total variation of segment lengths (lower is better),
- - `R∞`=$\max(R)/\Delta s$: the scale maximum variation of segment lengths (lower is better).
+ - `Rₜᵥ`=$\sum(R)/L$ where $R_i=|Δl_{i+1}-Δl_i|$: the scaled total variation of segment lengths (lower is better),
+ - `R∞`=$\max(R)/\Delta s$: the scaled maximum variation of segment lengths (lower is better).
 
 The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in with minimal excess segments, outperforming both adaptive subdivision and curvature-weighted sampling. In particular the measured deviation is within ±4% of the deviation limit, while the curvature weighted method has a ±15% variation **even after tuning**, and the subdivision method can be up to 50% oversampled.
 
@@ -152,26 +152,23 @@ Adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, in
 begin # sample `r` using `method`, and report metrics
 	function metrics(method, r, u₀, u₁, Δs, dₙ)
 		L = quadgk(arcspeed(r), u₀, u₁)[1]; Δs *= L
-		u = method(r, u₀, u₁, Δs, dₙ); N = 
+		u = method(r, u₀, u₁, Δs, dₙ)
 		dl,δ = seg_len(r,u),seg_dev(r,u)
-		(;δ∞ = maximum(δ)/(Δs*dₙ), # scaled max deviation, should => 1!
-		  σ = length(δ)*Δs/L-1,           # extra segments needed to hit dₙ
-		  Rₜᵥ = sum(abs,diff(dl))/L,       # total variation of segment length
-		  R∞ = maximum(abs,diff(dl))/Δs   # max variation of segment length
-		)
+		(;δ∞ = maximum(δ)/(Δs*dₙ),      # scaled max deviation, should => 1!
+		  σ = length(δ)*Δs/L-1,         # extra segments needed to hit dₙ
+		  Rₜᵥ = sum(abs,diff(dl))/L,     # total variation of segment length
+		  R∞ = maximum(abs,diff(dl))/Δs) # max variation of segment length
 	end
 
 	# segment metrics
 	seg_len(r,u₀,u₁) = quadgk(arcspeed(r),u₀,u₁)[1]
-	seg_len(r, u::Array) = [seg_len(r,u[i],u[i+1]) for i in 1:length(u)-1]
-	function seg_dev(r, u₀, u₁; n=100)
+	seg_len(r,u::Array) = [seg_len(r,u[i],u[i+1]) for i in 1:length(u)-1]
+	function seg_dev(r, u₀, u₁)
 		r₀ = r(u₀); dr = r(u₁)-r₀; h² = dr'dr
-		maximum(range(u₀, u₁, n)) do u
-	        v = r(u)-r₀
-	        norm(v - dr * v'dr/h²) # segment deviation from curve
-	    end
+		dev²(u) = (v = r(u)-r₀; w = v - dr * v'dr/h²; w'w)
+		optimize(u->-dev²(u), u₀, u₁).minimizer |> dev² |> sqrt
 	end
-	seg_dev(r, u::Array) = [seg_dev(r,u[i],u[i+1]) for i in 1:length(u)-1]
+	seg_dev(r,u::Array) = [seg_dev(r,u[i],u[i+1]) for i in 1:length(u)-1]
 end
 
 # ╔═╡ cc1fa09e-21da-425d-bb6c-a8c906a65e98
@@ -199,11 +196,11 @@ begin
 	function NDLP(r, u₀, u₁, Δs, dₙ) # so nice 🤓
 		speed(u) = max(arcspeed(r)(u),√(Δs*aₙ(r,u)/8dₙ))
 		rtol = 1e-6Δs # only needed since convergence study lets Δs→0
-		S,s⁻¹ = ∫speed(speed, u₀, u₁; rtol) 
+		S,s⁻¹ = ∫speed(speed, u₀, u₁; rtol)
 		return s⁻¹.(range(0, S, round(Int,S/Δs)+1))
 	end
 	function ∫speed(speed, u₀, u₁; rtol=1e-5,order=3)
-		# Adaptive speed(u) integration 
+		# Adaptive speed(u) integration
 		S,_,Δᵢ = quadgk_segbuf(speed,range(u₀, u₁,4);rtol,order) # approx is ok
 		# Get values and derivatives
 		sort!(Δᵢ,by=Δ->Δ.a)
@@ -245,13 +242,13 @@ map(test_curves) do (name, r, range, _)
 end |> Table |> display
 
 # ╔═╡ 561a1373-57a4-4b67-be5a-9d94c9496360
-md""" 
+md"""
 ## Convergence study
 
 We also evaluate the convergence of the NDLP segmentation metrics as the $\Delta s$ and $d_n$ limits vary. We use the cubic spline fish as a representative curve.
 
-Holding $d_n=1$% constant and *reducing* $\Delta s$ shows two distance phases. 
- - In the first phase, the deviation $\max(\delta)$ goes rapidly to the limit $d_n\Delta s$ and holds steady while the excess number of segments and total variation in the panel lengths drops to zero quadratically with $\Delta s$. (Note the scaling of $\max(R)$ by $\Delta s$ makes this look linear in the plot.) 
+Holding $d_n=1$% constant and *reducing* $\Delta s$ shows two distance phases.
+ - In the first phase, the deviation $\max(\delta)$ goes rapidly to the limit $d_n\Delta s$ and holds steady while the excess number of segments and total variation in the panel lengths drops to zero with $\Delta s$.
  - In the second phase the deviation limit is no longer active, so $\max(\delta)$ goes to zero without any additional segments or any length variation.
 """
 
@@ -272,7 +269,7 @@ end
 
 # ╔═╡ 67eba604-640b-4388-bc08-928f4e5e62ca
 md"""
-Holding $\Delta s=L/100$ and _increasing_ $d_n$ shows a similar trend. 
+Holding $\Delta s=L/100$ and _increasing_ $d_n$ shows a similar trend.
  - Again, in the first phase, the deviation limit is honored while the excess segments and total variation in segment lengths drop to zero. The key difference is that the $\max(R)$ remains roughly constant through this range; approximately $\Delta s/3$ for this example. Again, this indicates Lipschitz-continuous spacing, even for finite $\Delta s$ and large $d_n$.
  - In the second phase, the $d_n$ limit deactivates, letting $\max(\delta)$ scaled by $d_n$ and $\max(R)$ both drop to zero as the sampling becomes uniformly spaced.
 """
@@ -305,6 +302,7 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
@@ -313,6 +311,7 @@ TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 [compat]
 DataInterpolations = "~8.9.0"
 ForwardDiff = "0.10"
+Optim = "~2.0.0"
 Plots = "~1.41.4"
 QuadGK = "~2.11.2"
 StaticArrays = "~1.9.16"
@@ -323,9 +322,24 @@ TypedTables = "~1.4.6"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.2"
+julia_version = "1.11.5"
 manifest_format = "2.0"
-project_hash = "44d2c0bd017c06c27a64de760db5514a31adc94c"
+project_hash = "84beccf13d730d2ef8c64387b8e5b55843d0e9dd"
+
+[[deps.ADTypes]]
+git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
+uuid = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+version = "1.21.0"
+
+    [deps.ADTypes.extensions]
+    ADTypesChainRulesCoreExt = "ChainRulesCore"
+    ADTypesConstructionBaseExt = "ConstructionBase"
+    ADTypesEnzymeCoreExt = "EnzymeCore"
+
+    [deps.ADTypes.weakdeps]
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
+    EnzymeCore = "f151be2c-9106-41f4-ab19-57ee4f262869"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -347,6 +361,40 @@ version = "1.1.3"
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 version = "1.1.2"
+
+[[deps.ArrayInterface]]
+deps = ["Adapt", "LinearAlgebra"]
+git-tree-sha1 = "d81ae5489e13bc03567d4fbbb06c546a5e53c857"
+uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
+version = "7.22.0"
+
+    [deps.ArrayInterface.extensions]
+    ArrayInterfaceBandedMatricesExt = "BandedMatrices"
+    ArrayInterfaceBlockBandedMatricesExt = "BlockBandedMatrices"
+    ArrayInterfaceCUDAExt = "CUDA"
+    ArrayInterfaceCUDSSExt = ["CUDSS", "CUDA"]
+    ArrayInterfaceChainRulesCoreExt = "ChainRulesCore"
+    ArrayInterfaceChainRulesExt = "ChainRules"
+    ArrayInterfaceGPUArraysCoreExt = "GPUArraysCore"
+    ArrayInterfaceMetalExt = "Metal"
+    ArrayInterfaceReverseDiffExt = "ReverseDiff"
+    ArrayInterfaceSparseArraysExt = "SparseArrays"
+    ArrayInterfaceStaticArraysCoreExt = "StaticArraysCore"
+    ArrayInterfaceTrackerExt = "Tracker"
+
+    [deps.ArrayInterface.weakdeps]
+    BandedMatrices = "aae01518-5342-5314-be14-df237901396f"
+    BlockBandedMatrices = "ffab5731-97b5-5995-9138-79e8c1846df0"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    CUDSS = "45b445bb-4962-46a0-9369-b4df9d0f772e"
+    ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
+    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+    ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+    StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
+    Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -427,6 +475,21 @@ deps = ["Serialization", "Sockets"]
 git-tree-sha1 = "d9d26935a0bcffc87d2613ce14c527c99fc543fd"
 uuid = "f0e56b4a-5159-44fe-b623-3e5288b988bb"
 version = "2.5.0"
+
+[[deps.ConstructionBase]]
+git-tree-sha1 = "b4b092499347b18a015186eae3042f72267106cb"
+uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
+version = "1.6.0"
+
+    [deps.ConstructionBase.extensions]
+    ConstructionBaseIntervalSetsExt = "IntervalSets"
+    ConstructionBaseLinearAlgebraExt = "LinearAlgebra"
+    ConstructionBaseStaticArraysExt = "StaticArrays"
+
+    [deps.ConstructionBase.weakdeps]
+    IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
+    LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [[deps.Contour]]
 git-tree-sha1 = "439e35b0b36e2e5881738abc8857bd92ad6ff9a8"
@@ -513,6 +576,56 @@ git-tree-sha1 = "23163d55f885173722d1e4cf0f6110cdbaf7e272"
 uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
 version = "1.15.1"
 
+[[deps.DifferentiationInterface]]
+deps = ["ADTypes", "LinearAlgebra"]
+git-tree-sha1 = "5e6897d988addbfe7d9ad2ee467cc0c91001aae4"
+uuid = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
+version = "0.7.15"
+
+    [deps.DifferentiationInterface.extensions]
+    DifferentiationInterfaceChainRulesCoreExt = "ChainRulesCore"
+    DifferentiationInterfaceDiffractorExt = "Diffractor"
+    DifferentiationInterfaceEnzymeExt = ["EnzymeCore", "Enzyme"]
+    DifferentiationInterfaceFastDifferentiationExt = "FastDifferentiation"
+    DifferentiationInterfaceFiniteDiffExt = "FiniteDiff"
+    DifferentiationInterfaceFiniteDifferencesExt = "FiniteDifferences"
+    DifferentiationInterfaceForwardDiffExt = ["ForwardDiff", "DiffResults"]
+    DifferentiationInterfaceGPUArraysCoreExt = "GPUArraysCore"
+    DifferentiationInterfaceGTPSAExt = "GTPSA"
+    DifferentiationInterfaceMooncakeExt = "Mooncake"
+    DifferentiationInterfacePolyesterForwardDiffExt = ["PolyesterForwardDiff", "ForwardDiff", "DiffResults"]
+    DifferentiationInterfaceReverseDiffExt = ["ReverseDiff", "DiffResults"]
+    DifferentiationInterfaceSparseArraysExt = "SparseArrays"
+    DifferentiationInterfaceSparseConnectivityTracerExt = "SparseConnectivityTracer"
+    DifferentiationInterfaceSparseMatrixColoringsExt = "SparseMatrixColorings"
+    DifferentiationInterfaceStaticArraysExt = "StaticArrays"
+    DifferentiationInterfaceSymbolicsExt = "Symbolics"
+    DifferentiationInterfaceTrackerExt = "Tracker"
+    DifferentiationInterfaceZygoteExt = ["Zygote", "ForwardDiff"]
+
+    [deps.DifferentiationInterface.weakdeps]
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    DiffResults = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
+    Diffractor = "9f5e2b26-1114-432f-b630-d3fe2085c51c"
+    Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+    EnzymeCore = "f151be2c-9106-41f4-ab19-57ee4f262869"
+    FastDifferentiation = "eb9bf01b-bf85-4b60-bf87-ee5de06c00be"
+    FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
+    FiniteDifferences = "26cc04aa-876d-5657-8c51-4c34ba976000"
+    ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+    GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
+    GTPSA = "b27dd330-f138-47c5-815b-40db9dd9b6e8"
+    Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+    PolyesterForwardDiff = "98d1487c-24ca-40b6-b7ab-df2af84e126b"
+    ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+    SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
+    SparseMatrixColorings = "0a514795-09f3-496d-8182-132a7b665d35"
+    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+    Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
+    Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
+    Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+
 [[deps.DocStringExtensions]]
 git-tree-sha1 = "7442a5dfe1ebb773c29cc2962a8980f47221d76c"
 uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
@@ -562,11 +675,47 @@ version = "8.0.1+0"
 uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 version = "1.11.0"
 
+[[deps.FillArrays]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "2f979084d1e13948a3352cf64a25df6bd3b4dca3"
+uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
+version = "1.16.0"
+
+    [deps.FillArrays.extensions]
+    FillArraysPDMatsExt = "PDMats"
+    FillArraysSparseArraysExt = "SparseArrays"
+    FillArraysStaticArraysExt = "StaticArrays"
+    FillArraysStatisticsExt = "Statistics"
+
+    [deps.FillArrays.weakdeps]
+    PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+    Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
 [[deps.FindFirstFunctions]]
 deps = ["PrecompileTools"]
 git-tree-sha1 = "1960e97427e0c1e66b603f4d047e6367a70c5d9e"
 uuid = "64ca27bc-2ba2-4a57-88aa-44e436879224"
 version = "1.7.0"
+
+[[deps.FiniteDiff]]
+deps = ["ArrayInterface", "LinearAlgebra", "Setfield"]
+git-tree-sha1 = "9340ca07ca27093ff68418b7558ca37b05f8aeb1"
+uuid = "6a86dc24-6348-571c-b903-95158fe2bd41"
+version = "2.29.0"
+
+    [deps.FiniteDiff.extensions]
+    FiniteDiffBandedMatricesExt = "BandedMatrices"
+    FiniteDiffBlockBandedMatricesExt = "BlockBandedMatrices"
+    FiniteDiffSparseArraysExt = "SparseArrays"
+    FiniteDiffStaticArraysExt = "StaticArrays"
+
+    [deps.FiniteDiff.weakdeps]
+    BandedMatrices = "aae01518-5342-5314-be14-df237901396f"
+    BlockBandedMatrices = "ffab5731-97b5-5995-9138-79e8c1846df0"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [[deps.FixedPointNumbers]]
 deps = ["Statistics"]
@@ -606,6 +755,11 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "7a214fdac5ed5f59a22c2d9a885a16da1c74bbc7"
 uuid = "559328eb-81f9-559d-9380-de523a88c83c"
 version = "1.0.17+0"
+
+[[deps.Future]]
+deps = ["Random"]
+uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
+version = "1.11.0"
 
 [[deps.GLFW_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Xorg_libXcursor_jll", "Xorg_libXi_jll", "Xorg_libXinerama_jll", "Xorg_libXrandr_jll", "libdecor_jll", "xkbcommon_jll"]
@@ -834,6 +988,12 @@ git-tree-sha1 = "2a7a12fc0a4e7fb773450d17975322aa77142106"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.41.2+0"
 
+[[deps.LineSearches]]
+deps = ["LinearAlgebra", "NLSolversBase", "NaNMath", "Printf"]
+git-tree-sha1 = "738bdcacfef25b3a9e4a39c28613717a6b23751e"
+uuid = "d3d80556-e9d4-5f37-9878-2ab0fcc64255"
+version = "7.6.0"
+
 [[deps.LinearAlgebra]]
 deps = ["Libdl", "OpenBLAS_jll", "libblastrampoline_jll"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -905,6 +1065,12 @@ version = "1.11.0"
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2023.12.12"
 
+[[deps.NLSolversBase]]
+deps = ["ADTypes", "DifferentiationInterface", "FiniteDiff", "LinearAlgebra"]
+git-tree-sha1 = "b3f76b463c7998473062992b246045e6961a074e"
+uuid = "d41bc354-129a-5804-8e4c-c37616107c6c"
+version = "8.0.0"
+
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
 git-tree-sha1 = "9b8215b1ee9e78a293f99797cd31375471b2bcae"
@@ -929,7 +1095,7 @@ version = "0.3.27+1"
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
-version = "0.8.1+2"
+version = "0.8.5+0"
 
 [[deps.OpenSSL]]
 deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "NetworkOptions", "OpenSSL_jll", "Sockets"]
@@ -948,6 +1114,18 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "1346c9208249809840c91b26703912dff463d335"
 uuid = "efe28fd5-8261-553b-a9e1-b2916fc3738e"
 version = "0.5.6+0"
+
+[[deps.Optim]]
+deps = ["ADTypes", "EnumX", "FillArrays", "LineSearches", "LinearAlgebra", "NLSolversBase", "NaNMath", "PositiveFactorizations", "Printf", "SparseArrays", "Statistics"]
+git-tree-sha1 = "e4f98846b70ef55e111ac8c40add135256c0cc47"
+uuid = "429524aa-4258-5aef-a3af-852621145aeb"
+version = "2.0.0"
+
+    [deps.Optim.extensions]
+    OptimMOIExt = "MathOptInterface"
+
+    [deps.Optim.weakdeps]
+    MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 
 [[deps.Opus_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -1023,6 +1201,12 @@ version = "1.41.4"
     IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
     ImageInTerminal = "d8c32880-2388-543b-8c61-d9f865259254"
     Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[[deps.PositiveFactorizations]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "17275485f373e6673f7e7f97051f703ed5b15b20"
+uuid = "85a6dd25-e78a-55b7-8502-1745935b8125"
+version = "0.2.4"
 
 [[deps.PrecompileTools]]
 deps = ["Preferences"]
@@ -1140,6 +1324,12 @@ version = "1.3.0"
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 version = "1.11.0"
+
+[[deps.Setfield]]
+deps = ["ConstructionBase", "Future", "MacroTools", "StaticArraysCore"]
+git-tree-sha1 = "c5391c6ace3bc430ca630251d02ea9687169ca68"
+uuid = "efcf1570-3423-57d1-acb7-fd33fddbac46"
+version = "1.1.2"
 
 [[deps.Showoff]]
 deps = ["Dates", "Grisu"]

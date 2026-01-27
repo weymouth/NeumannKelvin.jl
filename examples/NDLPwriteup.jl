@@ -24,7 +24,7 @@ The most common alternative is to construct a re-parameterization for the curve 
 
 In this notebook we propose Normal-Deviation–Limited Parameterization (NDLP) which embeds a pointwise geometric deviation bound in the parameterization using the curve's normal acceleration. The resulting segmentation has smoothly varying density and exhibits a maximum deviation from the curve which is tightly bound to a prescribed tolerance, enforcing the bound while minimizing the number of segments. This is achieved without iteration or heuristic tuning - a true one-shot method.
 
-All results below are fully reproducible. Click the "Download as Pluto notebook" button at the top right to run locally.
+> All results below are fully reproducible. Click the `Edit or run this notebook` button at the top right.
 
 ## Key idea
 
@@ -62,7 +62,7 @@ These are deliberately chosen to expose both strengths and failure modes of the 
 begin
 	cx = CubicSpline([0, 0, 2, 2, 1/6, 0],range(0,1,6))
 	cy = CubicSpline([0, 1/2, -2/3, 3/4, -1/3, 0],range(0,1,6))
-	r_spline(u) = SA[cx(u), cy(u)]
+	fish_spline(u) = SA[cx(u), cy(u)]
 
 	test_curves = [
 	    # C∞ smooth, constant curvature
@@ -74,7 +74,7 @@ begin
 	     notes="Smoothly varying κ"),
 
 	    # cubic spline fish
-		(;name="Spline fish", r=r_spline, range=(0, 1),
+		(;name="Spline fish", r=fish_spline, range=(0, 1),
 	 	notes="Highly uneven curvature and spacing distribution. Delicious"),
 
 	    # 3D helix with varying pitch & radius
@@ -85,12 +85,10 @@ begin
 	    (;name="V-shape", r=u->u<1 ? SA[u, u] : SA[u, 2-u], range=(0, 2.25),
 	     notes="Corner at u=1, violates smoothness assumption")
 	]
+	plot(); for (name,r,range,_) in test_curves
+		plot!(t->r(t)[1],t->r(t)[2],range...,label=name)
+	end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 end
-
-# ╔═╡ 957d0951-2070-4d64-8fc9-58b5121bdfc1
-plot(); for (name,r,range,_) in test_curves
-	plot!(t->r(t)[1],t->r(t)[2],range...,label=name)
-end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 
 # ╔═╡ 10b2e0b0-f373-4a02-b6dc-fd1085b1f34a
 md"""
@@ -132,7 +130,7 @@ Note that while the deviation estimate that is the basis of this parameterizatio
 
 # ╔═╡ 219826fb-5362-46f2-bf51-84465e614269
 md"""
-### Results
+## Method evaluation results
 
 We evaluate each method on the test curves defined above, using a maximum segment length of $\Delta s=L/33$ and a deviation limit of $d_n=1/100$. The results are summarized in the tables below, reporting the following metrics:
  - `δ∞`=$\max(\delta)/(d_n\Delta s)$: the scaled normal deviation (target is 1),
@@ -140,19 +138,20 @@ We evaluate each method on the test curves defined above, using a maximum segmen
  - `Rₜᵥ`=$\sum(R)/L$ where $R_i=|Δl_{i+1}-Δl_i|$: the scaled total variation of segment lengths (lower is better),
  - `R∞`=$\max(R)/\Delta s$: the scaled maximum variation of segment lengths (lower is better).
 
-The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in minimal excess segments, outperforming both adaptive subdivision and curvature-weighted sampling. In particular the deviation from NDLP sampling is within 4% of the deviation limit, while the curvature weighted method has a ±20% variation **even after tuning**, and the subdivision method can be up to 50% oversampled. Adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, indicating Lipschitz-continuous spacing adaptation with respect to arclength. 
+The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in minimal excess segments, outperforming both adaptive subdivision and curvature-weighted sampling. In particular the deviation from NDLP sampling is within 4% of the deviation limit, while the curvature weighted method has a ±20% variation **even after tuning**, and the subdivision method can be up to 50% oversampled. Adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, indicating Lipschitz-continuous spacing adaptation with respect to arclength.
 """
 
 # ╔═╡ b38c2b1c-a48c-4f1f-954b-95faaba680d7
-begin # sample `r` using `method`, and report metrics
+begin
 	function metrics(method, r, u₀, u₁, Δs, dₙ)
-		L = quadgk(arcspeed(r), u₀, u₁)[1]; Δs *= L
-		u = method(r, u₀, u₁, Δs, dₙ)
-		dl,δ = seg_len(r,u),seg_dev(r,u)
-		(;δ∞ = maximum(δ)/(Δs*dₙ),      # scaled max deviation, should => 1!
-		  σ = length(δ)*Δs/L-1,         # extra segments needed to hit dₙ
-		  Rₜᵥ = sum(abs,diff(dl))/L,     # total variation of segment length
-		  R∞ = maximum(abs,diff(dl))/Δs) # max variation of segment length
+		L = seg_len(r, u₀, u₁)            # total length of curve `r`
+		Δs *= L                           # scale by L to compare across curves
+		u = method(r, u₀, u₁, Δs, dₙ)     # sample points using `method`
+		dl,δ = seg_len(r,u),seg_dev(r,u)  # segment lengths and deviations
+		return (;δ∞ = maximum(δ)/(Δs*dₙ), # scaled max deviation, should => 1!
+		  σ = length(δ)*Δs/L-1,           # extra segments needed to hit dₙ
+		  Rₜᵥ = sum(abs, diff(dl))/L,     # total variation of segment length
+		  R∞ = maximum(abs, diff(dl))/Δs) # max variation of segment length
 	end
 
 	# segment metrics
@@ -210,31 +209,26 @@ end
 
 # ╔═╡ 60fc45b3-8cea-4cae-83f4-9c05011b1dee
 plot(); let
-	c = test_curves[3]; x(u) = c.r(u)[1]; y(u) = c.r(u)[2]
-	for f in (κ_weighted,subdivision,NDLP)
-		u = f(c.r,c.range...,1/4,0.09)
-		δ = maximum(seg_dev(c.r,u))
-		plot!(x.(u),y.(u),label="$f, N=$(length(u)), max dev=$(round(δ,sigdigits=2))",marker=:circle)
+	x(u) = fish_spline(u)[1]; y(u) = fish_spline(u)[2]; range=(0,1)
+	Δs = 1/4; dₙ = 0.09	
+	for method in (subdivision,κ_weighted,NDLP)
+		u = method(fish_spline,range...,Δs,dₙ)
+		δ = maximum(seg_dev(fish_spline,u))
+		plot!(x.(u),y.(u),label="$method, N=$(length(u)-1), max dev=$(round(δ,sigdigits=2))",marker=:circle)
 	end
 end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 
-# ╔═╡ 0394397a-1198-444b-9340-b3b737e1b638
-Δs = 1/33; dₙ = 1/100;
-
 # ╔═╡ f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
-map(test_curves) do (name, r, range, _)
-	(;name,metrics(subdivision,r,range...,Δs,dₙ)...)
-end |> Table |> display
-
-# ╔═╡ 11a078e6-0eca-49c2-84d6-829b4b9351f8
-map(test_curves) do (name, r, range, _)
-	(;name,metrics(κ_weighted,r,range...,Δs,dₙ)...)
-end |> Table |> display
-
-# ╔═╡ 30dbf23a-1ac7-47f3-9a8f-11fb1712366c
-map(test_curves) do (name, r, range, _)
-	(;name,metrics(NDLP,r,range...,Δs,dₙ)...)
-end |> Table |> display
+let
+	invΔs = 33; dₙ = 1/100; # held constant for all methods/test_curves
+	println("Metrics using Δs = L/$invΔs and dₙ=$dₙ")
+	for method in (subdivision,κ_weighted,NDLP)
+		println("\nMethod: $method")
+		map(test_curves) do (name, r, range, _)
+			(;name,metrics(method,r,range...,1/invΔs,dₙ)...)
+		end |> Table |> display
+	end
+end
 
 # ╔═╡ 561a1373-57a4-4b67-be5a-9d94c9496360
 md"""
@@ -247,19 +241,18 @@ Holding $d_n=1\%$ constant and *reducing* $\Delta s$ shows two distance phases.
  - In the second phase the deviation limit is no longer active, so $\max(\delta)$ goes to zero without any additional segments or any length variation.
 """
 
-# ╔═╡ 1273c8c7-20b9-42c0-9b0d-d9bb8db57ec2
-convergeΔs = map(logrange(1e-1,1e-4,70)) do Δs
-		(;Δs,metrics(NDLP,test_curves[3].r,test_curves[3].range...,Δs,1e-2)...)
-end |> Table;
-
 # ╔═╡ dcb68886-2771-4b37-91b6-9c983e118728
-begin
+let
+	dₙ = 1e-2
+	convergeΔs = map(logrange(1e-1,1e-4,70)) do Δs
+		(;Δs,metrics(NDLP,fish_spline,0,1,Δs,dₙ)...)
+	end |> Table
 	plot(convergeΔs.Δs,convergeΔs.δ∞,label="max(δ)/dₙΔs")
 	plot!(convergeΔs.Δs,convergeΔs.σ,label="NΔs/L-1")
 	plot!(convergeΔs.Δs,convergeΔs.Rₜᵥ,label="sum(R)/L")
 	plot!(convergeΔs.Δs,convergeΔs.R∞,label="max(R)/Δs")
 	plot!(ylabel="scaled metrics",xlabel="Δs",xscale=:log10,xflip=true)
-	plot!(title="NDLP segmentation metrics with fixed dₙ=1%")
+	plot!(title="NDLP segmentation metrics with fixed dₙ=$dₙ")
 end
 
 # ╔═╡ 67eba604-640b-4388-bc08-928f4e5e62ca
@@ -269,19 +262,18 @@ Holding $\Delta s=L/100$ and _increasing_ $d_n$ shows a similar trend.
  - In the second phase, the $d_n$ limit deactivates, letting $\max(\delta)$ scaled by $d_n$ and $\max(R)$ both drop to zero as the sampling becomes uniformly spaced.
 """
 
-# ╔═╡ 260406ec-97ff-49fc-bb17-4f28fe12b8b6
-convergedₙ = map(logrange(1,5e-4,100)) do dₙ
-		(;dₙ,metrics(NDLP,test_curves[3].r,test_curves[3].range...,1e-2,dₙ)...)
-end |> Table;
-
 # ╔═╡ f67fc432-8031-4230-899b-b24fcb7b44f4
-begin
+let
+	invΔs = 100
+	convergedₙ = map(logrange(1,5e-4,100)) do dₙ
+		(;dₙ,metrics(NDLP,fish_spline,0,1,1/invΔs,dₙ)...)
+	end |> Table
 	plot(convergedₙ.dₙ,convergedₙ.δ∞,label="max(δ)/dₙΔs")
 	plot!(convergedₙ.dₙ,convergedₙ.σ,label="NΔs/L-1")
 	plot!(convergedₙ.dₙ,convergedₙ.Rₜᵥ,label="sum(R)/L")
 	plot!(convergedₙ.dₙ,convergedₙ.R∞,label="max(R)/Δs")
 	plot!(ylabel="scaled metrics",xlabel="dₙ",xscale=:log10)
-	plot!(title="NDLP segmentation metrics with fixed Δs=L/100")
+	plot!(title="NDLP segmentation metrics with fixed Δs=L/$invΔs")
 end
 
 # ╔═╡ 6094d19e-e64a-4434-b6db-e5647fd71e78
@@ -1789,20 +1781,14 @@ version = "1.13.0+0"
 # ╟─60fc45b3-8cea-4cae-83f4-9c05011b1dee
 # ╟─e1bc7e76-a497-41db-8f91-b8912e359e0e
 # ╟─28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
-# ╟─957d0951-2070-4d64-8fc9-58b5121bdfc1
 # ╟─10b2e0b0-f373-4a02-b6dc-fd1085b1f34a
-# ╟─cc1fa09e-21da-425d-bb6c-a8c906a65e98
+# ╠═cc1fa09e-21da-425d-bb6c-a8c906a65e98
 # ╟─219826fb-5362-46f2-bf51-84465e614269
 # ╠═b38c2b1c-a48c-4f1f-954b-95faaba680d7
-# ╠═0394397a-1198-444b-9340-b3b737e1b638
-# ╠═f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
-# ╠═11a078e6-0eca-49c2-84d6-829b4b9351f8
-# ╠═30dbf23a-1ac7-47f3-9a8f-11fb1712366c
+# ╟─f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 # ╟─561a1373-57a4-4b67-be5a-9d94c9496360
-# ╠═1273c8c7-20b9-42c0-9b0d-d9bb8db57ec2
 # ╟─dcb68886-2771-4b37-91b6-9c983e118728
 # ╟─67eba604-640b-4388-bc08-928f4e5e62ca
-# ╠═260406ec-97ff-49fc-bb17-4f28fe12b8b6
 # ╟─f67fc432-8031-4230-899b-b24fcb7b44f4
 # ╟─6094d19e-e64a-4434-b6db-e5647fd71e78
 # ╟─00000000-0000-0000-0000-000000000001

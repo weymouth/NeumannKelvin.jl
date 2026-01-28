@@ -47,7 +47,7 @@ end
 Solve a panel system using a direct construction and solve such that the normal
 velocity boundary condition `∂ₙϕ(pᵢ,pⱼ)*qⱼ = -U⋅nᵢ` is satisfied on body panels.
 
-**Note**: This function does not apply the FSBC and therefore ignores body panels.
+**Note**: This function does not apply the FSBC and ignores free surface panels.
 
 *Note*: This function is memory (and therefore time) intensive for large number of
 panels N because it constructs the full N² matrix elements. It is *not* accelerated

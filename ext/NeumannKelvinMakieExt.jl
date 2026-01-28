@@ -24,14 +24,14 @@ end
 
 # Generate mesh from Table data
 function viz!(fig::Figure,ax::Axis3, panels::Union{Table,PanelTree}, values; vectors=nothing, 
-    vscale=1, label="", colorrange=extrema(values), kwargs...)
+    vscale=1, label="", colormap=:viridis, colorrange=extrema(values), kwargs...)
 
     # Mesh geometry (vertices, normals, and colors)
-    obj = mesh!(ax, panelmesh.(panels,panels.kernel); color=values, colorrange, kwargs...)
+    obj = mesh!(ax, panelmesh.(panels,panels.kernel); color=values, colorrange, colormap, kwargs...)
 
     # Normals & color bar
     !isnothing(vectors) && arrows3d!(ax, components(panels.x)..., components(vectors)...;
-        lengthscale=0.1vscale, color=values, colorrange, kwargs...)
+        lengthscale=0.1vscale, color=values, colorrange, colormap, kwargs...)
 
     # Colorbar
     Colorbar(fig[1,2],obj;label,kwargs...)

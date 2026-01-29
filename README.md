@@ -278,9 +278,10 @@ See the docs for `NKPanelSystem`, `kelvin`, and the cited references for details
 
 As a final application, let's simulate the classic Wigley hull with `NKPanels`
 ```julia
-wigley(hᵤ;B=1/8,D=1/16,hᵥ=0.5hᵤ/D) = measure.(
-    (u,v)->SA[u-0.5,-2B*u*(1-u)*(v)*(2-v),D*(v-1)],
-    0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ)
+function wigley(hᵤ,hᵥ=hᵤ;B=1/8,D=1/6,kwargs...)
+    S(u,v) = SA[u-0.5,-2B*u*(1-u)*(v)*(2-v),D*(v-1)]
+    panelize(S;hᵤ,hᵥ,kwargs...)
+end
 NKsys = NKPanelSystem(wigley(0.025);ℓ=1/2π,sym_axes=2,contour=true) |> directsolve!
 viz(NKsys)
 ```

@@ -143,9 +143,9 @@ The NDLP segmentation consistently produces a max deviation which is tight to th
 
 # ╔═╡ b38c2b1c-a48c-4f1f-954b-95faaba680d7
 begin
-	function metrics(method, r, u₀, u₁, Δs, dₙ)
+	function metrics(method, r, u₀, u₁, N′, dₙ)
 		L = seg_len(r, u₀, u₁)            # total length of curve `r`
-		Δs *= L                           # scale by L to compare across curves
+		Δs = L/N′                         # segment length limit for `r`
 		u = method(r, u₀, u₁, Δs, dₙ)     # sample points using `method`
 		dl,δ = seg_len(r,u),seg_dev(r,u)  # segment lengths and deviations
 		return (;δ∞ = maximum(δ)/(Δs*dₙ), # scaled max deviation, should => 1!
@@ -189,7 +189,7 @@ begin
 	end
 	function NDLP(r, u₀, u₁, Δs, dₙ) # one-shot sampling! 🤓
 		speed(u) = max(arcspeed(r)(u),√(Δs*aₙ(r,u)/8dₙ))
-		rtol = 1e-6Δs # only needed since convergence study lets Δs→0
+		rtol = 1e-6Δs # only needed since sensitivity study lets Δs→0
 		S,s⁻¹ = ∫speed(speed, u₀, u₁; rtol)
 		return s⁻¹.(range(0, S, round(Int,S/Δs)+1))
 	end
@@ -220,21 +220,21 @@ end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 
 # ╔═╡ f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 let
-	invΔs = 33; dₙ = 1/100; # held constant for all methods/test_curves
-	println("Metrics using Δs = L/$invΔs and dₙ=$dₙ")
+	N′ = 33; dₙ = 1/100; # held constant for all methods/test_curves
+	println("Metrics using Δs = L/$N′ and dₙ=$dₙ")
 	for method in (subdivision,κ_weighted,NDLP)
 		println("\nMethod: $method")
 		map(test_curves) do (name, r, range, _)
-			(;name,metrics(method,r,range...,1/invΔs,dₙ)...)
+			(;name,metrics(method,r,range...,N′,dₙ)...)
 		end |> Table |> display
 	end
 end
 
 # ╔═╡ 561a1373-57a4-4b67-be5a-9d94c9496360
 md"""
-## Convergence study
+## Sampling sensitivity study
 
-We also evaluate the convergence of the NDLP segmentation metrics as the $\Delta s$ and $d_n$ limits vary. We use the cubic spline fish as a representative curve.
+We also evaluate the sensitivity of the NDLP sampling as the $\Delta s$ and $d_n$ limits vary. We use the cubic spline fish as a representative curve.
 
 Holding $d_n=1\%$ constant and *reducing* $\Delta s$ shows two distance phases.
  - In the first phase, the deviation $\max(\delta)$ goes rapidly to the limit $d_n\Delta s$ and holds steady while the excess number of segments and total variation in the panel lengths drops to zero with $\Delta s$.
@@ -244,14 +244,14 @@ Holding $d_n=1\%$ constant and *reducing* $\Delta s$ shows two distance phases.
 # ╔═╡ dcb68886-2771-4b37-91b6-9c983e118728
 let
 	dₙ = 1e-2
-	convergeΔs = map(logrange(1e-1,1e-4,70)) do Δs
-		(;Δs,metrics(NDLP,fish_spline,0,1,Δs,dₙ)...)
+	N′sweep = map(logrange(10,10000,70)) do N′
+		(;N′,metrics(NDLP,fish_spline,0,1,N′,dₙ)...)
 	end |> Table
-	plot(convergeΔs.Δs,convergeΔs.δ∞,label="max(δ)/dₙΔs")
-	plot!(convergeΔs.Δs,convergeΔs.σ,label="NΔs/L-1")
-	plot!(convergeΔs.Δs,convergeΔs.Rₜᵥ,label="sum(R)/L")
-	plot!(convergeΔs.Δs,convergeΔs.R∞,label="max(R)/Δs")
-	plot!(ylabel="scaled metrics",xlabel="Δs",xscale=:log10,xflip=true)
+	plot(N′sweep.N′,N′sweep.δ∞,label="max(δ)/dₙΔs")
+	plot!(N′sweep.N′,N′sweep.σ,label="NΔs/L-1")
+	plot!(N′sweep.N′,N′sweep.Rₜᵥ,label="sum(R)/L")
+	plot!(N′sweep.N′,N′sweep.R∞,label="max(R)/Δs")
+	plot!(ylabel="scaled metrics",xlabel="L/Δs",xscale=:log10)
 	plot!(title="NDLP segmentation metrics with fixed dₙ=$dₙ")
 end
 
@@ -264,16 +264,16 @@ Holding $\Delta s=L/100$ and _increasing_ $d_n$ shows a similar trend.
 
 # ╔═╡ f67fc432-8031-4230-899b-b24fcb7b44f4
 let
-	invΔs = 100
-	convergedₙ = map(logrange(1,5e-4,100)) do dₙ
-		(;dₙ,metrics(NDLP,fish_spline,0,1,1/invΔs,dₙ)...)
+	N′ = 100
+	dₙsweep = map(logrange(1,5e-4,100)) do dₙ
+		(;dₙ,metrics(NDLP,fish_spline,0,1,N′,dₙ)...)
 	end |> Table
-	plot(convergedₙ.dₙ,convergedₙ.δ∞,label="max(δ)/dₙΔs")
-	plot!(convergedₙ.dₙ,convergedₙ.σ,label="NΔs/L-1")
-	plot!(convergedₙ.dₙ,convergedₙ.Rₜᵥ,label="sum(R)/L")
-	plot!(convergedₙ.dₙ,convergedₙ.R∞,label="max(R)/Δs")
-	plot!(ylabel="scaled metrics",xlabel="dₙ",xscale=:log10)
-	plot!(title="NDLP segmentation metrics with fixed Δs=L/$invΔs")
+	plot(dₙsweep.dₙ,dₙsweep.δ∞,label="max(δ)/dₙΔs")
+	plot!(dₙsweep.dₙ,dₙsweep.σ,label="NΔs/L-1")
+	plot!(dₙsweep.dₙ,dₙsweep.Rₜᵥ,label="sum(R)/L")
+	plot!(dₙsweep.dₙ,dₙsweep.R∞,label="max(R)/Δs")
+	plot!(ylabel="scaled metrics",xlabel="dₙ",xscale=:log10,ylims=(-0.04,1.8))
+	plot!(title="NDLP segmentation metrics with fixed Δs=L/$N′")
 end
 
 # ╔═╡ 6094d19e-e64a-4434-b6db-e5647fd71e78
@@ -309,7 +309,7 @@ TypedTables = "~1.4.6"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.5"
+julia_version = "1.11.2"
 manifest_format = "2.0"
 project_hash = "84beccf13d730d2ef8c64387b8e5b55843d0e9dd"
 
@@ -1082,7 +1082,7 @@ version = "0.3.27+1"
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
-version = "0.8.5+0"
+version = "0.8.1+2"
 
 [[deps.OpenSSL]]
 deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "NetworkOptions", "OpenSSL_jll", "Sockets"]

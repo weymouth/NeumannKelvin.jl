@@ -68,9 +68,13 @@ end
     area_checks(panels.dA,0.18)
     @test sum(panels.dA) ≈ 4π^2*0.3
 
-    # Check sign is correct when flipped
-    panels_bad = panelize(torus,0,2pi,0,2pi,hᵤ=0.6,hᵥ=0.3,devlimit=Inf)
-    @test panels[1].n ⋅ panels_bad[1].n > 0.99
+    # Check sign is flipped
+    panels = panelize(sphere,0,pi,0,2pi,hᵤ=0.6,flip=true)
+    @test all(p->p.x'p.n<-0.9,panels)
+
+    # Check submerged
+    panels = panelize(spheroid,0,2pi/3,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
+    @test all(x->x[3]<0,panels.verts)
 
     # Check inputs
     @test_throws ArgumentError panelize(spheroid,0,pi,0,2pi,hᵤ=0)

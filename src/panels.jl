@@ -1,17 +1,18 @@
 """
-    panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,devlimit=0.05,transpose=false,flip=false,N_max=1000,kwargs...)
+    panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,devlimit=0.05,
+            transpose=false,flip=false,submerge=false,N_max=1000,kwargs...)
 
 Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]`, returning a `Table` of panels.
 
 The surface is split into strips roughly `hᵤ` wide which are split into panels roughly `hᵥ` high which are then `measure`d.
-Use `transpose=true` to change the strip direction and `flip=true` to flip the normal direction.
-The parameter `devlimit` sets the max deviation of a flat panel from the surface by reducing panel size in regions of high curvature.
+The parameter `devlimit` sets the max deviation `δ/(hᵤ+hᵥ)` from the surface by reducing panel size in regions of high curvature.
+Use `transpose=true` to change the strip direction, `flip=true` to flip the normal direction, and submerge=`true` to trim surface for `z≥0`.
 This function throws an error if the adaptive routine gives more than `N_max` panels.
 """
 function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,devlimit=0.05,
-                  transpose=false,flip=false,N_max=1000,verbose=false,T=Float64,kwargs...)
+                  transpose=false,flip=false,N_max=1000,verbose=false,submerge=false,T=Float64,kwargs...)
     # Transpose arguments u,v -> v,u
-    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,devlimit,
+    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ,hᵥ,devlimit,
                                  transpose=false,flip=!flip,N_max,verbose,T,kwargs...)
 
     # Check inputs and get output type
@@ -37,7 +38,8 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,devl
         u,du = 0.5uᵢ[i+1]+0.5uᵢ[i],uᵢ[i+1]-uᵢ[i] # Parametric center & width
 
         # Find equidistant points along strip center
-        S,s⁻¹ = arclength(v->surface(u,v),hᵥ,devlimit,v₀,v₁)
+        uv₀,uv₁ = submerge ? newlimits(v->surface(u,v),v₀,v₁) : (v₀,v₁)
+        S,s⁻¹ = arclength(v->surface(u,v),hᵥ,devlimit,uv₀,uv₁)
         verbose && @show i,S
         S ≤ 0.5hᵥ && return init               # not enough height
         ve = s⁻¹(range(0,S,round(Int,S/hᵥ)+1)) # panel endpoints
@@ -53,7 +55,11 @@ function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,devl
     length(panels) ≤ N_max && return Table(panels)
     throw(ArgumentError("length(panels)=$(length(panels))>$N_max. Increase hᵤ,hᵥ,devlimit and/or N_max."))
 end
-
+function newlimits(r,low,high)
+    z(u) = r(u)[3]+√eps(u)
+    zero = find_zero(z,(low,high))
+    return z(low)<0 ? (low,zero) : (zero,high)
+end
 using QuadGK,DataInterpolations
 """
     arclength(r, Δs, devlimit, low, high) -> S, u(s)

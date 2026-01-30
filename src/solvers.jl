@@ -46,10 +46,9 @@ end
 
 Solve a panel system using a direct construction and solve such that the normal
 velocity boundary condition `∂ₙϕ(pᵢ,pⱼ)*qⱼ = -U⋅nᵢ` is satisfied on body panels.
+This function can not be used to solve an `FSPanelSystem`.
 
-**Note**: This function does not apply the FSBC and ignores free surface panels.
-
-*Note*: This function is memory (and therefore time) intensive for large number of
+**Note**: This function is memory (and therefore time) intensive for large number of
 panels N because it constructs the full N² matrix elements. It is *not* accelerated
 with a PanelTree, but *is* accelerated when Threads.nthreads()>1.
 
@@ -68,8 +67,9 @@ extrema(cₚ(sys))               # measure
 ```
 """
 function directsolve!(sys;verbose=true)
+    typeof(sys)<:FSPanelSystem && throw(ArgumentError("Cannot directsolve! an FSPanelSystem"))
     q = if verbose
-        @warn "This routine ignores free surface panels and is memory intensive. See help?>directsolve!."
+        @warn "This routine is memory intensive. See help?>directsolve!."
         @time influence(sys)\rhs(sys.body,sys.U)
     else
         influence(sys)\rhs(sys.body,sys.U)

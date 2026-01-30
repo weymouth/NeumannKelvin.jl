@@ -12,7 +12,7 @@ This function throws an error if the adaptive routine gives more than `N_max` pa
 function panelize(surface,u₀=0.,u₁=1.,v₀=0.,v₁=1.;hᵤ=1.,hᵥ=hᵤ,devlimit=0.05,
                   transpose=false,flip=false,N_max=1000,verbose=false,submerge=false,T=Float64,kwargs...)
     # Transpose arguments u,v -> v,u
-    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ,hᵥ,devlimit,
+    transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,devlimit,
                                  transpose=false,flip=!flip,submerge,N_max,verbose,T,kwargs...)
 
     # Check inputs and get output type

@@ -209,11 +209,6 @@ end
     badsurf = measure.((u,v)->SA[u,v,0],-4:1:2,(1/2:1:2)',1,1,flip=true)
     @test_throws ArgumentError FSPanelSystem(body,badsurf;ℓ)
 
-    # Direct solve ignores freesurf
-    directsolve!(sys,verbose=false)
-    sys2 = directsolve!(BodyPanelSystem(body,sym_axes=2),verbose=false)
-    @test sys.body.q == sys2.body.q
-
     # Setting ℓ=0 turns freesurf into reflection wall
     gmressolve!(sys)
     sys2 = gmressolve!(BodyPanelSystem(body,sym_axes=(2,3),wrap=PanelTree))
@@ -223,7 +218,7 @@ end
     # Setting ℓ>0 turns on freesurf, but it's slow to converge
     sys = FSPanelSystem(body,freesurf;sym_axes=2,ℓ,θ²=16)
     gmressolve!(sys,itmax=160)                      # should converge...
-    @test 2steadyforce(sys,S=1)[1] ≈ 6.2e-3 rtol=0.066 # Analytic Linear FSBC solution
+    @test -2steadyforce(sys,S=1)[1] ≈ 6.2e-3 rtol=0.066 # Analytic Linear FSBC solution
     mn,mx = extrema(ζ(sys))
     @test -2mn > mx # trough is much bigger than crest
 end
@@ -268,15 +263,15 @@ wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure.(
     sys = NKPanelSystem(spheroid(0.04),sym_axes=2,ℓ=0.5^2) |> directsolve!
     @test @ballocations(Φ($sys.body.x[1],$sys)) ≤ TEST_ALLOCS
     @test @ballocations(cₚ($sys.body.x[1],$sys)) ≤ TEST_ALLOCS
-    @test steadyforce(sys,S=1/2)[1] ≈ 6e-3 rtol=0.02
+    @test -steadyforce(sys,S=1/2)[1] ≈ 6e-3 rtol=0.02
 
     # Compare elliptical prism drag to Guevel/Baar (no WL contour)
     sys = NKPanelSystem(prism(0.1),sym_axes=2,ℓ=0.55^2) |> directsolve!
-    @test steadyforce(sys,S=1/2)[1] ≈ 0.062 rtol=0.03
+    @test -steadyforce(sys,S=1/2)[1] ≈ 0.062 rtol=0.03
 
     # Compare thin-ship wigley to Tuck 2008 (no WL contour)
     sys = NKPanelSystem(wigley(0.05),sym_axes=2,ℓ=0.51^2) |> directsolve!
-    @test steadyforce(sys)[1] ≈ 0.0088-0.003 rtol=0.03 # Remove ITTC Cf
+    @test -steadyforce(sys)[1] ≈ 0.0088-0.003 rtol=0.03 # Remove ITTC Cf
 end
 
 using NURBS,FileIO  # or whatever triggers the extension

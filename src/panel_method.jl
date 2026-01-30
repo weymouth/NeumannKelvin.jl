@@ -77,7 +77,7 @@ the body panel area. Computation is accelerated when Threads.nthreads()>1.
 
 See also: [`cₚ`](@ref)
 """
-steadyforce(sys;S=bodyarea(sys)) = surface_integral(cₚ,sys)/S
+steadyforce(sys;S=bodyarea(sys)) = -surface_integral(cₚ,sys)/S
 @inline function surface_integral(f,sys)
     init = neutral = zero(eltype(sys.body.n))
     AK.mapreduce(+, sys.body, AK.get_backend(sys.body.q); init, neutral) do p

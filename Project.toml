@@ -1,7 +1,7 @@
 name = "NeumannKelvin"
 uuid = "7f078b06-e5c4-4cf8-bb56-b92882a0ad03"
 authors = ["Gabriel Weymouth"]
-version = "0.8.2"
+version = "0.9.0"
 
 [deps]
 AcceleratedKernels = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
@@ -25,13 +25,11 @@ TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 [weakdeps]
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NURBS = "dde13934-061e-461b-aa91-2c0fad390a0d"
-Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 
 [extensions]
 NeumannKelvinMakieExt = "Makie"
 NeumannKelvinNURBSExt = "NURBS"
-NeumannKelvinPlotsExt = "Plots"
 NeumannKelvinGeometryBasicsExt = "GeometryBasics"
 
 [compat]

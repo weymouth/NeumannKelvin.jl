@@ -79,10 +79,8 @@ See also: [`cₚ`](@ref)
 """
 steadyforce(sys;S=bodyarea(sys)) = -surface_integral(cₚ,sys)/S
 @inline function surface_integral(f,sys)
-    init = neutral = zero(eltype(sys.body.n))
-    AK.mapreduce(+, sys.body, AK.get_backend(sys.body.q); init, neutral) do p
-        f(p.x,sys) * p.n * p.dA
-    end
+    a = mapbody!(f,similar(sys.body.q),sys)
+    sum(i->a[i]*sys.body.n[i]*sys.body.dA[i],eachindex(a)) # sum quick
 end
 
 """

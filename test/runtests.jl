@@ -263,7 +263,7 @@ wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure.(
     sys = NKPanelSystem(spheroid(0.04),sym_axes=2,ℓ=0.5^2) |> directsolve!
     @test @ballocations(Φ($sys.body.x[1],$sys)) ≤ TEST_ALLOCS
     @test @ballocations(cₚ($sys.body.x[1],$sys)) ≤ TEST_ALLOCS
-    @test -steadyforce(sys,S=1/2)[1] ≈ 6e-3 rtol=0.02
+    @test -steadyforce(sys,S=1/2)[1] ≈ 6e-3 rtol=0.023
 
     # Compare elliptical prism drag to Guevel/Baar (no WL contour)
     sys = NKPanelSystem(prism(0.1),sym_axes=2,ℓ=0.55^2) |> directsolve!

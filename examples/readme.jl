@@ -13,7 +13,7 @@ BodyPanelSystem(halfbody,wrap=PanelTree,sym_axes=2) |> gmressolve!
 
 directsolve!(BodyPanelSystem(body,U=SA[0,-1,0]),verbose=false) |> addedmass
 
-ℓ = 1/4; h = 0.3ℓ # Froude-length and spacing
+ℓ = 1/4; h = 0.3ℓ # Kelvin-length and spacing
 # Make the free-surface grid using y-symmetry and resolving ℓ
 freesurf = measure.((u,v)->SA[u,-v,0],2:-h:-4,(h/2:h:2)',h,h)
 halfbody = panelize(S,0,π,0,π,hᵤ=h)
@@ -41,7 +41,7 @@ Meshsys = FSPanelSystem(dolphin,freesurf;ℓ=9f-2) |> gmressolve!
 using GLMakie # can also use Plots, or WGLMakie (for browsers)
 viz(Meshsys)
 
-ℓ = 1/4; h = 0.3ℓ # Froude-length and spacing
+ℓ = 1/4; h = 0.3ℓ # Kelvin-length and spacing
 halfbody = panelize(S,0,π,0,π,hᵤ=h)
 NKsys = NKPanelSystem(halfbody;ℓ,sym_axes=2) |> directsolve!
 steadyforce(NKsys)

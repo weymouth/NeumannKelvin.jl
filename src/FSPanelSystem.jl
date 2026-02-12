@@ -9,7 +9,7 @@ Similarly, the direction of the flow will always be `Û=-x̂`. Relative flow ve
 (i.e. drift angle) must be acheived by rotating the body.
 
 keyword arguments:
-- `ℓ ≡ Umag²/g` Froude length
+- `ℓ ≡ Umag²/g` Kelvin length
 - `Umag` Optional background flow magnitude
 - `sym_axes, wrap` see BodyPanelSystem
 
@@ -32,7 +32,7 @@ struct FSPanelSystem{B,F,D,L,T,M} <: AbstractPanelSystem
     body::B      # body panels
     freesurf::F  # free surface panels
     fsm::D       # free-surface sized Matrix
-    ℓ::L         # Froude-length
+    ℓ::L         # Kelvin-length
     U::SVector{3,T}
     mirrors::M
 end
@@ -54,7 +54,7 @@ function Base.show(io::IO, ::MIME"text/plain", sys::FSPanelSystem)
     print(  io, "  freesurf: "); show(io,sys.freesurf)
     println(io, "     size: $(size(sys.fsm))")
     println(io, "     panel type: $(eltype(sys.freesurf.kernel))")
-    println(io, "  Froude length ℓ: $(sys.ℓ)")
+    println(io, "  Kelvin length ℓ: $(sys.ℓ)")
     abstract_show(io,sys)
 end
 

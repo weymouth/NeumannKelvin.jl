@@ -37,7 +37,7 @@ export FSPanelSystem,ζ
 
 # Kelvin Green function definitions
 include("NKPanelSystem.jl")
-export NKPanelSystem,∫NK,kelvin
+export NKPanelSystem,kelvin,∫K
 
 # General support functions
 components(data,i) = getindex.(data, i)

@@ -7,7 +7,7 @@ A PanelSystem which applies the Neumann-Kelvin Green's function on the `body`.
 Translate and rotate the body as needed relative to these reference points.
 
 Keyword arguments:
-- `ℓ=Umag²/g` Froude length
+- `ℓ=Umag²/g` Kelvin length
 - `Umag` Optional background flow magnitude
 - `sym_axes` Optional symmetry axes
 - `filter` Optional flag to filter waves shorter than the panel size
@@ -42,9 +42,9 @@ Base.show(io::IO, ::MIME"text/plain", sys::NKPanelSystem) = (println(io,"NKPanel
     println(io,"  Neumann-Kelvin args: ",sys.args);abstract_show(io,sys))
 
 # Overload with Neumann-Kelvin potential
-Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫NK(x .* m,p,sys.args),sys.body),sys.mirrors)
-influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫NK(x,p,sys.args))
-@inline function ∫NK(x,p,(;ℓ,filter,contour)::A) where A
+Φ(x,sys::NKPanelSystem) = sum(m->sum(p->p.q*∫K(x .* m,p,sys.args),sys.body),sys.mirrors)
+influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫K(x,p,sys.args))
+@inline function ∫K(x,p,(;ℓ,filter,contour)::A) where A
     # Waterline contour factor ℓ∫n₁dy
     dy = extent(components(p.verts,2)); dl = hypot(extent(components(p.verts,1)),dy)
     c = contour && onwaterline(p) ? 1-ℓ*dy^2/(dl*p.dA) : one(dy)
@@ -58,7 +58,7 @@ end
 """
     kelvin(ξ,α;ℓ)
 
-Nearfield and Wavelike Green Functions `N+W` for a traveling source at position `α` with Froude
+Nearfield and Wavelike Green Functions `N+W` for a traveling source at position `α` with Kelvin
 length `ℓ ≡ U²/g`. The free surface is at z=0, and the flow direction is Û=[-1,0,0]. See Noblesse 1981.
 """
 function kelvin(ξ,α;ℓ=1,z_max=-0.)

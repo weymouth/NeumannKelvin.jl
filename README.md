@@ -136,10 +136,10 @@ The added mass force is larger when the flow is broadside to the body, as expect
 
 ## Free surface panel systems
 
-For our first free-surface simulation, we can define a `FSPanelSystem` with panels on both `body` and `freesurf`. We also **must** define the Froude length ℓ≡U²/g to apply the FSBC.
+For our first free-surface simulation, we can define a `FSPanelSystem` with panels on both `body` and `freesurf`. We also **must** define the Kelvin length ℓ≡U²/g to apply the FSBC.
 ```julia
 # Make the free-surface grid and body panels using y-symmetry and resolving ℓ
-ℓ = 1/4; h = 0.3ℓ # Froude-length and spacing
+ℓ = 1/4; h = 0.3ℓ # Kelvin-length and spacing
 freesurf = measure.((u,v)->SA[u,-v,0],2:-h:-4,(h/2:h:2)',h,h)
 halfbody = panelize(S,0,π,0,π,hᵤ=h)
 ```
@@ -161,7 +161,7 @@ FSPanelSystem
   freesurf: PanelTree(2187 panels, 13 levels, θ²: 16)
      size: (81, 27)
      panel type: NeumannKelvin.QuadKernel
-  Froude length ℓ: 0.25
+  Kelvin length ℓ: 0.25
   body: PanelTree(72 panels, 8 levels, θ²: 16)
      area & volume: 0.25097206316403453, 0.010422384595950107
      panel type: NeumannKelvin.QuadKernel
@@ -206,7 +206,7 @@ FSPanelSystem
   freesurf: PanelTree(1734 panels, 12 levels, θ²: 9)
      size: (51, 34)
      panel type: NeumannKelvin.QuadKernel
-  Froude length ℓ: 0.09
+  Kelvin length ℓ: 0.09
   body: PanelTree(1373 panels, 12 levels, θ²: 9)
      area & volume: 0.4362399, 0.013043594
      panel type: NeumannKelvinGeometryBasicsExt.TriKernel
@@ -231,7 +231,7 @@ We can satisfy the linear FSBC by construction if we switch from source panels t
 
 Here's the same submerged spheroid example solved using Kelvin panels.
 ```julia
-ℓ = 1/4; h = 0.3ℓ # Froude-length and spacing
+ℓ = 1/4; h = 0.3ℓ # Kelvin-length and spacing
 halfbody = panelize(S,0,π,0,π,hᵤ=h)
 ```
 ```julia

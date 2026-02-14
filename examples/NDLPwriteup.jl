@@ -5,7 +5,7 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 805e7c4a-f9f5-11f0-1430-43f2ae01e9f4
-using Plots, QuadGK, DataInterpolations, LinearAlgebra, StaticArrays, TypedTables, Optim
+using Plots, QuadGK, DataInterpolations, LinearAlgebra, StaticArrays, TypedTables, Optim, PrettyTables
 
 # ╔═╡ ad7b8fa0-e966-4c3b-8163-02d2817b1c9d
 using ForwardDiff:derivative as D # Automatic derivatives
@@ -42,53 +42,6 @@ where $\Delta s$ is the maximum segment length and $d_n$ is a specified normal d
 
 We give an initial illustration of the the performance over the new approach using a cubic spline geometry and a coarse sampling $\Delta s=1/4$ and $d_n=9\%$ to highlight the differences. The new NDLP sampling is tight to the prescribed deviation limit and uses the fewest number of points.
 """
-
-# ╔═╡ e1bc7e76-a497-41db-8f91-b8912e359e0e
-md"""
-## Test curves
-
-We begin by defining a small set of representative curves:
-
-1. A circle with constant curvature,
-1. an ellipse with smoothly varying curvature,
-1. a spline with highly nonuniform curvature (“spline fish”),
-1. a three-dimensional helix with varying pitch and radius,
-1. and a V-shaped "curve" with a corner that violates smoothness assumptions.
-
-These are deliberately chosen to expose both strengths and failure modes of the methods. The final example (the V-shape) is included as a negative control as local curvature-based methods cannot handle curvature discontinuities gracefully.
-"""
-
-# ╔═╡ 28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
-begin
-	cx = CubicSpline([0, 0, 2, 2, 1/6, 0],range(0,1,6))
-	cy = CubicSpline([0, 1/2, -2/3, 3/4, -1/3, 0],range(0,1,6))
-	fish_spline(u) = SA[cx(u), cy(u)]
-
-	test_curves = [
-	    # C∞ smooth, constant curvature
-	    (;name="Circle", r=u->SA[2sin(u), 2cos(u)], range=(0, 2π),
-	     notes="Constant κ, perfect for circular arc assumption"),
-
-	    # C∞ smooth, varying curvature
-	    (;name="Ellipse", r=u->SA[3sin(u), cos(u)], range=(0, π),
-	     notes="Smoothly varying κ"),
-
-	    # cubic spline fish
-		(;name="Spline fish", r=fish_spline, range=(0, 1),
-	 	notes="Highly uneven curvature and spacing distribution. Delicious"),
-
-	    # 3D helix with varying pitch & radius
-		(;name="Variable Helix", r=u->(R=1+0.3sin(3u); SA[R*cos(u), R*sin(u), (u/2π)^2]), range=(0, 2π),
-	 	notes="3D curve, demonstrates dimension-independence"),
-
-		# C⁰ continuous, C¹ discontinuous (corner)
-	    (;name="V-shape", r=u->u<1 ? SA[u, u] : SA[u, 2-u], range=(0, 2.25),
-	     notes="Corner at u=1, violates smoothness assumption")
-	]
-	plot(); for (name,r,range,_) in test_curves
-		plot!(t->r(t)[1],t->r(t)[2],range...,label=name)
-	end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
-end
 
 # ╔═╡ 10b2e0b0-f373-4a02-b6dc-fd1085b1f34a
 md"""
@@ -128,45 +81,9 @@ This speed function is integrated over the curve's $u$-range and sampled at equa
 Note that while the deviation estimate that is the basis of this parameterization is only second order in $\Delta l$, we show below that this is sufficient to saturate to the bound for all smooth curves considered, even at fairly low sampling density.
 """
 
-# ╔═╡ 219826fb-5362-46f2-bf51-84465e614269
-md"""
-## Method evaluation results
-
-We evaluate each method on the test curves defined above, using a maximum segment length of $\Delta s=L/33$ and a deviation limit of $d_n=1/100$. The results are summarized in the tables below, reporting the following metrics:
- - `δ∞`=$\max(\delta)/(d_n\Delta s)$: the scaled normal deviation (target is 1),
- - `σ`=$N\Delta s/L-1$: the scaled number of extra segments needed to hit the deviation limit (lower is better),
- - `Rₜᵥ`=$\sum(R)/L$ where $R_i=|Δl_{i+1}-Δl_i|$: the scaled total variation of segment lengths (lower is better),
- - `R∞`=$\max(R)/\Delta s$: the scaled maximum variation of segment lengths (lower is better).
-
-The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in minimal excess segments, outperforming both adaptive subdivision and curvature-weighted sampling. In particular the deviation from NDLP sampling is within 4% of the deviation limit, while the curvature weighted method has a ±20% variation **even after tuning**, and the subdivision method can be up to 50% oversampled. Adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, indicating Lipschitz-continuous spacing adaptation with respect to arclength.
-"""
-
-# ╔═╡ b38c2b1c-a48c-4f1f-954b-95faaba680d7
-begin
-	function metrics(method, r, u₀, u₁, N′, dₙ)
-		L = seg_len(r, u₀, u₁)            # total length of curve `r`
-		Δs = L/N′                         # segment length limit for `r`
-		u = method(r, u₀, u₁, Δs, dₙ)     # sample points using `method`
-		dl,δ = seg_len(r,u),seg_dev(r,u)  # segment lengths and deviations
-		return (;δ∞ = maximum(δ)/(Δs*dₙ), # scaled max deviation, should => 1!
-		  σ = length(δ)*Δs/L-1,           # extra segments needed to hit dₙ
-		  Rₜᵥ = sum(abs, diff(dl))/L,     # total variation of segment length
-		  R∞ = maximum(abs, diff(dl))/Δs) # max variation of segment length
-	end
-
-	# segment metrics
-	seg_len(r,u₀,u₁) = quadgk(arcspeed(r),u₀,u₁)[1]
-	seg_len(r,u::Array) = [seg_len(r,u[i],u[i+1]) for i in 1:length(u)-1]
-	function seg_dev(r, u₀, u₁)
-		r₀ = r(u₀); dr = r(u₁)-r₀; h² = dr'dr
-		dev²(u) = (v = r(u)-r₀; w = v - dr * v'dr/h²; w'w)
-		optimize(u->-dev²(u), u₀, u₁).minimizer |> dev² |> sqrt
-	end
-	seg_dev(r,u::Array) = [seg_dev(r,u[i],u[i+1]) for i in 1:length(u)-1]
-end
-
 # ╔═╡ cc1fa09e-21da-425d-bb6c-a8c906a65e98
 begin
+	# Define the 3 Segmentation methods
 	function subdivision(r, u₀, u₁, Δs, dₙ)
 		u₀, u₁ = Float64.((u₀, u₁))
 		segments = [(; u₀, u₁, dl=seg_len(r,u₀,u₁), δ=seg_dev(r,u₀,u₁))]
@@ -184,27 +101,87 @@ begin
 	function κ_weighted(r, u₀, u₁, Δs, dₙ)
 		C = 10.5 # Hand tuned for these test_curves! 🤢
 		speed(u) = √(arcspeed(r)(u)^2+C*Δs*aₙ(r,u))
-		S,s⁻¹ = ∫speed(speed, u₀, u₁)
-		return s⁻¹.(range(0, S, round(Int,S/Δs)+1))
+		equal_s(speed, u₀, u₁, Δs)
 	end
 	function NDLP(r, u₀, u₁, Δs, dₙ) # one-shot sampling! 🤓
 		speed(u) = max(arcspeed(r)(u),√(Δs*aₙ(r,u)/8dₙ))
 		rtol = 1e-6Δs # only needed since sensitivity study lets Δs→0
-		S,s⁻¹ = ∫speed(speed, u₀, u₁; rtol)
-		return s⁻¹.(range(0, S, round(Int,S/Δs)+1))
+		equal_s(speed, u₀, u₁, Δs; rtol)
 	end
-	function ∫speed(speed, u₀, u₁; rtol=1e-5)
-		# Adaptive speed(u) integration
-		S,_,Δᵢ = quadgk_segbuf(speed,range(u₀, u₁,4);rtol,order=3) # approx is ok
-		# Get values and derivatives
-		sort!(Δᵢ,by=Δ->Δ.a)
-		uᵢ,sᵢ = [u₀; map(Δ->Δ.b,Δᵢ)],[zero(S); cumsum(map(Δ->Δ.I,Δᵢ))]
-		duᵢ = @. inv(speed(uᵢ))
-		# Return interpolator for u(s)
-		return S, CubicHermiteSpline(duᵢ,uᵢ,sᵢ,extrapolation = ExtrapolationType.Constant)
+
+	# Measure segment length and maximum deviation
+	seg_len(r,u₀,u₁) = quadgk(arcspeed(r),u₀,u₁)[1]
+	seg_len(r,u::Array) = [seg_len(r,u[i],u[i+1]) for i in 1:length(u)-1]
+	function seg_dev(r, u₀, u₁)
+		r₀ = r(u₀); dr = r(u₁)-r₀; h² = dr'dr
+		dev²(u) = (v = r(u)-r₀; sum(abs2,v - dr * v'dr/h²))
+		maximize(dev², u₀, u₁) |> max_val |> sqrt
+	end
+	max_val(sol::Optim.MaximizationWrapper) = -sol.res.minimum
+	seg_dev(r,u::Array) = [seg_dev(r,u[i],u[i+1]) for i in 1:length(u)-1]
+
+	# Equal s-spacing sampling
+	function equal_s(s′, u₀, u₁, Δs; rtol=1e-5)
+		# Integrate s′ over adaptively defined intervals Δ
+		S,_,Δ = quadgk_segbuf(s′,range(u₀,u₁,4);rtol,order=3) # approx is ok
+		# Construct an interpolation function for u(s) using interval data
+		sort!(Δ,by=Δ->Δ.a)
+		u,s = [u₀; map(Δ->Δ.b,Δ)],[zero(S); cumsum(map(Δ->Δ.I,Δ))]
+		u′ = @. inv(s′(u)) # du/ds = 1/(ds/du)
+		f = CubicHermiteSpline(u′,u,s,extrapolation=ExtrapolationType.Constant)
+		# return u values which give equal s-spacing
+		map(f,range(0, S, round(Int,S/Δs)+1))
 	end
 	aₙ(r,u) = √max(0,sum(abs2,D(v->D(r,v),u))-D(arcspeed(r),u)^2)
 	arcspeed(r) = u->norm(D(r,u))
+	
+end;
+
+# ╔═╡ e1bc7e76-a497-41db-8f91-b8912e359e0e
+md"""
+## Test curves
+
+We defining a small set of representative curves to test the methods defined above:
+
+1. A circle with constant curvature,
+1. an ellipse with smoothly varying curvature,
+1. a spline with highly nonuniform curvature (“spline fish”),
+1. a three-dimensional helix with varying pitch and radius,
+1. and a V-shaped "curve" with a corner that violates smoothness assumptions.
+
+These are deliberately chosen to expose both strengths and failure modes of the methods. The final example (the V-shape) is included as a negative control as local curvature-based methods cannot handle curvature discontinuities gracefully.
+"""
+
+# ╔═╡ 28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
+begin
+	cx = CubicSpline([0, 0, 2, 2, 1/6, 0],range(0,1,6))
+	cy = CubicSpline([0, 1/2, -2/3, 3/4, -1/3, 0],range(0,1,6))
+	fish_spline(u) = SA[cx(u), cy(u)]
+
+	test_curves = [
+	    # C∞ smooth, constant curvature
+	    (;name="Circle", r=u->SA[2sin(u), 2cos(u)], range=(0, 2π),
+	     notes="Constant κ, perfect for circular arc assumption"),
+
+	    # C∞ smooth, varying curvature
+	    (;name="Ellipse", r=u->SA[3sin(u), cos(u)], range=(0, π),
+	     notes="Smoothly varying κ"),
+
+	    # cubic spline fish
+		(;name="Spline fish", r=fish_spline, range=(0, 1),
+	 	notes="Highly uneven curvature and spacing distribution. Delicious"),
+
+	    # 3D helix with varying pitch & radius
+		(;name="Variable Helix", r=u->(R=1+0.3sin(3u); SA[R*cos(u), R*sin(u), (u/2π)^2]), range=(0, 2π),
+	 	notes="3D curve, demonstrates dimension-independence"),
+
+		# C⁰ continuous, C¹ discontinuous (corner)
+	    (;name="V-shape", r=u->u<1 ? SA[u, -u] : SA[u, u-2], range=(0, 2.25),
+	     notes="Corner at u=1, violates smoothness assumption")
+	]
+	plot(); for (name,r,range,_) in test_curves
+		plot!(t->r(t)[1],t->r(t)[2],range...,label=name)
+	end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 end
 
 # ╔═╡ 60fc45b3-8cea-4cae-83f4-9c05011b1dee
@@ -218,16 +195,49 @@ plot(); let
 	end
 end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
 
+# ╔═╡ 219826fb-5362-46f2-bf51-84465e614269
+md"""
+## Method evaluation results
+
+We evaluate each method on the test curves defined above, reporting the following metrics:
+ - `δ∞`=$\max(\delta)/(d_n\Delta s)$: the scaled normal deviation (target is 1),
+ - `σ`=$N\Delta s/L-1$: the scaled number of extra segments needed to hit the deviation limit (lower is better),
+ - `Rₜᵥ`=$\sum(R)/L$ where $R_i=|Δl_{i+1}-Δl_i|$: the scaled total variation of segment lengths (lower is better),
+ - `R∞`=$\max(R)/\Delta s$: the scaled maximum variation of segment lengths (lower is better).
+
+"""
+
+# ╔═╡ b38c2b1c-a48c-4f1f-954b-95faaba680d7
+function metrics(method, r, u₀, u₁, N′, dₙ)
+	L = seg_len(r, u₀, u₁)            # total length of curve `r`
+	Δs = L/N′                         # segment length limit for `r`
+	u = method(r, u₀, u₁, Δs, dₙ)     # sample points using `method`
+	dl,δ = seg_len(r,u),seg_dev(r,u)  # segment lengths and deviations
+	return (;δ∞ = maximum(δ)/(Δs*dₙ), # scaled max deviation, should => 1!
+	  σ = length(δ)*Δs/L-1,           # extra segments needed to hit dₙ
+	  Rₜᵥ = sum(abs, diff(dl))/L,     # total variation of segment length
+	  R∞ = maximum(abs, diff(dl))/Δs) # max variation of segment length
+end
+
+# ╔═╡ 6dc6247e-d37e-4a75-ae4b-4c84d6959a16
+md"
+The results are summarized in the tables below, using a maximum segment length of $\Delta s=L/33$ and a deviation limit of $d_n=1\%$. 
+
+The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in minimal excess segments, outperforming both adaptive subdivision and $\kappa$-weighted sampling. The only exception is the V-shape test-curve, for which both reparameterization methods fail. On the other curves, the deviation from NDLP sampling is within 4% of the deviation limit, while the $\kappa$-weighted method has a ±20% variation **even after tuning**, and the subdivision method can be up to 50% oversampled. 
+
+The $\kappa$-weighted parameterization consistently produces the smallest variation in segment length, meaning this sampling is smoother than NDLP, but this is expected since $\kappa$-weighting uses more segments and ignores the deviation target. However, we note that adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, indicating Lipschitz-continuous spacing adaptation with respect to arclength. 
+"
+
 # ╔═╡ f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 let
-	N′ = 33; dₙ = 1/100; # held constant for all methods/test_curves
-	println("Metrics using Δs = L/$N′ and dₙ=$dₙ")
-	for method in (subdivision,κ_weighted,NDLP)
-		println("\nMethod: $method")
-		map(test_curves) do (name, r, range, _)
-			(;name,metrics(method,r,range...,N′,dₙ)...)
-		end |> Table |> display
-	end
+	N′ = 33; dₙ = 1/100; methods = [subdivision,κ_weighted,NDLP]
+	results = [metrics(method,r,range...,N′,dₙ) for method in methods, 
+			  (name, r, range, _) in test_curves]
+	pretty_table(HTML,results,
+		row_labels = repeat(methods,length(test_curves)),
+		row_group_labels=[length(methods)*(i-1)+1=>"$i. $(curve.name)" 
+						  for (i,curve) in enumerate(test_curves)],
+		subtitle="Metrics using Δs = L / $N′ and dₙ = $dₙ")
 end
 
 # ╔═╡ 561a1373-57a4-4b67-be5a-9d94c9496360
@@ -291,6 +301,7 @@ ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
@@ -300,6 +311,7 @@ DataInterpolations = "~8.9.0"
 ForwardDiff = "0.10"
 Optim = "~2.0.0"
 Plots = "~1.41.4"
+PrettyTables = "~3.1.2"
 QuadGK = "~2.11.2"
 StaticArrays = "~1.9.16"
 TypedTables = "~1.4.6"
@@ -309,9 +321,9 @@ TypedTables = "~1.4.6"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.2"
+julia_version = "1.11.5"
 manifest_format = "2.0"
-project_hash = "84beccf13d730d2ef8c64387b8e5b55843d0e9dd"
+project_hash = "8efc7c29de225a829f14dbd2cdb407dfc3a0ae10"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
@@ -1082,7 +1094,7 @@ version = "0.3.27+1"
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
-version = "0.8.1+2"
+version = "0.8.5+0"
 
 [[deps.OpenSSL]]
 deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "NetworkOptions", "OpenSSL_jll", "Sockets"]
@@ -1779,12 +1791,13 @@ version = "1.13.0+0"
 # ╠═805e7c4a-f9f5-11f0-1430-43f2ae01e9f4
 # ╠═ad7b8fa0-e966-4c3b-8163-02d2817b1c9d
 # ╟─60fc45b3-8cea-4cae-83f4-9c05011b1dee
-# ╟─e1bc7e76-a497-41db-8f91-b8912e359e0e
-# ╟─28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
 # ╟─10b2e0b0-f373-4a02-b6dc-fd1085b1f34a
 # ╠═cc1fa09e-21da-425d-bb6c-a8c906a65e98
+# ╟─e1bc7e76-a497-41db-8f91-b8912e359e0e
+# ╟─28abbec4-f1ea-4edb-8bd7-bcdc63c7cd82
 # ╟─219826fb-5362-46f2-bf51-84465e614269
 # ╠═b38c2b1c-a48c-4f1f-954b-95faaba680d7
+# ╟─6dc6247e-d37e-4a75-ae4b-4c84d6959a16
 # ╟─f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 # ╟─561a1373-57a4-4b67-be5a-9d94c9496360
 # ╟─dcb68886-2771-4b37-91b6-9c983e118728

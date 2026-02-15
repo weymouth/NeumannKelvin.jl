@@ -154,7 +154,7 @@ begin
 	cx = CubicSpline([0, 0, 2, 2, 1/6, 0],range(0,1,6))
 	cy = CubicSpline([0, 1/2, -2/3, 3/4, -1/3, 0],range(0,1,6))
 	fish_spline(u) = SA[cx(u), cy(u)]
-    segments(u) = zip(u,@view u[2:end])
+    smap(f,r,u) = map(i->f(r,u[i],u[i+1]),1:length(u)-1)
 
 	test_curves = [
 	    # C∞ smooth, constant curvature
@@ -188,7 +188,7 @@ plot(); let
 	Δs = 1/4; dₙ = 0.09
 	for method in (subdivision,κ_weighted,NDLP)
 		u = method(fish_spline,range...,Δs,dₙ)
-		δ = maximum(seg_dev.(fish_spline,segments(u)...))
+		δ = maximum(smap(seg_dev,fish_spline,u))
 		plot!(x.(u),y.(u),label="$method, N=$(length(u)-1), max dev=$(round(δ,sigdigits=2))",marker=:circle)
 	end
 end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
@@ -210,8 +210,7 @@ function metrics(method, r, u₀, u₁, N′, dₙ)
 	L = seg_len(r, u₀, u₁)            # total length of curve `r`
 	Δs = L/N′                         # segment length limit for `r`
 	u = method(r, u₀, u₁, Δs, dₙ)     # sample points using `method`
-	Δl = seg_len.(r,segments(u)...)   # segment lengths
-	δ = seg_dev.(r,segments(u)...)    # segment deviations
+	Δl,δ = smap(seg_len,r,u),smap(seg_dev,r,u) # segment len and dev
 	return (;δ∞ = maximum(δ)/(Δs*dₙ), # scaled max deviation, should => 1!
 	  σ = length(δ)*Δs/L-1,           # extra segments needed to hit dₙ
 	  Rₜᵥ = sum(abs, diff(Δl))/L,     # total variation of segment length

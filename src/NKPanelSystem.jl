@@ -58,7 +58,7 @@ end
 """
     kelvin(ξ,α;ℓ)
 
-Nearfield and Wavelike Green Functions `N+W` for a traveling source at position `α` with Kelvin
+Nearfield and Wavelike Green's function `N+W` for a traveling source at position `α` with Kelvin
 length `ℓ ≡ U²/g`. The free surface is at z=0, and the flow direction is Û=[-1,0,0]. See Noblesse 1981.
 """
 function kelvin(ξ,α;ℓ=1,z_max=-0.)

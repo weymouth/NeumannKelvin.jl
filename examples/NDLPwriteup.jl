@@ -86,14 +86,14 @@ begin
 	# Define the 3 Segmentation methods
 	function subdivision(r, u₀, u₁, Δs, dₙ)
 		u₀, u₁ = Float64.((u₀, u₁))
-		segments = [(; u₀, u₁, dl=seg_len(r,u₀,u₁), δ=seg_dev(r,u₀,u₁))]
+		segments = [(; u₀, u₁, Δl=seg_len(r,u₀,u₁), δ=seg_dev(r,u₀,u₁))]
 		while true
-			i = findfirst(s -> s.dl > Δs || s.δ > Δs*dₙ, segments)
+			i = findfirst(s -> s.Δl > Δs || s.δ > Δs*dₙ, segments)
 			i === nothing && break
 			s = segments[i]; um = (s.u₀ + s.u₁)/2
 			# we need to keep checking the length and deviation! 🤢
-			lseg = (u₀=s.u₀, u₁=um, dl=seg_len(r,s.u₀,um), δ=seg_dev(r,s.u₀,um))
-			rseg = (u₀=um, u₁=s.u₁, dl=seg_len(r,um,s.u₁), δ=seg_dev(r,um,s.u₁))
+			lseg = (u₀=s.u₀, u₁=um, Δl=seg_len(r,s.u₀,um), δ=seg_dev(r,s.u₀,um))
+			rseg = (u₀=um, u₁=s.u₁, Δl=seg_len(r,um,s.u₁), δ=seg_dev(r,um,s.u₁))
 			segments[i] = lseg; insert!(segments, i+1, rseg)
 		end
 		[map(s->s.u₀,segments); u₁]
@@ -108,17 +108,17 @@ begin
 		rtol = 1e-6Δs # only needed since sensitivity study lets Δs→0
 		equal_s(speed, u₀, u₁, Δs; rtol)
 	end
+	aₙ(r,u) = √max(0,sum(abs2,D(v->D(r,v),u))-D(arcspeed(r),u)^2)
+	arcspeed(r) = u->norm(D(r,u))
 
 	# Measure segment length and maximum deviation
 	seg_len(r,u₀,u₁) = quadgk(arcspeed(r),u₀,u₁)[1]
-	seg_len(r,u::Array) = [seg_len(r,u[i],u[i+1]) for i in 1:length(u)-1]
 	function seg_dev(r, u₀, u₁)
 		r₀ = r(u₀); dr = r(u₁)-r₀; h² = dr'dr
 		dev²(u) = (v = r(u)-r₀; sum(abs2,v - dr * v'dr/h²))
 		maximize(dev², u₀, u₁) |> max_val |> sqrt
 	end
 	max_val(sol::Optim.MaximizationWrapper) = -sol.res.minimum
-	seg_dev(r,u::Array) = [seg_dev(r,u[i],u[i+1]) for i in 1:length(u)-1]
 
 	# Equal s-spacing sampling
 	function equal_s(s′, u₀, u₁, Δs; rtol=1e-5)
@@ -132,9 +132,6 @@ begin
 		# return u values which give equal s-spacing
 		map(f,range(0, S, round(Int,S/Δs)+1))
 	end
-	aₙ(r,u) = √max(0,sum(abs2,D(v->D(r,v),u))-D(arcspeed(r),u)^2)
-	arcspeed(r) = u->norm(D(r,u))
-	
 end;
 
 # ╔═╡ e1bc7e76-a497-41db-8f91-b8912e359e0e
@@ -157,6 +154,7 @@ begin
 	cx = CubicSpline([0, 0, 2, 2, 1/6, 0],range(0,1,6))
 	cy = CubicSpline([0, 1/2, -2/3, 3/4, -1/3, 0],range(0,1,6))
 	fish_spline(u) = SA[cx(u), cy(u)]
+    segments(u) = zip(u,@view u[2:end])
 
 	test_curves = [
 	    # C∞ smooth, constant curvature
@@ -187,10 +185,10 @@ end
 # ╔═╡ 60fc45b3-8cea-4cae-83f4-9c05011b1dee
 plot(); let
 	x(u) = fish_spline(u)[1]; y(u) = fish_spline(u)[2]; range=(0,1)
-	Δs = 1/4; dₙ = 0.09	
+	Δs = 1/4; dₙ = 0.09
 	for method in (subdivision,κ_weighted,NDLP)
 		u = method(fish_spline,range...,Δs,dₙ)
-		δ = maximum(seg_dev(fish_spline,u))
+		δ = maximum(seg_dev.(fish_spline,segments(u)...))
 		plot!(x.(u),y.(u),label="$method, N=$(length(u)-1), max dev=$(round(δ,sigdigits=2))",marker=:circle)
 	end
 end; plot!(aspect_ratio=:equal,xlabel="x",ylabel="y")
@@ -212,30 +210,31 @@ function metrics(method, r, u₀, u₁, N′, dₙ)
 	L = seg_len(r, u₀, u₁)            # total length of curve `r`
 	Δs = L/N′                         # segment length limit for `r`
 	u = method(r, u₀, u₁, Δs, dₙ)     # sample points using `method`
-	dl,δ = seg_len(r,u),seg_dev(r,u)  # segment lengths and deviations
+	Δl = seg_len.(r,segments(u)...)   # segment lengths
+	δ = seg_dev.(r,segments(u)...)    # segment deviations
 	return (;δ∞ = maximum(δ)/(Δs*dₙ), # scaled max deviation, should => 1!
 	  σ = length(δ)*Δs/L-1,           # extra segments needed to hit dₙ
-	  Rₜᵥ = sum(abs, diff(dl))/L,     # total variation of segment length
-	  R∞ = maximum(abs, diff(dl))/Δs) # max variation of segment length
+	  Rₜᵥ = sum(abs, diff(Δl))/L,     # total variation of segment length
+	  R∞ = maximum(abs, diff(Δl))/Δs) # max variation of segment length
 end
 
 # ╔═╡ 6dc6247e-d37e-4a75-ae4b-4c84d6959a16
 md"
-The results are summarized in the tables below, using a maximum segment length of $\Delta s=L/33$ and a deviation limit of $d_n=1\%$. 
+The results are summarized in the tables below, using a maximum segment length of $\Delta s=L/33$ and a deviation limit of $d_n=1\%$.
 
-The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in minimal excess segments, outperforming both adaptive subdivision and $\kappa$-weighted sampling. The only exception is the V-shape test-curve, for which both reparameterization methods fail. On the other curves, the deviation from NDLP sampling is within 4% of the deviation limit, while the $\kappa$-weighted method has a ±20% variation **even after tuning**, and the subdivision method can be up to 50% oversampled. 
+The NDLP segmentation consistently produces a max deviation which is tight to the prescribed limit, resulting in minimal excess segments, outperforming both adaptive subdivision and $\kappa$-weighted sampling. The only exception is the V-shape test-curve, for which both reparameterization methods fail. On the other curves, the deviation from NDLP sampling is within 4% of the deviation limit, while the $\kappa$-weighted method has a ±20% variation **even after tuning**, and the subdivision method can be up to 50% oversampled.
 
-The $\kappa$-weighted parameterization consistently produces the smallest variation in segment length, meaning this sampling is smoother than NDLP, but this is expected since $\kappa$-weighting uses more segments and ignores the deviation target. However, we note that adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, indicating Lipschitz-continuous spacing adaptation with respect to arclength. 
+The $\kappa$-weighted parameterization consistently produces the smallest variation in segment length, meaning this sampling is smoother than NDLP, but this is expected since $\kappa$-weighting uses more segments and ignores the deviation target. However, we note that adjacent segment lengths under NDLP sampling differ by at most $O(\Delta s)$, indicating Lipschitz-continuous spacing adaptation with respect to arclength.
 "
 
 # ╔═╡ f7a8cdf1-2cdb-4d6b-a10f-3f2d980c836e
 let
 	N′ = 33; dₙ = 1/100; methods = [subdivision,κ_weighted,NDLP]
-	results = [metrics(method,r,range...,N′,dₙ) for method in methods, 
-			  (name, r, range, _) in test_curves]
+	results = [metrics(method,r,range...,N′,dₙ) for method in methods,
+			  (;r, range) in test_curves]
 	pretty_table(HTML,results,
 		row_labels = repeat(methods,length(test_curves)),
-		row_group_labels=[length(methods)*(i-1)+1=>"$i. $(curve.name)" 
+		row_group_labels=[length(methods)*(i-1)+1=>"$i. $(curve.name)"
 						  for (i,curve) in enumerate(test_curves)],
 		subtitle="Metrics using Δs = L / $N′ and dₙ = $dₙ")
 end

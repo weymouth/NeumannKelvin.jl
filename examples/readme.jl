@@ -35,10 +35,10 @@ dolphin = let
 end
 
 # The rest of the system matches the example above
-h = 0.04; freesurf = measure.((u,v)->SA[u,-v,0],2/3:-h:-4/3,(-2/3:h:2/3)',h,h,T=Float32); # Float32 to match the Mesh
+h,s = 4f-2, 66f-2; freesurf = measure.((u,v)->SA[u,-v,0],s:-h:-2s,(-s:h:s)',h,h); # Float32 to match the Mesh
 Meshsys = FSPanelSystem(dolphin,freesurf;ℓ=9f-2) |> gmressolve!
 
-using GLMakie # can also use Plots, or WGLMakie (for browsers)
+using GLMakie
 viz(Meshsys)
 
 ℓ = 1/4; h = 0.3ℓ # Kelvin-length and spacing

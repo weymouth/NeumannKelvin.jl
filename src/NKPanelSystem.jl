@@ -50,7 +50,7 @@ influence(sys::NKPanelSystem) = influence(sys.body,sys.mirrors,(x,p)->∫K(x,p,s
     c = contour && onwaterline(p) ? 1-ℓ*dy^2/(dl*p.dA) : one(dy)
     c < 0 && @warn "Waterline ℓ∫n₁dy > ∫da" maxlog=2
     # Evaluate potential with kelvin(x,y,z ≤ -dl) to filter unresolved waves
-    z_max = filter ? -dl : -0.
+    z_max = filter ? -dl : -0f0
     ∫G(x,p)-∫G(x .* SA[1,1,-1],p)+p.dA*kelvin(x,p.x;ℓ,z_max)*c
 end
 @inline onwaterline(p) = any(x->x[3]≥-1e-4,p.verts)
@@ -61,7 +61,7 @@ end
 Nearfield and Wavelike Green's function `N+W` for a traveling source at position `α` with Kelvin
 length `ℓ ≡ U²/g`. The free surface is at z=0, and the flow direction is Û=[-1,0,0]. See Noblesse 1981.
 """
-function kelvin(ξ,α;ℓ=1,z_max=-0.)
+function kelvin(ξ,α;ℓ=1,z_max=-0f0)
     # nearfield, and wavelike disturbance
     x,y,z = (ξ-α .* SA[1,1,-1])/ℓ; z = min(z,z_max/ℓ)
     return (nearfield(x,y,z)+wavelike(x,abs(y),z))/ℓ

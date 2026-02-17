@@ -87,7 +87,7 @@ end
 using BenchmarkTools
 @testset "PanelSystem.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-    panels = panelize(S, 0, π, 0, 2π, hᵤ=1/4, T=Float32)
+    panels = panelize(S, 0, 1f0π, 0, 2f0π, hᵤ=1/4f0)
     @test eltype(panels.dA) == Float32
     sys = BodyPanelSystem(panels)
     @test sys.body.q == zeros(Float32,length(panels))
@@ -194,9 +194,7 @@ function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,kwargs...)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),-r*sin(θ₂)*sin(θ₁),r*cos(θ₂)*sin(θ₁)+Z]
     panelize(S,0,π,0,π,hᵤ=h*√AR,hᵥ=h/√AR;kwargs...)
 end
-function halfplane(L::T,ℓ;hᵤ=0.3ℓ,hᵥ=hᵤ,s=L/2+2π*ℓ) where T
-    measure.((u,v)->SA[u,v,0],s:-hᵤ:-2s,(hᵥ/2:hᵥ:4s/3)',hᵤ,hᵥ,flip=true;T)
-end
+halfplane(L,ℓ;hᵤ=0.3f0ℓ,hᵥ=hᵤ,s=L/2+2f0π*ℓ) = measure.((x,y)->SA[x,y,0],s:-hᵤ:-2s,(hᵥ/2:hᵥ:4s/3)',hᵤ,hᵥ,flip=true)
 @testset "FSPanelSystem.jl" begin
     ℓ = 0.45^2; freesurf = halfplane(1.,ℓ); body = spheroid(1/60)
     sys = FSPanelSystem(body,freesurf,sym_axes=2,ℓ=0,wrap=identity)
@@ -274,7 +272,7 @@ wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure.(
     @test -steadyforce(sys)[1] ≈ 0.0088-0.003 rtol=0.03 # Remove ITTC Cf
 end
 
-using NURBS,FileIO  # or whatever triggers the extension
+using NURBS,FileIO
 @testset "NURBS" begin
     sphere = load(pkgdir(NURBS) * "/test/assets/sphere.stp")
     # measure a whole patch as one panel
@@ -293,7 +291,7 @@ using NURBS,FileIO  # or whatever triggers the extension
     @test addedmass(panels) ≈ I/2 rtol=0.013
 end
 
-using GeometryBasics,FileIO  # or whatever triggers the extension
+using GeometryBasics,FileIO
 @testset "GeometryBasics" begin
     panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
     @test panel.x ≈ SA[2,1,0]/3

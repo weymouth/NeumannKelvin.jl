@@ -198,13 +198,13 @@ dolphin = let
 end
 
 # The rest of the system matches the example above
-h = 0.04; freesurf = measure.((u,v)->SA[u,-v,0],2/3:-h:-4/3,(-2/3:h:2/3)',h,h,T=Float32); # Float32 to match the Mesh
+h,s = 4f-2, 66f-2; freesurf = measure.((u,v)->SA[u,-v,0],s:-h:-2s,(-s:h:s)',h,h); # Float32 to match the Mesh
 sys = FSPanelSystem(dolphin,freesurf;ℓ=9f-2) |> gmressolve!
 ```
 ```julia
 FSPanelSystem
-  freesurf: PanelTree(1734 panels, 12 levels, θ²: 9)
-     size: (51, 34)
+  freesurf: PanelTree(1700 panels, 12 levels, θ²: 9)
+     size: (50, 34)
      panel type: NeumannKelvin.QuadKernel
   Kelvin length ℓ: 0.09
   body: PanelTree(1373 panels, 12 levels, θ²: 9)
@@ -212,7 +212,7 @@ FSPanelSystem
      panel type: NeumannKelvinGeometryBasicsExt.TriKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, 1, 1],)
-  strength extrema: (-0.24399182f0, 0.19675535f0)
+  strength extrema: (-0.24442716f0, 0.19687507f0)
 ```
 Note that the body panel type is now `TriKernel` because it is defined by the STL Mesh instead of a parametric surface.
 

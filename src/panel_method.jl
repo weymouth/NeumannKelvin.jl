@@ -33,7 +33,7 @@ end
 
 Normal velocity influence of panel `pⱼ` on `pᵢ`.
 """
-∂ₙϕ(pᵢ,pⱼ;ϕ=∫G) = derivative(t->ϕ(pᵢ.x+t*pᵢ.n,pⱼ),0.)
+∂ₙϕ(pᵢ,pⱼ;ϕ=∫G) = derivative(t->ϕ(pᵢ.x+t*pᵢ.n,pⱼ),0)
 
 """
     Φ(x,sys)

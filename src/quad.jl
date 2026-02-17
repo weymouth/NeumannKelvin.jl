@@ -6,12 +6,7 @@ const xg32,wg32 = gausslegendre(32)
 
 Approximate ∫f(x)dx from x=[a,b] using the Gauss-Legendre weights and points `w,x`.
 """
-function quadgl(f;x,w)
-    I = 0.
-    @simd for i in eachindex(x,w)
-        I += w[i]*f(x[i])
-    end; I
-end
+quadgl(f;x,w) = sum(i->w[i]*f(x[i]),eachindex(x,w))
 quadgl(f,a,b;x=xg32,w=wg32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
@@ -55,7 +50,7 @@ slowly varying compared to `g` over `h`.
 end
 
 """
-    finite_ranges(S,g,Δg,R;atol=0.1Δg)
+    finite_ranges(S,g,Δg,R;atol=Δg/10)
 
 Return pairs of flagged ranges `(a₁,f₁),(a₂,f₂)` covering the points `a∈S∈[-R,R]`
 such that `|g(a)-g(aᵢ)|≈Δg`. Ranges do no overlap and limited to `±R`. "Unbounded" flag

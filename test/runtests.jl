@@ -275,8 +275,35 @@ end
 using NURBS,FileIO
 @testset "NURBS" begin
     sphere = load(pkgdir(NURBS) * "/test/assets/sphere.stp")
+    
+    # Test that gNURBS gives same results as NURBS.jl
+    patch = sphere[1]
+    ext = Base.get_extension(NeumannKelvin, :NeumannKelvinNURBSExt)
+    gpatch = ext.gNURBS(patch)
+    u,v = collect(0.1:0.2:0.9), collect(0.1:0.4:0.9)
+    nurbs_result = patch(u, v)
+    gnurbs_result = gpatch.(u, v')
+    @test gnurbs_result ≈ nurbs_result
+    # @btime $patch($u, $v)
+    # @btime $gpatch.($u, $v')    
+    # @btime $patch(0.45, 0.55)[1]
+    # @btime $gpatch(0.45, 0.55)
+
+    # Test AD w.r.t control points
+    using ForwardDiff
+    pnts_flat = reduce(vcat, [collect(p) for p in vec(gpatch.pnts)])
+    cu, cv = size(gpatch.pnts)
+    make_matrix(x) = reshape(reinterpret(SVector{3,eltype(x)}, x), cu, cv)
+    test_fn(x) = begin
+        g = ext.gNURBS(make_matrix(x), gpatch.uknots, gpatch.vknots, gpatch.wgts)
+        norm(g(0.3, 0.4))
+    end
+    grad = ForwardDiff.gradient(test_fn, pnts_flat)
+    @test grad isa Vector  # Should compute without error
+    @test !all(iszero, grad)  # Should have non-zero gradients
+
     # measure a whole patch as one panel
-    panel = measure(sphere[1],0.5,0.5,1.0,1.0)
+    panel = measure(patch,0.5,0.5,1.0,1.0)
     @test panel.kernel isa NeumannKelvin.QuadKernel
     @test panel.dA ≈ 4π/6 rtol=0.03
 

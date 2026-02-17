@@ -9,7 +9,7 @@ The parameter `devlimit` sets the max deviation `δ/(hᵤ+hᵥ)` from the surfac
 Use `transpose=true` to change the strip direction, `flip=true` to flip the normal direction, and submerge=`true` to trim surface for `z≥0`.
 This function throws an error if the adaptive routine gives more than `N_max` panels.
 """
-function panelize(surface,u₀=0,u₁=1,v₀=0,v₁=1;hᵤ=1,hᵥ=hᵤ,devlimit=5f-2,
+function panelize(surface,u₀=0,u₁=1f0,v₀=0,v₁=1f0;hᵤ=1,hᵥ=hᵤ,devlimit=5f-2,
                   transpose=false,flip=false,N_max=1000,verbose=false,submerge=false,kwargs...)
     # Transpose arguments u,v -> v,u
     transpose && return panelize((v,u)->surface(u,v),v₀,v₁,u₀,u₁,;hᵤ=hᵥ,hᵥ=hᵤ,devlimit,

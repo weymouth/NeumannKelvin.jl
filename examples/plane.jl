@@ -1,6 +1,7 @@
 using NeumannKelvin,QuadGK
 using NeumannKelvin: nearfield, wavelike, kₓ
 using SpecialFunctions: besselj1
+γ(t) = abs(t)<√eps(abs(t)) ? one(t)/2 : besselj1(t*kₓ(t))/(t*kₓ(t))
 
 """
 ∫₂kelvin(x,y,z) = ∫ √(1-y′^2) (W(x,y-y′,z)+N(x,y-y′,z)) dy′
@@ -31,7 +32,7 @@ function ∫₂kelvin(x,y,z;rtol=1e-3)
     elseif abs(y) < 1-x/√8  # Inside wake: use direct integration        
         4π*quadgk(t->∫₂W(x,y,z,t), -Inf, 0, Inf; rtol)[1]
     else                    # Outside wake: use complex_path with γ=J₁(k)/k weighting
-        π*wavelike(promote(x,abs(y),z)...;γ = t->besselj1(t*kₓ(t))/(t*kₓ(t)))
+        π*wavelike(promote(x,abs(y),z)...;γ)
     end    
     return N_int + W_int
 end
@@ -39,7 +40,7 @@ end
 # Real-line integrand (use in quadgk and plotting)
 function ∫₂W(x,y,z,t)
     kx = hypot(1,t); ky = t*kx; kz = 1+t^2
-    besselj1(ky)/ky*exp(z*kz)*sin(x*kx+y*ky)
+    γ(t)*exp(z*kz)*sin(x*kx+y*ky)
 end
 
 # Brute-force version for comparison
@@ -67,7 +68,6 @@ derivative(x′->∫₂kelvin(x′,y,z),x)
 derivative(x′->brute∫₂k(x′,y,z),x)
 
 using Plots
-rtol = 1e-5
-plot(0.8:0.002:1.2,y->∫₂kelvin(x,y,z;rtol))
-plot(0:5e-3:2,y->derivative(x′->∫₂kelvin(x′,y,z;rtol),x))
+plot(-5:0.05:5,t->derivative(x->∫₂W(x,y,z,t),x))
+plot(0:5e-3:2,y->derivative(x′->∫₂kelvin(x′,y,z;rtol=1e-5),x))
 contour(-20:0.1:1,-10:0.1:10,(x,y)->∫₂kelvin(x,y,-0.))

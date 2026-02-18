@@ -102,19 +102,20 @@ end
 Ngk(X::SVector{3}) = Ngk(X...)
 
 # Wave-like disturbance
-function wavelike(x::T,y::T,z::T)::T where T
+function wavelike(x::T,y::T,z::T;γ=one)::T where T
     (x≥0 || z≤-10) && return zero(T)                 # trivial case
     xv,yv,zv = value.((x,y,z))                       # strip any Duals for ranges
     R,Δg = √(-10/zv-1),typeof(xv).(5.4)              # heuristic angle & phase limits
     S = filter(s->-R<s<R,stationary_points(xv,yv))   # g'=0 points
-    f(t) = exp(z*(1+t^2))*sin(g(x,y,t))              # integrand
+    f(t) = γ(t)*exp(z*(1+t^2))*sin(g(x,y,t))         # integrand
     length(S)==0 && return quadgl(f,-R,R)            # real-line case
     rngs = finite_ranges(S,t->g(xv,yv,t),Δg,R)       # finite phase ranges
     4complex_path(t->g(x,y,t)-im*z*(1+t^2),          # complex case: complex phase
-                  t->dg(x,y,t)-2im*z*t, rngs; f)     # ...and it's derivative
+                  t->dg(x,y,t)-2im*z*t, rngs; f,γ)   # ...and it's derivative
 end
-g(x,y,t) = (x+y*t)*⎷(1+t^2)               # phase function
-dg(x,y,t) = (x*t+y*(2t^2+1))/⎷(1+t^2)     # it's derivative
+g(x,y,t) = (x+y*t)*kₓ(t)                  # phase function
+dg(x,y,t) = (x*t+y*(2t^2+1))/kₓ(t)        # it's derivative
+kₓ(t) = ⎷(1+t^2)                          # x-wavenumber
 ⎷(z::Complex) = π/2≤angle(z)≤π ? -√z : √z # move √ branch-cut
 ⎷(x) = √x
 

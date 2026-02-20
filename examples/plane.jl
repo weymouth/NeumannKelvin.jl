@@ -1,12 +1,36 @@
 using NeumannKelvin,QuadGK,TupleTools
 using NeumannKelvin: nearfield, wavelike, kₓ, finite_ranges, complex_path, nsp, g, dg, quadgl
-using ForwardDiff: value
-using SpecialFunctions: besselj1,besselh
+using ForwardDiff: value, partials, Dual
+# Fix automatic differentiation of besselh(ν,k,Complex(Dual))
+using SpecialFunctions
 using NeumannKelvin: stationary_points as S₀
 k(t) = t*kₓ(t)
-γ(t,b) = abs(t)<√eps(abs(t)) ? one(t)/2 : besselj1(b*k(t))/k(t)
-γ1(t,b) = besselh(1,1,b*k(t)) / (2*k(t)*exp(im*b*k(t)))
-γ2(t,b) = besselh(1,2,b*k(t)) / (2*k(t)*exp(-im*b*k(t)))
+γ(t,b) = abs(t)<√eps(abs(t)) ? one(t)/2 : SpecialFunctions.besselj1(b*k(t))/k(t)
+γ1(t,b) = SpecialFunctions.besselhx(1,1,b*k(t))/2k(t)
+γ2(t,b) = SpecialFunctions.besselhx(1,2,b*k(t))/2k(t)
+function SpecialFunctions.besselj1(z::Complex{<:Dual{Tag}}) where {Tag}
+    x, y = reim(z); px, py = partials(x), partials(y)
+    w = complex(value(x), value(y))
+    Ω = SpecialFunctions.besselj1(w)
+    ∂Ω = SpecialFunctions.besselj0(w) - Ω/w  # dJ₁/dz = J₀(z) - J₁(z)/z
+    u, v = reim(Ω); ∂u, ∂v = reim(∂Ω)
+    complex(Dual{Tag}(u, ∂u*px - ∂v*py), Dual{Tag}(v, ∂v*px + ∂u*py))
+end
+function SpecialFunctions.besselhx(ν::Integer, k::Integer, z::Complex{<:Dual{Tag}}) where {Tag}
+    x, y = reim(z); px, py = partials(x), partials(y)
+    w = complex(value(x), value(y))
+    Ω = SpecialFunctions.besselhx(ν, k, w)
+    # d/dz besselhx(ν,k,z) = besselhx(ν-1,k,z) - (ν/z ± im)*besselhx(ν,k,z), +im for k=1, -im for k=2
+    ∂Ω = SpecialFunctions.besselhx(ν-1, k, w) - (ν/w + im*(3-2k)) * Ω
+    u, v = reim(Ω); ∂u, ∂v = reim(∂Ω)
+    complex(Dual{Tag}(u, ∂u*px - ∂v*py), Dual{Tag}(v, ∂v*px + ∂u*py))
+end
+
+delta(f,x;h=10√eps(typeof(abs(x)))) = (f(x+h)-f(x-h))/(2h)
+z = 2. + im
+derivative(d->SpecialFunctions.besselj1(z+d),0.) ≈ delta(t->SpecialFunctions.besselj1(t), z)
+derivative(d->SpecialFunctions.besselhx(1,1,z+d),0.) ≈ delta(t->SpecialFunctions.besselhx(1,1,t), z)
+derivative(d->SpecialFunctions.besselhx(1,2,z+d),0.) ≈ delta(t->SpecialFunctions.besselhx(1,2,t), z)
 
 """
 ∫₂kelvin(x,y,z) = ∫ √(1-y′^2) (W(x,y-y′,z)+N(x,y-y′,z)) dy′
@@ -29,19 +53,18 @@ which is better regularized than the original integral for z≈0⁻, but still r
 """
 function ∫₂kelvin(x,y,z,b=1)
     # Near-field contribution (fixed quadrature - nearfield is smooth)
-    N_int = quadgl(y′->√(1-y′^2)*nearfield(x,y-y′,z), -1, 1)
+    N_int = quadgl(y′->√(1-y′^2)*nearfield(x,y-y′,z), -b, b)
     
     # Wavelike contribution
-    W_int = if abs(y) > b-x/√8                     # outside the wake
-        π*wavelike(x,y,z,γ=t->γ(t,b))                    # use wavelike with the Bessel function pre-factor
-    else                                           # inside the wake
-        T = promote_type(typeof(x),typeof(y),typeof(z))
-        (x≥0 || z≤-10) && return zero(T)                 # trivial case
-        y = abs(y)
-
-        xv,yv,zv = value.((x,y,z))                       # strip any Duals for ranges
-        R,Δg = √(-10/zv-1),typeof(xv).(8)                # heuristic angle & phase limits
-        S = filter(s->-R<s<R,TupleTools.sort(TupleTools.vcat(
+    x,y,z = promote(x,abs(y),z)
+    W_int = if (x≥0 || z≤-10)                    # upstream or deep water limit
+        zero(x)                                          # no waves
+    elseif abs(y) > b-x/√8                       # outside the wake
+        π*wavelike(x,y,z,γ=t->γ(t,b))                    # wavelike with Bessel function pre-factor
+    else                                         # inside the wake
+        xv,yv,zv = value.((x,y,z))                       # strip Duals for ranges
+        R,Δg = √(-10/zv-1),12one(xv)                     # heuristic angle & phase limits
+        S = filter(s->-R<s<R,TupleTools.sort(TupleTools.vcat((zero(xv)),
                 S₀(xv,yv),S₀(xv,yv-b),S₀(xv,yv+b))))     # g'=0 points
 
         f(t) = γ(t,b)*exp(z*(1+t^2))*sin(g(x,y,t))       # integrand
@@ -51,15 +74,15 @@ function ∫₂kelvin(x,y,z,b=1)
         g₊(t)=g(x,y+b,t)-im*z*(1+t^2); dg₊(t)=dg(x,y+b,t)-2im*z*t; γ₊(t)=γ1(t,b)
         g₋(t)=g(x,y-b,t)-im*z*(1+t^2); dg₋(t)=dg(x,y-b,t)-2im*z*t; γ₋(t)=γ2(t,b)
 
-        val = zero(f(zero(T)))
-        for i in 1:2:length(rngs)
+        val = zero(f(zero(x)))                           # initialize accumulator
+        for i in 1:2:length(rngs)                        # sum over finite ranges & infinite tails
             (t₁,∞₁),(t₂,∞₂) = rngs[i],rngs[i+1]
             ∞₁ && (val -= nsp(t₁,g₊,dg₊,γ₊) + nsp(t₁,g₋,dg₋,γ₋))
             val += quadgl(f,t₁,t₂)
             ∞₂ && (val += nsp(t₂,g₊,dg₊,γ₊) + nsp(t₂,g₋,dg₋,γ₋))
         end
         4π*val
-    end    
+    end
     return N_int + W_int
 end
 
@@ -90,12 +113,6 @@ check(y,x=-1.,z=-0.) = begin
 end
 Table(check(y) for y in (0.,0.5,1.,2.,4.))
 
-# x,y,z = -pi,0.95,-0.
-# derivative(x′->∫₂kelvin(x′,y,z),x)
-# derivative(x′->brute∫₂k(x′,y,z),x)
-
-# using Plots
-# plot(-5:0.05:5,t->derivative(x->∫₂W(x,y,z,t),x))
-# plot(0:5e-3:2,y->derivative(x′->∫₂kelvin(x′,y,z;rtol=1e-5),x))
-# plot(0:0.01:8,y->derivative(x′->∫₂kelvin(x′,y,z;rtol=1e-5),-20.))
-# contour(-20:0.1:1,-10:0.1:10,(x,y)->∫₂kelvin(x,y,-0.))
+using Plots
+contour(-20:0.1:1,-10:0.1:10,(x,y)->∫₂kelvin(x,y,-0.),levels=-11:2:11,colormap=:phase,clims=(-12,12))
+contour(-20:0.1:1,-10:0.1:10,(x,y)->derivative(x->∫₂kelvin(x,y,-0.),x),levels=-11:2:11,clims=(-12,12))

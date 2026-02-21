@@ -49,7 +49,7 @@ where `t∈[-∞,∞], `g(x,y,t)=(x+yt)√(1+t²)`, and `H` is the Heaviside fun
 
 ∫ √(1-(y′/b)^2) W dy′ = 4π H(-x)∫ J₁(bk)/k exp(z (1+t^2)) sin(g(x,y,t)) dt
 
-where `J₁` is the Bessel function of the first kind and `k(t)=t√(1+t^2)`. This is better regularized than the original integral for z≈0⁻, but still requires the use of a complex path of integration to avoid wasting 1000s of function evaluations on the decaying tail oscillations. We use the identity
+where `J₁` is the Bessel function of the first kind and `k(t)=t√(1+t^2)`. This is better regularized than the original integral for z≈0⁻, but still requires the use of a complex path of integration to avoid wasting 1000s of function evaluations on the decaying tail oscillations. Away from the stationary points and t=0 we use the identity
 
     J₁(z) = (H₁¹x(z) exp(iz) + H₁²x(z) exp(-iz))/2
 

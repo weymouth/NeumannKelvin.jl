@@ -4,9 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 6e8b4c6a-bd1a-4f4a-9ff3-4d86d3e4ee01
-using LinearAlgebra, QuadGK, SpecialFunctions
-
 # ╔═╡ 3ac13c0a-95d2-4f9c-9a98-8ff7f88b80d8
 md"""
 # Wave Predictions Using the Kelvin Green's Function in the Limit $z\to 0^-$
@@ -62,65 +59,52 @@ $$\ell\,\phi_{\xi\xi} + \phi_\zeta = 0,\qquad \zeta=0,$$
 
 where $\ell=U^2/g$ is the Kelvin length.
 
-The Green's function at field point $\vec \xi$ due to a source at $\vec a$ is
+The Green's function at field point $\vec \xi$ due to a source at $\vec a$ moving with speed $U$ is
 
 $$G(\xi) = -\frac 1{|\xi-a|}+\frac 1{|\xi-a'|}+\frac{N(\vec x)+W(\vec x)}\ell,$$
 
-where $\vec a'$ is the image point reflected across $z=0$.
-
-Define $\vec x = (\vec\xi-\vec a')/\ell = (x, y, z)$.
+where $\vec a'$ is the image point reflected across $z=0$ and $\vec x = (\vec\xi-\vec a')/\ell = (x, y, z)$. The $N$ and $W$ are the near-field and wavelike terms, defined by the integral equations
 
 $$N = \frac 2\pi\int_{-1}^1 \Im\left(\text{expintx}\left((z\sqrt{1-T^2}+yT+i|x|)\sqrt{1-T^2}\right)\right) dT,$$
 
-where $\text{expintx}(z)=e^z E_1(z)$. This term is smooth and admits efficient Chebyshev polynomial representations.
+and
 
 $$W = 4 H(-x)\int_{-\infty}^\infty \exp\bigl((1+t^2)z\bigr)\sin\bigl((x+|y|t)\sqrt{1+t^2}\bigr)\, dt,$$
 
-where $H$ is the Heaviside function. The phase function is $g(x,y,t) = (x+yt)\sqrt{1+t^2}$.
+where $\text{expintx}(z)=e^z E_1(z)$ and where $H$ is the Heaviside function.
 
-When sources and field points both lie on $z=0$, the Rankine source and image cancel, leaving only $(N+W)/\ell$. Evaluating $W$ in this limit is the central difficulty addressed here.
+The near-field term is smooth and admits efficient Chebyshev polynomial representations while evaluating $W$ in the limit of $z\to 0^-$ where the exponential damping is minimized is the central difficulty addressed here.
 """
 
-# ╔═╡ 0b29c5d6-66c4-44c8-8e26-8f9d38c355ba
+# ╔═╡ 1e6f98ef-f9a2-4b7f-bc11-b3e7d8b16a13
 md"""
+
 ## 3. Neumann-Kelvin Formulation for Surface-Piercing Bodies
 
 In Neumann-Kelvin formulations for steady forward speed, the Kelvin Green's function is used in Green's second identity in the domain $z<0$. For surface-piercing bodies, the free-surface contribution can be reduced to a waterline contour term because both $\phi$ and $G$ satisfy the same free-surface boundary condition.
 
 Let $S$ denote the waterplane footprint of a surface-piercing body, with waterline contour $\partial S$. On the free surface $z=0$, both $\phi$ and $G$ satisfy the linearized FSBC, which implies
 
-$$
-\phi G_z - G\phi_z = -\ell\,(\phi G_{xx} - G\phi_{xx}) = -\ell\,\frac{\partial}{\partial x}(\phi G_x - G\phi_x).
-$$
+$$\phi G_z - G\phi_z = -\ell\,(\phi G_{xx} - G\phi_{xx}) = -\ell\,\frac{\partial}{\partial x}(\phi G_x - G\phi_x)$$
 
 Integrating over the exterior free surface and applying the divergence theorem reduces this to a contour integral over $\partial S$. The resulting waterline contribution takes the form
 
-$$
-\phi(\mathbf{x})\ \supset\ \ell\oint_{\partial S} q(\boldsymbol{\alpha})\,G(\mathbf{x};\boldsymbol{\alpha})\,n_x\,dy_\alpha,
-$$
+$$\phi(\mathbf{x})\ \supset\ \ell\oint_{\partial S} q(\boldsymbol{\alpha})\,G(\mathbf{x};\boldsymbol{\alpha})\,n_x\,dy_\alpha,$$
 
 where $q$ is the source strength and $n_x$ denotes the $x$-component of the outward unit normal in the free-surface plane.
 
 For a submerged body with wetted surface $S_B$ entirely below $z=0$, the potential may be written as
 
-$$
-\phi(\mathbf{x}) = \iint_{S_B} q(\boldsymbol{\alpha})\,G(\mathbf{x};\boldsymbol{\alpha})\,dS_{\alpha},
-$$
+$$\phi(\mathbf{x}) = \iint_{S_B} q(\boldsymbol{\alpha})\,G(\mathbf{x};\boldsymbol{\alpha})\,dS_{\alpha},$$
 
 with $q$ determined by enforcing the body boundary condition.
 
 For a surface-piercing body, the same derivation yields an additional waterline term:
 
-$$
-\phi(\mathbf{x}) = \iint_{S_B} q(\boldsymbol{\alpha})\,G(\mathbf{x};\boldsymbol{\alpha})\,dS_{\alpha}
-\; + \; \ell\oint_{\partial S} q(\boldsymbol{\alpha})\,G(\mathbf{x};\boldsymbol{\alpha})\,n_x\,dy_{\alpha}.
-$$
+$$\phi(\mathbf{x}) = \iint_{S_B} q(\boldsymbol{\alpha})\,G(\mathbf{x};\boldsymbol{\alpha})\,dS_{\alpha}
+\; + \; \ell\oint_{\partial S} q(\boldsymbol{\alpha})\,G(\mathbf{x};\boldsymbol{\alpha})\,n_x\,dy_{\alpha}.$$
 
 The contour contribution requires evaluation of the Green's function at (or arbitrarily near) $z=0$. In this limit, the wavelike term $W$ becomes highly oscillatory. Classical series-based representations that converge for $z<0$ are not uniformly valid as $z\to 0^-$, particularly for $y\to 0$ (along waterlines or behind contour endpoints). This motivates the $z\to 0^-$ evaluation strategy developed in this paper.
-"""
-
-# ╔═╡ 1e6f98ef-f9a2-4b7f-bc11-b3e7d8b16a13
-md"""
 """
 
 # ╔═╡ f5f56210-9b75-4a0c-b8b5-2412ffdbf5a1
@@ -138,21 +122,15 @@ md"""
 
 In anticipation of the spanwise integration in Section 5, we write the wavelike contribution in the general form
 
-$$
-W_A(x,y,z) = 4H(-x)\int_{-\infty}^{\infty} A(t)\,\exp\bigl(z(1+t^2)\bigr)\,\sin\bigl(g(x,y,t)\bigr)\,dt,
-$$
+$$W_A(x,y,z) = 4H(-x)\int_{-\infty}^{\infty} A(t)\,\exp\bigl(z(1+t^2)\bigr)\,\sin\bigl(g(x,y,t)\bigr)\,dt,$$
 
 with phase $g(x,y,t) = (x + yt)\sqrt{1+t^2}$ and $A(t) = 1$ for the point-source case. The stationary points are given by $\partial_t g = 0$, which yields a quadratic equation in $t$:
 
-$$
-t_\pm = \frac{-x \pm \sqrt{x^2 - 8y^2}}{4y}.
-$$
+$$t_\pm = \frac{-x \pm \sqrt{x^2 - 8y^2}}{4y}.$$
 
 For $|y| > |x|/\sqrt{8}$ there are no real stationary points; for $|y| < |x|/\sqrt{8}$ there are two, corresponding to the transverse and diverging wave systems of the Kelvin wake. The critical observation is that in the near-centerline regime $|y| \ll |x|$, the larger root satisfies
 
-$$
-t_+ \approx -\frac{x}{2y}, \qquad |t_+| \to \infty \text{ as } y \to 0,
-$$
+$$t_+ \approx -\frac{x}{2y}, \qquad |t_+| \to \infty \text{ as } y \to 0,$$
 
 so the dominant stationary point migrates to arbitrarily high wavenumber $k_+ = 1 + t_+^2 \approx t_+^2$ as the centerline is approached. It is convenient to use $t_+$ (equivalently $k_+$) as the primary variable, with $y = -x/(2t_+)$ and planar distance $R = \sqrt{x^2 + y^2} \approx |x|$ for $t_+ \gg 1$.
 
@@ -160,21 +138,15 @@ so the dominant stationary point migrates to arbitrarily high wavenumber $k_+ = 
 
 A standard stationary-phase estimate at the large saddle $t_+$ gives
 
-$$
-W_A(x,y,z) \;\sim\; C\,A(t_+)\,\exp\!\bigl(z\,t_+^2\bigr)\, \left(\frac{t_+}{R}\right)^{1/2} \sin\!\bigl(g(x,y,t_+) + \tfrac{\pi}{4}\bigr).
-$$
+$$W_A(x,y,z) \;\sim\; C\,A(t_+)\,\exp\!\bigl(z\,t_+^2\bigr)\, \left(\frac{t_+}{R}\right)^{1/2} \sin\!\bigl(g(x,y,t_+) + \tfrac{\pi}{4}\bigr).$$
 
 For the point source ($A \equiv 1$) evaluated on the free surface $z = 0$, the exponential factor is unity and
 
-$$
-|W(x,y,0)| \;\sim\; C\,\left(\frac{t_+}{R}\right)^{1/2},
-$$
+$$|W(x,y,0)| \;\sim\; C\,\left(\frac{t_+}{R}\right)^{1/2},$$
 
 which diverges as $t_+ \to \infty$. The $x$-derivative $\partial_x W$ brings down an additional factor of $k_+ \sim t_+^2$, giving
 
-$$
-|\partial_x W(x,y,0)| \;\sim\; C\,\frac{t_+^{5/2}}{R^{1/2}}.
-$$
+$$|\partial_x W(x,y,0)| \;\sim\; C\,\frac{t_+^{5/2}}{R^{1/2}}.$$
 
 This blow-up along the centerline is intrinsic to the Kelvin geometry and explains why series representations valid for $z < 0$ fail as $z \to 0^-$: the scale of contributing wavenumbers $k \lesssim |z|^{-1}$ expands without bound as $z \to 0^-$, and the limit is non-uniform.
 
@@ -182,27 +154,19 @@ This blow-up along the centerline is intrinsic to the Kelvin geometry and explai
 
 For fixed $z < 0$ the exponential factor $\exp(z\,t_+^2)$ suppresses large-$t_+$ contributions, so the field amplitude remains finite. However, finite amplitude is not sufficient for numerical tractability: the wave slope $ak$, which controls the spatial resolution required to represent the field, must also be small at wavenumbers beyond the grid's Nyquist limit. The wave slope associated with the dominant stationary point scales as
 
-$$
-ak \;\sim\; \frac{t_+^{5/2}}{R^{1/2}}\,\exp\!\bigl(-|z|\,t_+^2\bigr),
-$$
+$$ak \;\sim\; \frac{t_+^{5/2}}{R^{1/2}}\,\exp\!\bigl(-|z|\,t_+^2\bigr),$$
 
 or equivalently, in terms of $k_+ \approx t_+^2$,
 
-$$
-ak \;\sim\; \frac{k_+^{5/4}}{R^{1/2}}\,\exp\!\bigl(-|z|\,k_+\bigr).
-$$
+$$ak \;\sim\; \frac{k_+^{5/4}}{R^{1/2}}\,\exp\!\bigl(-|z|\,k_+\bigr).$$
 
 For fixed $|z|$ and $R$, this is maximized by differentiating with respect to $k_+$ and setting the result to zero:
 
-$$
-\frac{d}{dk_+}\!\left[k_+^{5/4}\,e^{-|z|k_+}\right] = 0 \implies k_+^* = \frac{5}{4|z|}, \quad t_+^* = \left(\frac{5}{4|z|}\right)^{1/2}.
-$$
+$$\frac{d}{dk_+}\!\left[k_+^{5/4}\,e^{-|z|k_+}\right] = 0 \implies k_+^* = \frac{5}{4|z|}, \quad t_+^* = \left(\frac{5}{4|z|}\right)^{1/2}.$$
 
 Substituting back, the peak wave slope is
 
-$$
-\left.ak\right|_{\max} \;\sim\; \frac{C}{R^{1/2}\,|z|^{5/4}},
-$$
+$$\left.ak\right|_{\max} \;\sim\; \frac{C}{R^{1/2}\,|z|^{5/4}},$$
 
 where $C$ absorbs the numerical constant $e^{-5/4}(5/4)^{5/4}$. Two features of this result are decisive. First, the peak occurs at $k_+^* \sim 1/|z|$, meaning the worst offending wavenumber is set entirely by the submergence depth. For a source close to the free surface, $k_+^*$ can be arbitrarily large, well beyond any practical grid resolution. Second, the peak wave slope decays only as $R^{-1/2}$ along the wake meaning that a source panel at small $|z|$ radiates numerically unresolvable wavenumbers over an extended downstream region.
 
@@ -219,64 +183,46 @@ This section develops the line-integrated Kelvin kernel that arises naturally in
 
 Consider a horizontal, surface-piercing planform (e.g., a planing hull at small angle of attack $\alpha$). Following Baar and Price (1988), we represent the velocity potential as a distribution of Kelvin sources. Applying Green's second identity in $z<0$, the contribution from the $z=0$ plane splits into the hull footprint $S$ and the exterior free surface. On the exterior, both $\phi$ and $G$ satisfy the linearized FSBC, hence
 
-$$
-\phi G_z - G\phi_z = -\ell\frac{\partial}{\partial x}(\phi G_x - G\phi_x),
-$$
+$$\phi G_z - G\phi_z = -\ell\frac{\partial}{\partial x}(\phi G_x - G\phi_x),$$
 
 which is an exact $x$-derivative. After integration and application of the divergence theorem, the free-surface contribution reduces to a contour integral around the waterline $\partial S$. Side edges parallel to $x$ do not contribute, leaving only leading and trailing edge contributions.
 
 The flat-ship idealization imposes uniform downwash approaching the free surface:
 
-$$
-\phi_z = \alpha U,\qquad (x,y)\in S,\ z\to 0^-.
-$$
+$$\phi_z = \alpha U,\qquad (x,y)\in S,\ z\to 0^-.$$
 
 With the source strength $q$ taken uniform in $x'$ (consistent with the edge reduction), the potential reduces to contributions from the leading edge $x'=x_L$ and trailing edge $x'=x_T$:
 
-$$
-\phi = \alpha U\,\ell\int_{-b}^{b} q(y')\Bigl[G(x-x_T,y-y',z)-G(x-x_L,y-y',z)\Bigr]dy'.
-$$
+$$\phi = \alpha U\,\ell\int_{-b}^{b} q(y')\Bigl[G(x-x_T,y-y',z)-G(x-x_L,y-y',z)\Bigr]dy'.$$
 
 The remaining unknown is the spanwise distribution $q(y')$. For uniform downwash forcing, the dominant nearfield operator is logarithmic in span:
 
-$$
-\int_{-b}^{b} q(y')\log|y-y'|\,dy' = \mathrm{const}.
-$$
+$$\int_{-b}^{b} q(y')\log|y-y'|\,dy' = \mathrm{const}.$$
 
 This is the classical constant-downwash problem; the solution on $[-b,b]$ is the elliptic distribution
 
-$$
-q(y') = q_0\sqrt{1-(y'/b)^2}.
-$$
+$$q(y') = q_0\sqrt{1-(y'/b)^2}.$$
 
 ### 5.2 The Line-Integrated Wavelike Kernel
 
 For each edge, the wavelike contribution is
 
-$$
-W_b(x,y,z) = \int_{-b}^{b} \sqrt{1-(y'/b)^2}\,W(x,y-y',z)\,dy'.
-$$
+$$W_b(x,y,z) = \int_{-b}^{b} \sqrt{1-(y'/b)^2}\,W(x,y-y',z)\,dy'.$$
 
 In the unified oscillatory-integral notation of Section 4.1, the spanwise convolution with the elliptic weight transforms $A(t) = 1$ into a Bessel amplitude via the Fourier transform of the elliptic distribution:
 
-$$
-W_b(x,y,z) = 4\pi H(-x)\int_{-\infty}^{\infty} A_b(t)\,\exp\bigl(z(1+t^2)\bigr)\,\sin\bigl(g(x,y,t)\bigr)\,dt,
-$$
+$$W_b(x,y,z) = 4\pi H(-x)\int_{-\infty}^{\infty} A_b(t)\,\exp\bigl(z(1+t^2)\bigr)\,\sin\bigl(g(x,y,t)\bigr)\,dt,$$
 
 with
 
-$$
-A_b(t) = \pi\,\frac{J_1\bigl(b\,k(t)\bigr)}{k(t)},\qquad k(t)=t\sqrt{1+t^2}.
-$$
+$$A_b(t) = \pi\,\frac{J_1\bigl(b\,k(t)\bigr)}{k(t)},\qquad k(t)=t\sqrt{1+t^2}.$$
 
 The factor $J_1(bk)/k$ is finite at $t=0$ (with limit $b/2$) and decays as $|t| \to \infty$. This is the mechanism by which spanwise smoothing regularizes the kernel: the elliptic distribution acts as a low-pass filter in wavenumber, suppressing exactly the large-$t_+$ saddle contributions that drove the point-source divergence in Section 4.
 
 For large $|t|$, the Bessel asymptotic gives $|A_b(t)| \sim \mathcal{O}(b^{-1/2}|t|^{-3})$. Substituting into the stationary-phase estimate at $t_+ \approx -x/(2y)$ with $R \approx |x|$, the amplitude and wave slope on $z=0$ are
 
-$$
-|W_b(x,y,0)| \;\sim\; \frac{C}{b^{1/2}}\,\frac{1}{t_+^{5/2}\,R^{1/2}}, \qquad
-|\partial_x W_b(x,y,0)| \;\sim\; \frac{C}{b^{1/2}}\,\frac{1}{t_+^{1/2}\,R^{1/2}},
-$$
+$$|W_b(x,y,0)| \;\sim\; \frac{C}{b^{1/2}}\,\frac{1}{t_+^{5/2}\,R^{1/2}}, \qquad
+|\partial_x W_b(x,y,0)| \;\sim\; \frac{C}{b^{1/2}}\,\frac{1}{t_+^{1/2}\,R^{1/2}},$$
 
 both of which vanish as $t_+ \to \infty$. The $t_+^{5/2}$ growth that made the point-source wave slope numerically unresolvable has become $t_+^{-5/2}$ decay in amplitude and $t_+^{-1/2}$ decay in wave slope — directly on $z=0$, without recourse to finite submergence. The kernel $W_b$ is finite and differentiable along the wake centerline, and waterline contour evaluation is well-posed without further regularization.
 
@@ -302,9 +248,7 @@ The real axis is partitioned into finite intervals such that each endpoint is se
 
 Because the phase is non-analytic and highly nonlinear, the interval endpoints are determined by numerical root-finding. For each stationary point $a \in S$, one solves
 
-$$
-|g(t) - g(a)| = \Delta g
-$$
+$$|g(t) - g(a)| = \Delta g$$
 
 to locate the interval boundaries, with safeguards for finite truncation $|t| \le R$. Outside the wake cusp (where no real stationary point exists), a single pseudo-stationary point $t_0 = -x/(4y)$ organizes the partition. The branch is selected so that $\sqrt{1+t^2}$ remains continuous along each deformed contour.
 
@@ -316,9 +260,7 @@ Values on the order of $\Delta g \approx 5$–$6$ provide accurate evaluations w
 
 The same contour-deformation strategy applies to the line-integrated kernel, extended to handle the additional oscillatory structure introduced by the Bessel prefactor $J_1(bk(t))/k(t)$. The Bessel function is decomposed using Hankel functions away from $t = 0$:
 
-$$
-J_1(z) = \tfrac{1}{2}\!\left(H_1^{(1)}(z)\,e^{iz} + H_1^{(2)}(z)\,e^{-iz}\right).
-$$
+$$J_1(z) = \tfrac{1}{2}\!\left(H_1^{(1)}(z)\,e^{iz} + H_1^{(2)}(z)\,e^{-iz}\right).$$
 
 The scaled Hankel functions $H_1^{(1,2)}(z)e^{\mp iz}$ are slowly varying, so the exponential factors can be absorbed into the complex phase, producing tail integrals suitable for the same steepest-descent treatment as Section 6.1. Near $t = 0$, the real-line partition includes a segment on which the Bessel representation is used directly, avoiding the Hankel singularity at the origin.
 
@@ -361,9 +303,7 @@ This section lists the intended verification and demonstration problems.
 
 **TODO**: Insert specific quantitative comparisons and define error measures.
 
-$$
-\boxed{\textbf{AUTHOR TODO:} \text{Decide the primary output observable for the planing/flat-ship section (wave cut, far-field wave resistance from energy flux, or pressure-derived forces) and specify the nondimensionalization.}}
-$$
+$$\boxed{\textbf{AUTHOR TODO:} \text{Decide the primary output observable for the planing/flat-ship section (wave cut, far-field wave resistance from energy flux, or pressure-derived forces) and specify the nondimensionalization.}}$$
 """
 
 # ╔═╡ 8cde3f1f-b4d7-44a6-9c4f-e3c0b388bd68
@@ -380,32 +320,11 @@ md"""
 - Gibbs, A. and Huybrechs, D. (2024). **TODO** (full bibliographic entry).
 """
 
-# ╔═╡ 00000000-0000-0000-0000-000000000001
-PLUTO_PROJECT_TOML_CONTENTS = """
-[deps]
-InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
-QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
-SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
-"""
-
-# ╔═╡ 00000000-0000-0000-0000-000000000002
-PLUTO_MANIFEST_TOML_CONTENTS = """
-# This file is machine-generated - editing it directly is not advised
-
-julia_version = "1.11.5"
-manifest_format = "2.0"
-project_hash = "TODO"
-"""
-
 # ╔═╡ Cell order:
-# ╠═6e8b4c6a-bd1a-4f4a-9ff3-4d86d3e4ee01
 # ╟─3ac13c0a-95d2-4f9c-9a98-8ff7f88b80d8
 # ╟─450f5b7d-37ce-40bf-9c0f-7f7b8c10a1b3
 # ╟─4c5e8f63-7dc2-46fb-8f61-8f62128720c2
 # ╟─9b0b3e1e-5f73-4bfb-8586-5fdb7a2b28cc
-# ╟─0b29c5d6-66c4-44c8-8e26-8f9d38c355ba
 # ╟─1e6f98ef-f9a2-4b7f-bc11-b3e7d8b16a13
 # ╟─f5f56210-9b75-4a0c-b8b5-2412ffdbf5a1
 # ╟─8d44d2f8-1d8d-45ee-8c0c-441a3ffbc2a2
@@ -413,5 +332,3 @@ project_hash = "TODO"
 # ╟─f6c4f8db-2ffd-4f56-8c93-1e0f0f55d3d5
 # ╟─4a0b4a48-98b3-4c10-9e4e-8c2175f0d18f
 # ╟─8cde3f1f-b4d7-44a6-9c4f-e3c0b388bd68
-# ╟─00000000-0000-0000-0000-000000000001
-# ╟─00000000-0000-0000-0000-000000000002

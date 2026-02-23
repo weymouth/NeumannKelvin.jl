@@ -7,27 +7,15 @@
 \geometry{margin=1in}
 
 \title{Wave Predictions Using the Kelvin Green's Function in the Limit $z\to 0^-$}
-\author{Draft manuscript (Pluto notebook)}
+\author{G. D. Weymouth}
 \date{\today}
 
 \begin{document}
 
 \maketitle
 
-\section*{Status}
-Rough draft for internal circulation.
-
-\section*{Scope}
-Evaluation and application of the Kelvin Green's function for steady forward speed, emphasizing the limiting behavior required by waterline contour formulations.
-
-\section*{Notes}
-\begin{itemize}
-    \item Citations and several closed-form results are left as placeholders (marked \textbf{TODO}).
-    \item The narrative aims for a conventional academic style (cf. Newman 1987) rather than an expository notebook style.
-\end{itemize}
-
 \begin{abstract}
-Linear wave theory captures the essential physics of free-surface flows at a fraction of the computational cost of nonlinear and viscous methods, making it attractive for applications in design, real-time control, and surrogate modeling. However, linear wave predictions for ships with forward speed require evaluating the Kelvin Green's function at the free surface $z=0$, where the point-source kernel is ill-posed. Indeed the wave elevation grows without bound as $z\to 0^-$ even far downstream, causing both numerical and physical interpretation difficulties. In this paper we develop flat-ship theory for shallow-draft, high-speed planforms and show, via stationary-phase analysis, that its natural elliptic spanwise line integration acts as a wavenumber low-pass filter that exactly resolves this ill-posedness, yielding a kernel that is finite and differentiable at $z=0$. We then present a fast evaluator for both point and line kernels using contour deformation adapted to the non-analytic Kelvin phase, achieving $10^4$-$10^5$ speedup over direct quadrature while preserving far-wake asymptotics. An open-source Julia implementation is provided.
+Linear wave theory captures the essential physics of free-surface flows at a fraction of the computational cost of nonlinear and viscous methods, making it attractive for applications in design, real-time control, and surrogate modeling. However, linear wave predictions for ships with forward speed require evaluating the Kelvin Green's function at the free surface $z=0$, where the point-source kernel is ill-posed; the wave elevation grows without bound as $z\to 0^-$ even far downstream, causing both numerical and physical interpretation difficulties. In this paper we develop flat-ship theory for shallow-draft, high-speed planforms and show, via stationary-phase analysis, that its natural elliptic spanwise line integration acts as a wavenumber low-pass filter that exactly resolves this ill-posedness, yielding a kernel that is finite and differentiable at $z=0$. We then present a fast evaluator for both point and line kernels using contour deformation adapted to the non-analytic Kelvin phase, achieving $10^4$-$10^5$ speedup over direct quadrature while preserving far-wake asymptotics. An open-source Julia implementation is provided.
 \end{abstract}
 
 \section{Introduction}
@@ -42,9 +30,7 @@ The problem is less severse for submeged bodies, but evaluation of the wavelike 
 
 For surface-piercing bodies, the free-surface limit becomes unavoidable. Baar and Price showed that the waterline contour contributes directly to the potential through a line integral that arises when Green's second identity is applied in the fluid domain. This contour term can have a leading-order influence on the wave field, yet its evaluation requires the Green's function precisely at the free surface---the regime where existing representations fail. Alternative formulations have been proposed to circumvent the waterline contribution. The Neumann-Michell approach of Noblesse, Huang, and Yang (2013) replaces the explicit Green's function with an implicit iterative scheme that avoids the contour integral entirely. While this sidesteps the numerical difficulty, it sacrifices the directness and efficiency of an explicit kernel evaluation. The present work retains the classical formulation and addresses the modelling and numerical obstacle directly.
 
-This paper addresses the $z\to 0^-$ limit with an emphasis on obtaining meaningful finite energy free-surface predictions. The first contribution is analytical: Section~4 develops the limiting wave elevation spectrum $S_\zeta(k;0)\sim 1/(|z|R)$ stated above via stationary-phase analysis, showing that the point-source kernel is ill-posed; Section~5 then shows that the elliptic spanwise line integration inherent in the waterline contribution resolves this completely, replacing the divergent spectrum with a finite, integrable $S_{b,\zeta}(t;0)\sim (J_1(bk(t))/t)^2$ that decays as $t^{-3}$. The second contribution is numerical: Section~6 develops a practical evaluator for both point and line kernels using contour deformation adapted to the non-analytic Kelvin phase, achieving $10^4$--$10^5$ speedup over direct quadrature while preserving the wave energy. 
-
-The paper also introduces flat-ship theory---a reduced model for shallow-draft, high-speed planforms---in which the entire exterior wave field collapses to two line-integrated kernel evaluations per field point (leading and trailing edges). The method is used to study the wavefield and wavedrag generated in the $z=0$ limit as a function of length and beam based Froude-number and shows (SOME COOL SHIT). An open-source Julia implementation is provided for reproducibility.
+This paper addresses the $z\to 0^-$ limit with an emphasis on obtaining meaningful finite energy free-surface predictions. The first contribution is analytical: Section~4 develops the limiting wave elevation spectrum $S_\zeta(k;0)\sim 1/(|z|R)$ stated above via stationary-phase analysis, showing that the point-source kernel is ill-posed; Section~5 then developed the flat-ship model for shallow-draft $z\approx 0$ planforms, deriving the elliptic spanwise distribution of source strength that arises from the constant-downwash condition. The flat-ship potential collapses to the waterline contribution to leading order, but replaces the divergent spectrum with a finite and integrable $S_{b,\zeta}(t;0)\sim (J_1(bk(t))/t)^2$ that decays as $t^{-3}$. The second contribution is numerical: Section~6 develops a practical evaluator for both point and line kernels using contour deformation adapted to the non-analytic Kelvin phase, achieving $10^4$--$10^5$ speedup over direct quadrature while preserving the wave energy. The flat-ship theory, requiring only two (leading and trailing edge) kernel evaluations per field point is then used to study the wavefield and wavedrag generated in the $z=0$ limit by a rectangular planform as a function of length and beam based Froude-number. An open-source Julia implementation is provided for reproducibility.
 
 \section{Mathematical Formulation of the Kelvin Green's Function}
 

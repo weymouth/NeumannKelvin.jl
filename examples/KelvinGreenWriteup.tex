@@ -30,7 +30,7 @@ The problem is less severe for submeged bodies, but evaluation of the wavelike G
 
 For surface-piercing bodies, the free-surface limit becomes unavoidable. Baar and Price showed that the waterline contour contributes directly to the potential through a line integral that arises when Green's second identity is applied in the fluid domain. This contour term can have a leading-order influence on the wave field, yet its evaluation requires the Green's function precisely at the free surface---the regime where existing representations fail. Alternative formulations have been proposed to circumvent the waterline contribution. The Neumann-Michell approach of Noblesse, Huang, and Yang (2013) replaces the explicit Green's function with an implicit iterative scheme that avoids the contour integral entirely. While this sidesteps the numerical difficulty, it sacrifices the directness and efficiency of an explicit kernel representation for the potential. The present work retains the classical formulation and addresses the modelling and numerical obstacle directly.
 
-This paper addresses the $z\to 0^-$ limit with an emphasis on obtaining meaningful finite energy free-surface predictions. The first contribution is analytical: Section~4 develops the limiting wave elevation spectrum $S_\zeta(k;z)\sim 1/(|z|R)$ stated above via stationary-phase analysis, showing that the point-source kernel is ill-posed; Section~5 then developed the flat-ship model for shallow-draft $z\approx 0$ planforms, deriving the elliptic spanwise distribution of source strength that arises from the constant-downwash condition. The leading order flat-ship potential \textit{is} the waterline contribution, but analytic integration replaces the divergent spectrum with a finite $S_{b,\zeta}(k;0)\sim J_1(k)^2/k$ which decays as $k^{-3/2}$, where $J_1$ is the first-order Bessel function. The second contribution is numerical: Section~6 develops a practical evaluator for both point and line kernels using contour deformation adapted to the non-analytic Kelvin phase, achieving $10^4$--$10^5$ speedup over direct quadrature while preserving the wave energy. The flat-ship theory, requiring only two (leading and trailing edge) kernel evaluations per field point, is then used to study the wave elevation and wave drag generated in the $z=0$ limit by a rectangular planform as a function of the length and beam based Froude-number. An open-source Julia implementation is provided for reproducibility.
+This paper addresses the $z\to 0^-$ limit with an emphasis on obtaining meaningful finite energy free-surface predictions. The first contribution is analytical: Section~\ref{sec:point_source_asymptotics} develops the limiting wave elevation spectrum $S_\zeta(k;z)\sim 1/(|z|R)$ stated above via stationary-phase analysis, showing that the point-source kernel is ill-posed; Section~\ref{sec:flat_ship_theory} then developed the flat-ship model for shallow-draft $z\approx 0$ planforms, deriving the elliptic spanwise distribution of source strength that arises from the constant-downwash condition. The leading order flat-ship potential \textit{is} the waterline contribution, but analytic integration replaces the divergent spectrum with a finite $S_{b,\zeta}(k;0)\sim J_1(k)^2/k$ which decays as $k^{-3/2}$, where $J_1$ is the first-order Bessel function. The second contribution is numerical: Section~\ref{sec:fast_evaluator} develops a practical evaluator for both point and line kernels using contour deformation adapted to the non-analytic Kelvin phase, achieving $10^4$--$10^5$ speedup over direct quadrature while preserving the wave energy. The flat-ship theory, requiring only two (leading and trailing edge) kernel evaluations per field point, is then used to study the wave elevation and wave drag generated in the $z=0$ limit by a rectangular planform as a function of the length and beam based Froude-number. An open-source Julia implementation is provided for reproducibility.
 
 \section{Mathematical Formulation}
 
@@ -72,7 +72,7 @@ For a submerged body with wetted surface $S$ entirely below $z=0$, the potential
 \]
 with $q$ determined by enforcing the Neumann boundary condition $\partial_n\phi+U_n=0$ on $S$.
 
-For a surface-piercing body, let $C$ denote the waterplane footprint of a surface-piercing body, with waterline contour $\partial C$. On the free surface $z=0$, both $\phi$ and $G$ satisfy the linearized FSBC, which implies
+For a surface-piercing body, let $C$ denote the waterplane footprint, with waterline contour $\partial C$. On the free surface $z=0$, both $\phi$ and $G$ satisfy the linearized FSBC, which implies
 \[
 \phi G_z - G\phi_z = -\ell\,(\phi G_{xx} - G\phi_{xx}) = -\ell\,\frac{\partial}{\partial x}(\phi G_x - G\phi_x)
 \]
@@ -81,15 +81,15 @@ Integrating over the exterior free surface and applying the divergence theorem r
 \phi(\vec x) = \iint_S q(\vec\alpha)\,G(\vec x,\vec\alpha)\,dS_{\alpha}
 \; + \; \ell\oint_{\partial C} q(\vec\alpha)\,G(\vec x,\vec\alpha)\,n_x\,dy_{\alpha}.
 \]
-The contour contribution requires evaluation of the Green's function near $z=0$ to determine $q$ and \textit{on} $z=0$ to evaluate the free surface elevation $\zeta = -\frac{U}{g}\partial_x\phi$. In the next section we show that the point-source kernel is ill-posed in this limit, motivating the need for regularization through spanwise integration, which is developed in Section 5.
+The contour contribution requires evaluation of the Green's function near $z=0$ to determine $q$ and \textit{on} $z=0$ to evaluate the free surface elevation $\zeta = -\frac{U}{g}\partial_x\phi$. In the next section we show that the point-source kernel is ill-posed in this limit.
 
-\section{Point-Source Asymptotics and the Breakdown of Linear Theory}
+\section{Point-Source Asymptotics and the Breakdown of Linear Theory}\label{sec:point_source_asymptotics}
 
-For a linearized velocity potential $\phi$ to yield physically meaningful predictions, both $\phi$ and its $x$-derivative $\partial_x\phi$ must be finite. This section analyzes the stationary-point structure of the oscillatory integral defining $W$ and shows that the dominant saddle migrates to $t_+ \to \infty$ as the wake centerline is approached, producing wave energy contributions that grow without bound. This motivates the need for regularization through spanwise integration, which is developed in Section 5.
+For a linearized velocity potential $\phi$ to yield physically meaningful predictions, both $\phi$ and its $x$-derivative $\partial_x\phi$ must be finite. This section analyzes the stationary-point structure of the oscillatory integral defining $W$ and shows that the dominant saddle migrates to $t_+ \to \infty$ as the wake centerline is approached, producing wave energy contributions that grow without bound. This motivates the need for regularization through spanwise integration, which is developed in Section \ref{sec:line_integrated_kernels}.
 
 \subsection{A Unified Oscillatory-Integral Form}\label{ssec:unified}
 
-In anticipation of the spanwise integration in Section 5, we write the wavelike contribution in the general form
+In anticipation of the spanwise integration in Section \ref{sec:line_integrated_kernels}, we write the wavelike contribution in the general form
 \[
 W_A(x,y,z) = 4H(-x)\int_{-\infty}^{\infty} A(t)\,\exp\left(z(1+t^2)\right)\,\sin\left(g(x,y,t)\right)\,dt,
 \]
@@ -129,22 +129,21 @@ which peaks at
 %
 As $|z| \to 0$ the peak migrates to arbitrarily high wavenumber while its amplitude grows as $|z|^{-1}$. For any fixed numerical resolution $k_{\max}$, the spectrum becomes unresolvable once $|z| \lesssim 1/(2k_{\max})$. The $R^{-1}$ decay along the wake means this is not a local problem: a near-surface source radiates an unresolvable wavenumber band over the entire downstream wake. Figure~\ref{fig:point_source_spectrum} shows $S_\zeta(k;\,z)$ for a sequence of decreasing $|z|$ values, illustrating the peak migration and amplitude growth.
 
-The natural regularization in waterline formulations is spanwise line integration, developed in the next section.
+The natural regularization in the waterline formulation is spanwise line integration, developed in the next section.
 
-\section{Line-Integrated Kelvin Potentials and Flat-Ship Theory}
+\section{Line-Integrated Kelvin Potentials and Flat-Ship Theory}\label{sec:line_integrated_kernels}
 
-This section develops the line-integrated Kelvin kernel that arises naturally in waterline-driven configurations. We first establish the flat-ship model as the physical context, derive the elliptic spanwise distribution, and then show that the resulting line-integrated kernel is finite and differentiable at $z=0$ --- in sharp contrast to the point-source behavior analyzed in Section 4.
+This section develops the line-integrated Kelvin kernel that arises naturally in waterline-driven configurations. We first establish the flat-ship model as the physical context, derive the elliptic spanwise distribution, and then show that the resulting line-integrated kernel is finite and differentiable at $z=0$ --- in sharp contrast to the point-source behavior analyzed in Section~\ref{sec:point_source_asymptotics}.
 
-\subsection{The Flat-Ship Model}
+\subsection{The Flat-Ship Model}\label{ssec:flat_ship_model}
 
-Consider a horizontal surface-piercing planform, e.g., a planing hull, at small angle of attack $\alpha$.
-The flat-ship idealization imposes uniform downwash approaching the free surface:
+Consider a horizontal surface-piercing planform, e.g., a planing hull, at small angle of attack $\alpha$. The flat-ship idealization imposes uniform downwash approaching the free surface:
 \[
 \phi_z = \alpha U,\qquad (x,y)\in S,\ z\to 0^-.
 \]
 With the source strength $q$ taken uniform in $x'$ (consistent with the edge reduction), the potential reduces to contributions from the leading edge $x'=x_L$ and trailing edge $x'=x_T$:
 \[
-\phi = \alpha U\,\ell\int_{-b}^{b} q(y')\Bigl[G(x-x_T,y-y',z)-G(x-x_L,y-y',z)\Bigr]dy'.
+\phi = \alpha U\,\ell\int_{-b}^{b} q(y')\left[G(x-x_T,y-y',z)-G(x-x_L,y-y',z)\right]dy'.
 \]
 The remaining unknown is the spanwise distribution $q(y')$. For uniform downwash forcing, the dominant nearfield operator is logarithmic in span:
 \[
@@ -178,7 +177,7 @@ with
   \label{eq:Ab}
 \end{equation}
 %
-The factor $J_1(bk)/k$ is finite at $t=0$ (with limit $b/2$) and decays as $|t| \to \infty$. This is the mechanism by which spanwise smoothing regularizes the kernel: the elliptic distribution acts as a low-pass filter in wavenumber, suppressing the large-$k$ contributions that drove the point-source divergence in Section~\ref{ssec:unified}.
+The factor $J_1(bk)/k$ is finite at $k=0$ (with limit $b/2$) and decays as $k \to \infty$. This is the mechanism by which spanwise smoothing regularizes the kernel: the elliptic distribution acts as a low-pass filter in wavenumber, suppressing the large-$k$ contributions that drove the point-source divergence in Section~\ref{ssec:unified}.
 
 The wave elevation spectrum at $z=0$ is
 %
@@ -187,12 +186,12 @@ The wave elevation spectrum at $z=0$ is
   \label{eq:Sb_spectrum}
 \end{equation}
 %
-which is $O(b^2)$ at $k=0$ and decays as $k^{-3/2}$ for large $k$ --- integrable, with a finite peak set by the beam $b$. This is the precise opposite of the point-source spectrum~\eqref{eq:point_source_spectrum}, which grows without bound at $z=0$. The kernel $W_b$ is therefore finite and differentiable, even as $z\to 0$ and $y\to 0$ without further regularization.
+which is $O(b^2)$ at $k=0$ and decays as $k^{-2}$ for large $k$ --- integrable, with a finite peak set by the beam $b$. This is the precise opposite of the point-source spectrum~\eqref{eq:point_source_spectrum}, which grows without bound at $z=0$. The kernel $W_b$ is therefore finite and differentiable, even as $z\to 0$ and $y\to 0$ without further regularization.
 
 \subsection{Wave Resistance}
 \label{sec:wave_resistance}
 
-The wave resistance $R_w$ follows from the Havelock formula. Working directly in the variable $t = \sin\theta/\cos^2\theta$ with Jacobian $d\theta/\cos^3\theta = (1+t^2)/(1+2t^2)\,dt$, the Havelock formula becomes
+The flat-ship wave resistance $R_w$ follows from the Havelock formula. Working directly in the variable $t = \sin\theta/\cos^2\theta$ with Jacobian $d\theta/\cos^3\theta = (1+t^2)/(1+2t^2)\,dt$, the Havelock formula becomes
 %
 \begin{equation}
   R_w = \frac{\rho}{2\pi\ell^2} \int_{-\infty}^{\infty} |K(t)|^2\, \frac{1+t^2}{1+2t^2}\, dt,
@@ -220,7 +219,7 @@ Substituting~\eqref{eq:kochin} into~\eqref{eq:havelock} and defining the wave dr
   \label{eq:Cw}
 \end{equation}
 %
-With $q_0 \propto \alpha U$ the prefactor $q_0^2/U^2 \propto \alpha^2$ is dimensionless. The integrand is $O(1)$ at $t=0$ and decays as $t^{-3}$ for large $t$, so~\eqref{eq:Cw} is well-posed and rapidly convergent. The Bessel factor $(J_1(bk)/bk)^2$ controls angular energy spreading with beam $b$ while the interference factor $2(1-\cos(L\sqrt{1+t^2}))$ oscillates with $L$, producing the classical constructive and destructive interference between bow and stern wave systems. For $b\to 0$, we have $J_1(bk)/bk\to 1/2$ and the integral depends only on $L$ as in thin-ship theory.
+With $q_0 \propto \alpha U$ the prefactor $q_0^2/U^2 \propto \alpha^2$ is dimensionless. The integrand is $O(1)$ at $k=0$ and decays as $k^{-3}$ for large $k$, so~\eqref{eq:Cw} is well-posed and rapidly convergent. The Bessel factor $(J_1(bk)/bk)^2$ controls angular energy spreading with beam $b$ while the interference factor $2(1-\cos(L\sqrt{1+t^2}))$ oscillates with $L$, producing the classical constructive and destructive interference between bow and stern wave systems. For $b\to 0$, we have $J_1(bk)/bk\to 1/2$ and the integral depends only on $L$ as in thin-ship theory.
 
 \subsection{Computational Structure}
 
@@ -228,7 +227,7 @@ A noteworthy point in the flat-ship limit is that the potential induced by the p
 
 This efficiency is only realizable because $W_b$, unlike the point-source kernel, admits direct evaluation at $z=0$. The numerical scheme for doing so is developed in the following section.
 
-\section{Numerical Evaluation by Contour Deformation}
+\section{Numerical Evaluation by Contour Deformation}\label{sec:fast_evaluator}
 
 The point-source kernel and the line-integrated kernels are evaluated within a unified contour-deformation framework, following the Path-Finder approach of Gibbs and Huybrechs (2024). The key idea is to partition the real line into finite intervals around stationary points --- where standard quadrature applies --- and semi-infinite tails that are deformed into the complex plane where the integrand decays exponentially. Direct real-line quadrature is impractical for both kernels: the integrand is highly oscillatory, and for the point-source kernel at $z = 0$ the real-line integral diverges outright due to the $t_+ \to \infty$ saddle.
 
@@ -254,13 +253,13 @@ The same contour-deformation strategy applies to the line-integrated kernel, ext
 \[
 J_1(z) = \tfrac{1}{2}\!\left(H_1^{(1)}(z)\,e^{iz} + H_1^{(2)}(z)\,e^{-iz}\right).
 \]
-The scaled Hankel functions $H_1^{(1,2)}(z)e^{\mp iz}$ are slowly varying, so the exponential factors can be absorbed into the complex phase, producing tail integrals suitable for the same steepest-descent treatment as Section 6.1. Near $t = 0$, the real-line partition includes a segment on which the Bessel representation is used directly, avoiding the Hankel singularity at the origin. The additional oscillatory structure requires a larger phase separation ($\Delta g \approx 12$) than the point-source case, but the overall algorithmic structure is identical.
+The scaled Hankel functions $H_1^{(1,2)}$ are slowly varying and the exponential factors can be absorbed into the complex phase, producing tail integrals suitable for the same steepest-descent treatment as the previous section. Near $t = 0$, the real-line partition includes a segment on which the Bessel representation is used directly, avoiding the Hankel singularity at the origin. The additional oscillatory structure requires a larger phase separation ($\Delta g \approx 12$) than the point-source case, but the overall algorithmic structure is identical.
 
 Note that we can use the same approach for the wave resistance integral~\eqref{eq:Cw} by defining
 \[
 A_w(t)=\frac{J_1(bt\sqrt{1+t^2})^2}{b^2t^2(1+2t^2)}
 \]
-and using the same Hankel function decomposition for contour deformation. The super fast $t^{-6}$ decay of $A_w$ means direct quadrature is also practical.
+and using the same Hankel function decomposition for contour deformation. The fast $t^{-6}$ decay of $A_w$ means direct quadrature is also practical.
 
 \subsection{Algorithm Summary}
 

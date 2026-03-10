@@ -61,7 +61,7 @@ function finite_ranges(S::NTuple{N}, g, Δg, R; atol=Δg/10) where N
     dg(a) = t->abs(g(a)-g(t))-Δg
     no(a,b) = abs(g(a)-g(b)) ≤ Δg+atol
     # find roots of dg using brackets (Order0) or secant method (Order1)
-    fz0(a,b) = no(a,b) ? (return b, false) : (find_zero(dg(a), (a,b), Order0()), true)
+    fz0(a,b) = no(a,b) ? (return b, false) : (find_zero(dg(a), (a,b), AlefeldPotraShi()), true)
     fz1(a,b) = (isfinite(b) && no(a,b)) ? (return b, false) : (find_zero(dg(a), (a,a+copysign(1,b)), Order1(); atol), true)
     # return flagged sub-range
     (fz1(first(S), -R), mid_ranges(Val(N), S, fz0)..., fz1(last(S), R))

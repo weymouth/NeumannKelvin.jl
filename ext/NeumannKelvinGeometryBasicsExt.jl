@@ -30,7 +30,9 @@ function NeumannKelvin.∫G_kernel(ξ, p, ::TriKernel; ignore...)
     r = p.verts .- Ref(ξ); R = norm.(r)
     edges = sum(1:3) do i
         m,t,j = p.inplane[i],p.tangents[i],i%3+1
-        r[i]'m*log((R[i]+r[i]'t)/(R[j]+r[j]'t))
+        numer = R[i] + r[i]'t
+        denom = R[j] + r[j]'t
+        (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
     end
     Ω = 2atan(r[1]'*(r[2]×r[3]),prod(R)+sum(i->r[i]'r[i%3+1]*R[(i+1)%3+1],1:3))
     @inbounds edges+r[1]'p.n*Ω

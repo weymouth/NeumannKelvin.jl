@@ -190,6 +190,17 @@ end
     @test @ballocations(Φ($panels.x[1],$sys)) ≤ TEST_ALLOCS
 end
 
+using NeumannKelvin,ForwardDiff
+using NeumannKelvin:get_q,bc!,set_q!,rhs
+ForwardDiff.jacobian([1.,2.,3.]) do (a,b,c)
+    S(θ₁,θ₂) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
+    panels = panelize(S,0,π,0,2π)
+    sys = BodyPanelSystem(panels,wrap=PanelTree)
+    gmressolve!(sys)
+    # b = rhs(sys); set_q!(sys,b); bc!(b,sys)
+    return get_q(sys)
+end
+
 function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,kwargs...)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),-r*sin(θ₂)*sin(θ₁),r*cos(θ₂)*sin(θ₁)+Z]
     panelize(S,0,π,0,π,hᵤ=h*√AR,hᵥ=h/√AR;kwargs...)

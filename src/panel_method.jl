@@ -14,7 +14,10 @@ Gauss quadrature over source panel `p`.
 """
 ∫G_kernel(ξ,p,::QuadKernel) = (r²=sum(abs2,ξ-p.x); r²>5p.dA ? -p.dA/√r² : sum(w*source(ξ,x) for (x,w) in zip(p.xg,p.wg)))
 
-using ForwardDiff: value, partials, Dual
+using ForwardDiff: partials, Dual
+using ForwardDiff
+value(x) = ForwardDiff.value(x)
+value(a::AbstractArray) = map(value, a)
 """
     ∫G(x,p)
 

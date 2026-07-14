@@ -25,7 +25,7 @@ struct PanelTree{T, P<:Table, B, N, D} <: AbstractVector{T}
         new{eltype(panels), P, B, N, D}(panels, bvh, nodes, θ²)
 end
 function PanelTree(panels;θ²=9)
-    bvh = BVH(map(BoundingVolume,panels.verts))
+    bvh = BVH(map(BoundingVolume,value(panels.verts))) # strip dual numbers before constructing BVH
     PanelTree(panels,bvh,fill_nodes(panels,bvh),θ²)
 end
 struct MonoKernel <: GreenKernel end

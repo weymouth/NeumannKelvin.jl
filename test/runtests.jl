@@ -196,8 +196,9 @@ ForwardDiff.jacobian([1.,2.,3.]) do (a,b,c)
     S(θ₁,θ₂) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
     panels = panelize(S,0,π,0,2π)
     sys = BodyPanelSystem(panels,wrap=PanelTree)
-    gmressolve!(sys)
-    # b = rhs(sys); set_q!(sys,b); bc!(b,sys)
+    # b = rhs(sys); set_q!(sys,b); bc!(b,sys); return b
+    directsolve!(sys)
+    # gmressolve!(sys) # invokes gmres method not found error
     return get_q(sys)
 end
 

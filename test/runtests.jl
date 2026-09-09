@@ -31,6 +31,7 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
+using FastGaussQuadrature
 @testset "panels.jl" begin
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
@@ -51,7 +52,29 @@ end
     torus(θ₁,θ₂;r=0.3,R=1) = SA[(R+r*cos(θ₂))*cos(θ₁),(R+r*cos(θ₂))*sin(θ₁),r*sin(θ₂)]
     spheroid(θ₁,θ₂;a=1.,b=1.,c=3.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
     sphere(θ₁,θ₂) = spheroid(θ₁,θ₂; c=1.)
+    plane(u,v) = SA[u,v,0]
 
+    # measure checks
+    pϕ(a,b) = -4*(a*asinh(b/a) + b*asinh(a/b))
+    panel = measure(plane,0.,0.,1.,2.)
+    @test panel.dA ≈ 2
+    @test panel.x ≈ [0,0,0]
+    @test panel.n ≈ [0,0,1]
+    @test panel.wg ≈ [0.5 0.5; 0.5 0.5]
+    @test panel.ϕ ≈ pϕ(1/2,1) rtol=1e-3
+    @test panel.v ≈ 2π*panel.n broken=true
+
+    Δg,wg = SVector{4}.(gausslegendre(4))
+    # panel = measure(sphere,0.5,π,1,2π;Δg,wg)
+    panel = measure(sphere,0.5,π,1,2π;cubature=true)
+    h = (1+cos(1))/2; D(h) = √(1+h^2-2h*cos(1))
+    @test panel.dA ≈ 4π*(1-h)
+    @test panel.x ≈ [0,0,h] rtol=1e-3
+    @test panel.n ≈ [0,0,1] rtol=1e-3
+    @test panel.ϕ ≈ -(2π/h)*(D(h)-1+h) rtol=1e-3
+    @test panel.v ≈ [0,0,derivative(h->(2π/h)*(D(h)-1),h)] rtol=1e-3
+end    
+@testset "measure checks continued" begin
     # Equal areas sanity checks
     function area_checks(dA,goal)
         mdA = sum(dA)/length(dA)
@@ -335,7 +358,8 @@ using GeometryBasics,FileIO
     @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
 
     ext = Base.get_extension(NeumannKelvin, :NeumannKelvinGeometryBasicsExt)
-    panels = panelize(load("../examples/Icosahedron.stl"))
+    # panels = panelize(load("../examples/Icosahedron.stl"))
+    panels = panelize(load("examples/Icosahedron.stl"))
     @test length(panels)==20
     @test eltype(panels.kernel)==ext.TriKernel
     @test all([p.n'p.x>0 for p in panels]) # all outward facing

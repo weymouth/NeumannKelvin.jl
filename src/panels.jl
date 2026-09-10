@@ -132,26 +132,20 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3
     xᵤᵥ, nᵤᵥ = Suv.(uvᵤᵥ), normalize.(nda.(uvᵤᵥ))
     # get self-influence
     uv₀ = SA[u,v]; duv = jacobian(Suv,uv₀)\(x-S(u,v)); uv₀ += duv
-    while duv'duv > 1e-8*du*dv
+    while duv'duv > 1e-8*du*dv # minimize |x-S(uv₀)|
         duv = jacobian(Suv,uv₀)\(x-Suv(uv₀)); uv₀ += duv
     end
-    dA₀,J₀,δ = da(uv₀), jacobian(Suv,uv₀),Suv(uv₀)-x
-    function diff(ξ,η,d₁,d₂) # self influence of S(uv) - (δ+J₀*uv)
-        uv(ξ, η) = uv₀ + ξ*((1-η)*d₁ + η*d₂); S̃ = Suv ∘ uv
-        r = S̃(ξ, η) - x; R = norm(r)
-        rp = δ+J₀*(uv(ξ, η)-uv₀); Rp = norm(rp); dAp = abs(det([d₁ d₂]))*ξ*dA₀
-        SA[-1/R,r/R^3...]*norm(normal(S̃,ξ,η))#-SA[-1/Rp,rp/Rp^3...]*dAp
+    dA₀,J₀,δ₀ = da(uv₀), jacobian(Suv,uv₀),Suv(uv₀)-x
+    function diff(uv) # self influence of S(uv) - (δ₀+J₀*uv)
+        r = Suv(uv) - x; R = norm(r)
+        rp = δ₀+J₀*(uv-uv₀); Rp = norm(rp)
+        SA[-1/R,r/R^3...]*da(uv)-SA[-1/Rp,rp/Rp^3...]*dA₀
     end
-    self = sum(1:4) do i
-        d₁,d₂ = uvᵤᵥ[i]-uv₀,uvᵤᵥ[i%4+1]-uv₀
-        cubature && return hcubature(x->diff(x...,d₁,d₂),SA[0.,0.],SA[1.,1.],rtol=1e-3)[1]
-        sum(diff((1+Δg[j])/2,(1+Δg[k])/2,d₁,d₂)*wg[j]*wg[k]/4 for k in eachindex(wg), j in eachindex(wg))
-    end
-    # end +sum(1:2:3) do i
-    #     d₁,d₂,d₃ = uvᵤᵥ[i]-uv₀,uvᵤᵥ[i%4+1]-uv₀,uvᵤᵥ[(i+1)%4+1]-uv₀
-    #     p = measure(J₀*d₁,J₀*d₂,J₀*d₃); ϕ(x) = ∫G(x,p;inside=norm(δ)<1e-8 ? 1/2 : 0.)
-    #     SA[ϕ(-δ),gradient(ϕ,-δ)...]
-    # end
+    self = sum(1:2:3) do i # add ∫(δ₀+J₀*uv)dA back on
+        d₁,d₂,d₃ = uvᵤᵥ[i]-uv₀,uvᵤᵥ[i%4+1]-uv₀,uvᵤᵥ[(i+1)%4+1]-uv₀
+        p = measure(J₀*d₁,J₀*d₂,J₀*d₃); ϕ(x) = ∫G(x,p;inside=norm(δ₀)<1e-8 ? 1/2 : 0.)
+        SA[ϕ(δ₀),gradient(ϕ,δ₀)...]
+    end + (cubature ? cube(diff) : quadgl(diff;x=uv₄,w=w₄))
     # combine everything into named tuple
     (;x, n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=normalize.(ndA₄), ϕ=self[1],
         v = popfirst(self), verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel())

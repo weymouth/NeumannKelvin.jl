@@ -56,25 +56,30 @@ using FastGaussQuadrature
 
     # measure checks
     pϕ(a,b) = -4*(a*asinh(b/a) + b*asinh(a/b))
-    Δg,wg = SVector{6}.(gausslegendre(6))
-    panel = measure(plane,0.,0.,1.,2.;Δg,wg)
+    panel = measure(plane,0.,0.,1.,2.)
     @test panel.dA ≈ 2
     @test panel.x ≈ [0,0,0] atol=1e-6
     @test panel.n ≈ [0,0,1]
     @test panel.ϕ ≈ pϕ(1/2,1)
     @test panel.v ≈ 2π*panel.n
 
-    # panel = measure(sphere,0.5,π,1,2π;Δg,wg)
+    tri1,tri2 = measure(panel.verts[1:3]...),measure(panel.verts[3:4]...,panel.verts[1])
+    ϕ(x) = ∫G(x,tri1;inside=1/2)+∫G(x,tri2;inside=1/2)
+    @test ϕ(panel.x) ≈ pϕ(1/2,1)
+    @test gradient(ϕ,panel.x) ≈ 2π*panel.n
+
     panel = measure(sphere,0.5,π,1,2π;cubature=true)
     h = (1+cos(1))/2; D(h) = √(1+h^2-2h*cos(1))
     @test panel.dA ≈ 4π*(1-h)
-    @test panel.x ≈ [0,0,h] rtol=1e-3
-    @test panel.n ≈ [0,0,1] rtol=1e-3
+    @test panel.x ≈ [0,0,h] rtol=1e-4
+    @test panel.n ≈ [0,0,1] rtol=1e-4
     @test panel.ϕ ≈ -(2π/h)*(D(h)-1+h) rtol=1e-6
-    @test panel.v ≈ [0,0,derivative(h->(2π/h)*(D(h)-1),h)] rtol=1e-3
+    @test panel.v ≈ [0,0,derivative(h->(2π/h)*(D(h)-1),h)] rtol=8e-4
 
-    panel = measure(sphere,pi/4,pi/4,pi/20,pi/20;Δg,wg)
-    @test panel.n'panel.v ≈ norm(panel.v) rtol=1e-6
+    panel = measure(sphere,pi/4,pi/4,pi/20,pi/20)
+    @test panel.n'panel.v ≈ norm(panel.v) rtol=1e-4
+    panel = measure(sphere,pi/4,pi/4,pi/2,pi/2)
+    @test panel.n'panel.v ≈ norm(panel.v) rtol=0.02
 end
 @testset "measure checks continued" begin
     # Equal areas sanity checks

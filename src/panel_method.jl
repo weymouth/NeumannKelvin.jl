@@ -13,6 +13,21 @@ Monopole Green's function for a source panel `p`.
 Gauss quadrature over source panel `p`.
 """
 ∫G_kernel(ξ,p,::QuadKernel) = (r²=sum(abs2,ξ-p.x); r²>5p.dA ? -p.dA/√r² : sum(w*source(ξ,x) for (x,w) in zip(p.xg,p.wg)))
+""" ∫G_kernel(ξ,p,::TriKernel)
+
+Exact integrated potential over a triangular panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
+"""
+function ∫G_kernel(ξ, p, ::TriKernel; ignore...)
+    r = p.verts .- Ref(ξ); R = norm.(r)
+    edges = sum(1:3) do i
+        m,t,j = p.inplane[i],p.tangents[i],i%3+1
+        numer = R[i] + r[i]'t
+        denom = R[j] + r[j]'t
+        (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
+    end
+    Ω = 2atan(r[1]'*(r[2]×r[3]),prod(R)+sum(i->r[i]'r[i%3+1]*R[(i+1)%3+1],1:3))
+    @inbounds edges+r[1]'p.n*Ω
+end
 
 using ForwardDiff: value, partials, Dual
 """
@@ -61,7 +76,7 @@ mapbody!(f,b,sys) = (AK.foreachindex(i-> b[i] = f(sys.body.x[i],sys), b); b)
 """
     u([x::SVector{3},] sys)
 
-Measure the velocity vector `u = U+∇Φ`. If no location `x` is given, a vector of 
+Measure the velocity vector `u = U+∇Φ`. If no location `x` is given, a vector of
 u at all body centers is calculated and is accelerated when Threads.nthreads()>1.
 
 See also: [`Φ`](@ref)

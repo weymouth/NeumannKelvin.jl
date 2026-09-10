@@ -56,24 +56,23 @@ using FastGaussQuadrature
 
     # measure checks
     pϕ(a,b) = -4*(a*asinh(b/a) + b*asinh(a/b))
-    panel = measure(plane,0.,0.,1.,2.)
+    Δg,wg = SVector{6}.(gausslegendre(6))
+    panel = measure(plane,0.,0.,1.,2.;Δg,wg)
     @test panel.dA ≈ 2
-    @test panel.x ≈ [0,0,0]
+    @test panel.x ≈ [0,0,0] atol=1e-6
     @test panel.n ≈ [0,0,1]
-    @test panel.wg ≈ [0.5 0.5; 0.5 0.5]
-    @test panel.ϕ ≈ pϕ(1/2,1) rtol=1e-3
-    @test panel.v ≈ 2π*panel.n broken=true
+    @test panel.ϕ ≈ pϕ(1/2,1)
+    @test panel.v ≈ 2π*panel.n
 
-    Δg,wg = SVector{4}.(gausslegendre(4))
     # panel = measure(sphere,0.5,π,1,2π;Δg,wg)
     panel = measure(sphere,0.5,π,1,2π;cubature=true)
     h = (1+cos(1))/2; D(h) = √(1+h^2-2h*cos(1))
     @test panel.dA ≈ 4π*(1-h)
     @test panel.x ≈ [0,0,h] rtol=1e-3
     @test panel.n ≈ [0,0,1] rtol=1e-3
-    @test panel.ϕ ≈ -(2π/h)*(D(h)-1+h) rtol=1e-3
+    @test panel.ϕ ≈ -(2π/h)*(D(h)-1+h) rtol=1e-6
     @test panel.v ≈ [0,0,derivative(h->(2π/h)*(D(h)-1),h)] rtol=1e-3
-end    
+end
 @testset "measure checks continued" begin
     # Equal areas sanity checks
     function area_checks(dA,goal)
@@ -298,7 +297,7 @@ end
 using NURBS,FileIO
 @testset "NURBS" begin
     sphere = load(pkgdir(NURBS) * "/test/assets/sphere.stp")
-    
+
     # Test that gNURBS gives same results as NURBS.jl
     patch = sphere[1]
     ext = Base.get_extension(NeumannKelvin, :NeumannKelvinNURBSExt)
@@ -308,7 +307,7 @@ using NURBS,FileIO
     gnurbs_result = gpatch.(u, v')
     @test gnurbs_result ≈ nurbs_result
     # @btime $patch($u, $v)
-    # @btime $gpatch.($u, $v')    
+    # @btime $gpatch.($u, $v')
     # @btime $patch(0.45, 0.55)[1]
     # @btime $gpatch(0.45, 0.55)
 

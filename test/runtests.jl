@@ -72,6 +72,9 @@ using FastGaussQuadrature
     @test panel.n ≈ [0,0,1] rtol=1e-3
     @test panel.ϕ ≈ -(2π/h)*(D(h)-1+h) rtol=1e-6
     @test panel.v ≈ [0,0,derivative(h->(2π/h)*(D(h)-1),h)] rtol=1e-3
+
+    panel = measure(sphere,pi/4,pi/4,pi/20,pi/20;Δg,wg)
+    @test panel.n'panel.v ≈ norm(panel.v) rtol=1e-6
 end
 @testset "measure checks continued" begin
     # Equal areas sanity checks

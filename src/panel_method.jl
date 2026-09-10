@@ -17,7 +17,7 @@ Gauss quadrature over source panel `p`.
 
 Exact integrated potential over a triangular panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
 """
-function ∫G_kernel(ξ, p, ::TriKernel; ignore...)
+function ∫G_kernel(ξ, p, ::TriKernel; inside= ξ==p.x ? 1 : 0, ignore...)
     r = p.verts .- Ref(ξ); R = norm.(r)
     edges = sum(1:3) do i
         m,t,j = p.inplane[i],p.tangents[i],i%3+1
@@ -26,7 +26,7 @@ function ∫G_kernel(ξ, p, ::TriKernel; ignore...)
         (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
     end
     Ω = 2atan(r[1]'*(r[2]×r[3]),prod(R)+sum(i->r[i]'r[i%3+1]*R[(i+1)%3+1],1:3))
-    @inbounds edges+r[1]'p.n*Ω
+    @inbounds edges+r[1]'p.n*Ω-2π*sign(r[1]'p.n)*inside
 end
 
 using ForwardDiff: value, partials, Dual
@@ -35,13 +35,13 @@ using ForwardDiff: value, partials, Dual
 
 Approximate integral `∫ₚ G(x,x')da'` over source panel `p`. This function enforces ∇∫G(x,x)=2π̂n.
 """
-∫G(x,p) = ∫G_kernel(x,p,p.kernel)
-function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p) where {Tag,T,N}
-    val = ∫G_kernel(d,p,p.kernel) # use auto-diff
-    value(d) ≠ p.x && return val
-    ∂ = ntuple(i->2π*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
-    Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=2πn̂ contribution
-end
+∫G(x,p;kwargs...) = ∫G_kernel(x,p,p.kernel;kwargs...)
+# function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p) where {Tag,T,N}
+#     val = ∫G_kernel(d,p,p.kernel) # use auto-diff
+#     value(d) ≠ p.x && return val
+#     ∂ = ntuple(i->2π*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
+#     Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=2πn̂ contribution
+# end
 
 """
     ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G) = Aᵢⱼ

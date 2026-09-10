@@ -140,14 +140,18 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3
         uv(ξ, η) = uv₀ + ξ*((1-η)*d₁ + η*d₂); S̃ = Suv ∘ uv
         r = S̃(ξ, η) - x; R = norm(r)
         rp = δ+J₀*(uv(ξ, η)-uv₀); Rp = norm(rp); dAp = abs(det([d₁ d₂]))*ξ*dA₀
-        SA[-1/R,r/R^3...]*norm(normal(S̃,ξ,η))-SA[-1/Rp,rp/Rp^3...]*dAp
+        SA[-1/R,r/R^3...]*norm(normal(S̃,ξ,η))#-SA[-1/Rp,rp/Rp^3...]*dAp
     end
     self = sum(1:4) do i
         d₁,d₂ = uvᵤᵥ[i]-uv₀,uvᵤᵥ[i%4+1]-uv₀
-        Ip = planar(δ,J₀*d₁,J₀*d₂)
-        cubature && return Ip+hcubature(x->diff(x...,d₁,d₂),SA[0.,0.],SA[1.,1.],rtol=1e-3)[1]
-        Ip+sum(diff((1+Δg[j])/2,(1+Δg[k])/2,d₁,d₂)*wg[j]*wg[k]/4 for k in eachindex(wg), j in eachindex(wg))
+        cubature && return hcubature(x->diff(x...,d₁,d₂),SA[0.,0.],SA[1.,1.],rtol=1e-3)[1]
+        sum(diff((1+Δg[j])/2,(1+Δg[k])/2,d₁,d₂)*wg[j]*wg[k]/4 for k in eachindex(wg), j in eachindex(wg))
     end
+    # end +sum(1:2:3) do i
+    #     d₁,d₂,d₃ = uvᵤᵥ[i]-uv₀,uvᵤᵥ[i%4+1]-uv₀,uvᵤᵥ[(i+1)%4+1]-uv₀
+    #     p = measure(J₀*d₁,J₀*d₂,J₀*d₃); ϕ(x) = ∫G(x,p;inside=norm(δ)<1e-8 ? 1/2 : 0.)
+    #     SA[ϕ(-δ),gradient(ϕ,-δ)...]
+    # end
     # combine everything into named tuple
     (;x, n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=normalize.(ndA₄), ϕ=self[1],
         v = popfirst(self), verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel())
@@ -155,11 +159,6 @@ end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
 unwrap(a) = map(i->a[i],SA[1,2,4,3])
-
-function planar(δ,dx₁,dx₂)
-    ϕ(x) = ∫G(x,measure(zero(δ),dx₁,dx₂))
-    return SA[ϕ(-δ),gradient(ϕ,-δ)...]
-end
 
 struct TriKernel <: GreenKernel end
 """

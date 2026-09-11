@@ -6,7 +6,7 @@ Represents a panel **system**, i.e., a set of `panels` with strengths `q` used t
 satisfy the boundary conditions for the Green's function `∫G(x,p)`.
 
 The system consists of:
-- `panels::Table`: Panels defining the body geometry. **Note** all panel normals must 
+- `panels::Table`: Panels defining the body geometry. **Note** all panel normals must
 point *into* the fluid region.
 - `q::Vector` Option initial strength vector which is added as a column to `sys.body`.
 - `U::SVector{3}`: Optional background flow vector.
@@ -57,4 +57,4 @@ function abstract_show(io,sys)
     print(io, "  strength extrema: $(extrema(sys.body.q))")
 end
 bodyarea(sys) = sum(sys.body.dA)
-bodyvol(sys) = sum(p->p.x'p.n * p.dA,sys.body) / 3
+bodyvol(sys) = sum(p->p.x'normalize(p.n) * p.dA,sys.body) / 3

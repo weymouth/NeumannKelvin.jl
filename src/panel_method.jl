@@ -3,21 +3,27 @@
 Green function `G(x)` for a source at position `a`.
 """
 source(x,a) = -1/norm(x-a)
-""" ∫G_kernel(x,p) = p.dA*source(x,p.x)
+""" ∫G(x,p) = p.dA*source(x,p.x)
 
 Monopole Green's function for a source panel `p`.
 """
-∫G_kernel(x,p,args...) = p.dA*source(x,p.x)
-""" ∫G_kernel(ξ,p,::QuadKernel) = ∑ᵢ wgᵢ*source(ξ,xgᵢ)
+∫G(x,p,args...) = p.dA*source(x,p.x)
+""" ∫G(ξ,p,::QuadKernel; d²=25) = ∑ᵢ wgᵢ*source(ξ,xgᵢ)
 
-Gauss quadrature over source panel `p`.
+Gauss quadrature over source panel `p`. Uses a monopole if `r²/dA>d²`. The self-influence integral
+is desingularized using the exact tangent plane potential.
 """
-∫G_kernel(ξ,p,::QuadKernel) = (r²=sum(abs2,ξ-p.x); r²>5p.dA ? -p.dA/√r² : sum(w*source(ξ,x) for (x,w) in zip(p.xg,p.wg)))
-""" ∫G_kernel(ξ,p,::TriKernel)
+function ∫G(ξ,p,::QuadKernel; d²=25,ignore...)
+    r²=sum(abs2,ξ-p.x)
+    r²>d²*p.dA && return -p.dA/√r²
+    r²>0 && return quadgl(x->source(ξ,x),x=p.xg,w=p.wg)
+    p.ϕ+(ξ-p.x)'p.v # AD-friendly pre-computed desingularized self-influence
+end
+""" ∫G(ξ,p,::TriKernel)
 
 Exact integrated potential over a triangular panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
 """
-function ∫G_kernel(ξ, p, ::TriKernel; inside= ξ==p.x ? 1 : 0, ignore...)
+function ∫G(ξ, p, ::TriKernel; inside= ξ==p.x ? 1 : 0, ignore...)
     r = p.verts .- Ref(ξ); R = norm.(r)
     edges = sum(1:3) do i
         m,t,j = p.inplane[i],p.tangents[i],i%3+1
@@ -28,20 +34,7 @@ function ∫G_kernel(ξ, p, ::TriKernel; inside= ξ==p.x ? 1 : 0, ignore...)
     Ω = 2atan(r[1]'*(r[2]×r[3]),prod(R)+sum(i->r[i]'r[i%3+1]*R[(i+1)%3+1],1:3))
     @inbounds edges+r[1]'p.n*Ω-2π*sign(r[1]'p.n)*inside
 end
-
-using ForwardDiff: value, partials, Dual
-"""
-    ∫G(x,p)
-
-Approximate integral `∫ₚ G(x,x')da'` over source panel `p`. This function enforces ∇∫G(x,x)=2π̂n.
-"""
-∫G(x,p;kwargs...) = ∫G_kernel(x,p,p.kernel;kwargs...)
-# function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p) where {Tag,T,N}
-#     val = ∫G_kernel(d,p,p.kernel) # use auto-diff
-#     value(d) ≠ p.x && return val
-#     ∂ = ntuple(i->2π*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
-#     Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=2πn̂ contribution
-# end
+∫G(ξ,p;kwargs...) = ∫G(ξ,p,p.kernel;kwargs...)
 
 """
     ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G) = Aᵢⱼ

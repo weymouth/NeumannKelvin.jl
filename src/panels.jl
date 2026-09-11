@@ -110,23 +110,23 @@ using ForwardDiff: jacobian
 
 Measures a parametric surface function `S(u,v)` for a `u,v ∈ [u±du/2]×[v±dv/2]` panel.
 Returns centroid point and normal `x,n`, the surface area `dA`, and the Gauss-point
-locations and weights `xg,wg`. Panel corner data `vertices,nvertices` is used only for plotting.
+locations and weights `xg,wg`.
  - `flip=true` flips the panel to point the other way.
  - `cubature=true` uses an adaptive "h-cubature" for `dA,x,n`.
 """
 function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3],wg=SA[1,1])
     # define functions
     flip && return measure((v,u)->S(u,v),v,u,dv,du;cubature,Δg,wg)
-    nda(uv) = normal(S,uv...); da(uv) = norm(nda(uv)); Suv(uv) = S(uv...)
+    nda(uv) = normal(S,uv...); da = norm ∘ nda; Suv(uv) = S(uv...)
     cube(f) = hcubature(f,SA[u-du/2,v-dv/2],SA[u+du/2,v+dv/2],rtol=0.01)[1]
     # get Gauss-point values
     uv₄ = SVector.(u .+ du*Δg/2, v .+ dv*Δg'/2)  # Gauss-point coordinates
-    x₄, ndA₄ = Suv.(uv₄), nda.(uv₄)  # Gauss-point positions and normal vectors
-    w₄ = norm.(ndA₄) .* (wg*wg')*du*dv/4         # area-scaled weights
-    # get centroid values
+    x₄, n₄ = Suv.(uv₄), normalize.(nda.(uv₄))    # ... positions and normal vectors
+    w₄ = da.(uv₄) .* (wg*wg')*du*dv/4            # ... integral weights
+    # get area and area averages
     dA = cubature ? cube(da) : sum(w₄)
     x = cubature ? cube(uv->Suv(uv)*da(uv))/dA : sum(x₄ .* w₄)/dA
-    n = cubature ? normalize(cube(nda)) : normalize(sum(ndA₄ .* (wg*wg')))
+    n = cubature ? cube(nda)/dA : sum(n₄ .* w₄)/dA
     # get corner values
     uvᵤᵥ = unwrap(SVector.(u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2))
     xᵤᵥ, nᵤᵥ = Suv.(uvᵤᵥ), normalize.(nda.(uvᵤᵥ))
@@ -136,7 +136,7 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3
         duv = jacobian(Suv,uv₀)\(x-Suv(uv₀)); uv₀ += duv
     end
     dA₀,J₀,δ₀ = da(uv₀), jacobian(Suv,uv₀),Suv(uv₀)-x
-    function diff(uv) # self influence of S(uv) - (δ₀+J₀*uv)
+    function diff(uv) # self-influence of S(uv) - (δ₀+J₀*uv)
         r = Suv(uv) - x; R = norm(r)
         rp = δ₀+J₀*(uv-uv₀); Rp = norm(rp)
         SA[-1/R,r/R^3...]*da(uv)-SA[-1/Rp,rp/Rp^3...]*dA₀
@@ -147,7 +147,7 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3
         SA[ϕ(δ₀),gradient(ϕ,δ₀)...]
     end + (cubature ? cube(diff) : quadgl(diff;x=uv₄,w=w₄))
     # combine everything into named tuple
-    (;x, n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=normalize.(ndA₄), ϕ=self[1],
+    (;x, n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=n₄, ϕ=self[1],
         v = popfirst(self), verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel())
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)

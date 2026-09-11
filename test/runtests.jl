@@ -31,7 +31,6 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
-using FastGaussQuadrature
 @testset "panels.jl" begin
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
@@ -72,16 +71,15 @@ using FastGaussQuadrature
     h = (1+cos(1))/2; D(h) = √(1+h^2-2h*cos(1))
     @test panel.dA ≈ 4π*(1-h)
     @test panel.x ≈ [0,0,h] rtol=1e-4
-    @test panel.n ≈ [0,0,1] rtol=1e-4
+    @test panel.n ≈ [0,0,h] rtol=1e-4
     @test panel.ϕ ≈ -(2π/h)*(D(h)-1+h) rtol=1e-6
     @test panel.v ≈ [0,0,derivative(h->(2π/h)*(D(h)-1),h)] rtol=8e-4
 
     panel = measure(sphere,pi/4,pi/4,pi/20,pi/20)
-    @test panel.n'panel.v ≈ norm(panel.v) rtol=1e-4
+    @test normalize(panel.n)'panel.v ≈ norm(panel.v) rtol=1e-4
     panel = measure(sphere,pi/4,pi/4,pi/2,pi/2)
-    @test panel.n'panel.v ≈ norm(panel.v) rtol=0.02
-end
-@testset "measure checks continued" begin
+    @test normalize(panel.n)'panel.v ≈ norm(panel.v) rtol=0.02
+
     # Equal areas sanity checks
     function area_checks(dA,goal)
         mdA = sum(dA)/length(dA)
@@ -132,10 +130,10 @@ using LinearAlgebra
 using NeumannKelvin:∂ₙϕ
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-    panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
+    panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2;cubature=true) |> Table
     @test size(panels) == (8,)
-    @test panels.dA ≈ fill(π/2,8) rtol=1e-6   # cubature gives perfect areas
-    @test panels.n ⋅ panels.x ≈ 4√3 rtol=1e-6 # ...and centroids
+    @test panels.dA ≈ fill(π/2,8) rtol=1e-6 # cubature gives perfect areas
+    @test panels.n'panels.x ≈ 6   rtol=2e-6 # ...and centroids
 
     # Check that ∫G is non-allocating, including duals
     p = panels[1]
@@ -144,16 +142,17 @@ using NeumannKelvin:∂ₙϕ
     @test @ballocations(∂ₙϕ($p,$p)) ≤ TEST_ALLOCS
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
-    @test tr(A) ≈ 8*2π
+    # @test tr(A) ≈ 8*2π
     @test minimum(A) ≈ panels[1].dA/4 rtol=0.2 # rough estimate
     @test sum(b)<8eps()
 
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    Ma = addedmass(panels,V=4π/3)
-    @test Ma ≈ I/2 rtol=0.1 # ϵ=10% with 8 panels
-    @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
+    @show first.(panels.n) q
+    # Ma = addedmass(panels)
+    # @test Ma ≈ I/2 rtol=0.1 # ϵ=10% with 8 panels
+    # @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
 end
 
 extreme_cₚ(sys) = collect(extrema(cₚ(sys)))

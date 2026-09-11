@@ -57,4 +57,4 @@ function abstract_show(io,sys)
     print(io, "  strength extrema: $(extrema(sys.body.q))")
 end
 bodyarea(sys) = sum(sys.body.dA)
-bodyvol(sys) = sum(p->p.x'normalize(p.n) * p.dA,sys.body) / 3
+bodyvol(sys) = sum(p->p.x'p.n * p.dA,sys.body) / 3

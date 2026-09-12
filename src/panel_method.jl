@@ -10,14 +10,12 @@ Monopole Green's function for a source panel `p`.
 ∫G(x,p,args...) = p.dA*source(x,p.x)
 """ ∫G(ξ,p,::QuadKernel; d²=25) = ∑ᵢ wgᵢ*source(ξ,xgᵢ)
 
-Gauss quadrature over source panel `p`. Uses a monopole if `r²/dA>d²`. The self-influence integral
-is desingularized using the exact tangent plane potential.
+Gauss quadrature over source panel `p`. Uses a monopole if `r²/dA>d²`.
 """
-function ∫G(ξ,p,::QuadKernel; d²=25,ignore...)
-    r²=sum(abs2,ξ-p.x)
+function ∫G(ξ,p,::QuadKernel; d²=5,ignore...)
+    r² = sum(abs2,ξ-p.x)
     r²>d²*p.dA && return -p.dA/√r²
-    r²>0 && return quadgl(x->source(ξ,x),x=p.xg,w=p.wg)
-    p.ϕ+(ξ-p.x)'p.v # AD-friendly pre-computed desingularized self-influence
+    quadgl(x->source(ξ,x),x=p.xg,w=p.wg)+(r²==0 ? 2π*(ξ-p.x)'p.n : 0)
 end
 """ ∫G(ξ,p,::TriKernel)
 

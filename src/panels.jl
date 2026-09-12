@@ -123,34 +123,20 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3
     uv₄ = SVector.(u .+ du*Δg/2, v .+ dv*Δg'/2)  # Gauss-point coordinates
     x₄, n₄ = Suv.(uv₄), normalize.(nda.(uv₄))    # ... positions and normal vectors
     w₄ = da.(uv₄) .* (wg*wg')*du*dv/4            # ... integral weights
+    # get corner values
+    uvᵤᵥ = unwrap(SVector.(u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2))
+    xᵤᵥ, nᵤᵥ = Suv.(uvᵤᵥ), normalize.(nda.(uvᵤᵥ))
     # get area and area averages
     dA = cubature ? cube(da) : sum(w₄)
     x = cubature ? cube(uv->Suv(uv)*da(uv))/dA : sum(x₄ .* w₄)/dA
     n = normalize(cubature ? cube(nda) : sum(n₄ .* w₄))
-    # get corner values
-    uvᵤᵥ = unwrap(SVector.(u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2))
-    xᵤᵥ, nᵤᵥ = Suv.(uvᵤᵥ), normalize.(nda.(uvᵤᵥ))
-    # closest point on the surface to x
+    # closest point on the surface to centroid
     uv₀ = SA[u,v]; duv = jacobian(Suv,uv₀)\(x-S(u,v)); uv₀ += duv
-    while duv'duv > 1e-8*du*dv # minimize |x-S(uv₀)|
+    while duv'duv > 1e-8*du*dv
         duv = jacobian(Suv,uv₀)\(x-Suv(uv₀)); uv₀ += duv
     end
-    dA₀,J₀,δ₀ = da(uv₀),jacobian(Suv,uv₀),Suv(uv₀)-x
-    # self-influence difference between the actual surface S(uv) and the tangent plane: δ₀+J₀*uv
-    function diff(uv) 
-        r = Suv(uv) - x; R = norm(r)
-        p = δ₀+J₀*(uv-uv₀); P = norm(p)
-        SA[-1/R,r/R^3...]*da(uv)-SA[-1/P,p/P^3...]*dA₀
-    end
-    # self-influence = ∫ diff(uv) dA + exact tangent plane triangles
-    self = (cubature ? cube(diff) : quadgl(diff;x=uv₄,w=w₄)) + sum((1,3)) do i
-        x₁,x₂,x₃ = ntuple(j->J₀*(uvᵤᵥ[(i+j-2)%4+1]-uv₀), 3)
-        p = measure(x₁,x₂,x₃); ϕ(x) = ∫G(x,p;inside=norm(δ₀)<1e-8 ? 1/2 : 0.)
-        SA[ϕ(δ₀),gradient(ϕ,δ₀)...]
-    end
     # combine everything into named tuple
-    (;x, n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=n₄, verts=xᵤᵥ, nverts=nᵤᵥ, 
-        ϕ=first(self), v=popfirst(self), kernel=QuadKernel())
+    (;x=Suv(uv₀), n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=n₄, verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel())
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))

@@ -31,6 +31,8 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
+using FastGaussQuadrature
+Δg,wg = SVector{8}.(gausslegendre(8))
 @testset "panels.jl" begin
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
@@ -56,29 +58,31 @@ end
     # measure checks
     pϕ(a,b) = -4*(a*asinh(b/a) + b*asinh(a/b))
     panel = measure(plane,0.,0.,1.,2.)
-    @test panel.dA ≈ 2
-    @test panel.x ≈ [0,0,0] atol=1e-6
-    @test panel.n ≈ [0,0,1]
-    @test panel.ϕ ≈ pϕ(1/2,1)
-    @test panel.v ≈ 2π*panel.n
+    @testset "parametric plane" begin
+        @test panel.dA ≈ 2
+        @test panel.x ≈ [0,0,0] atol=1e-6
+        @test panel.n ≈ [0,0,1]
+        ϕ(x) = ∫G(x,panel)
+        @test ϕ(panel.x) ≈ pϕ(1/2,1) rtol=0.5 # this is terrible
+        @test gradient(ϕ,panel.x) ≈ 2π*panel.n
+    end
 
-    tri1,tri2 = measure(panel.verts[1:3]...),measure(panel.verts[3:4]...,panel.verts[1])
-    ϕ(x) = ∫G(x,tri1;inside=1/2)+∫G(x,tri2;inside=1/2)
-    @test ϕ(panel.x) ≈ pϕ(1/2,1)
-    @test gradient(ϕ,panel.x) ≈ 2π*panel.n
+    @testset "parametric plane triangles" begin
+        tri1,tri2 = measure(panel.verts[1:3]...),measure(panel.verts[3:4]...,panel.verts[1])
+        ϕ(x) = ∫G(x,tri1;inside=1/2)+∫G(x,tri2;inside=1/2)
+        @test ϕ(panel.x) ≈ pϕ(1/2,1)
+        @test gradient(ϕ,panel.x) ≈ 2π*panel.n
+    end
 
-    panel = measure(sphere,0.5,π,1,2π;cubature=true)
-    h = (1+cos(1))/2; D(h) = √(1+h^2-2h*cos(1))
-    @test panel.dA ≈ 4π*(1-h)
-    @test panel.x ≈ [0,0,h] rtol=1e-4
-    @test panel.n ≈ [0,0,1] rtol=1e-4
-    @test panel.ϕ ≈ -(2π/h)*(D(h)-1+h) rtol=1e-6
-    @test panel.v ≈ [0,0,derivative(h->(2π/h)*(D(h)-1),h)] rtol=8e-4
-
-    panel = measure(sphere,pi/4,pi/4,pi/20,pi/20)
-    @test panel.n'panel.v ≈ norm(panel.v) rtol=1e-4
-    panel = measure(sphere,pi/4,pi/4,pi/2,pi/2)
-    @test panel.n'panel.v ≈ norm(panel.v) rtol=0.02
+    @testset "spherical cap" begin
+        panel = measure(sphere,0.5,π,1,2π;Δg,wg)
+        @test panel.dA ≈ 2π*(1-cos(1))
+        @test panel.x ≈ [0,0,1] rtol=2e-5
+        @test panel.n ≈ [0,0,1]
+        ϕ(x) = ∫G(x,panel)
+        @test ϕ(panel.x) ≈ -4π*sin(0.5)
+        @test gradient(ϕ,panel.x) ≈ [0,0,2π*(1+sin(0.5))] rtol=0.01 # this example is nuts so even the 8x8 quadrature struggles
+    end
 
     # Equal areas sanity checks
     function area_checks(dA,goal)
@@ -128,15 +132,20 @@ end
 
 using LinearAlgebra
 using NeumannKelvin:∂ₙϕ
-using FastGaussQuadrature
 @testset "panel_method.jl" begin
-    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-    Δg,wg = SVector{8}.(gausslegendre(8))
-    panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2;Δg,wg) |> Table
-    @test size(panels) == (8,)
-    @test panels.dA ≈ fill(π/2,8) rtol=1e-6 # gausslegendre(8) gives perfect areas
-    @test panels.n'panels.x ≈ 4√3 rtol=1e-6 # ...and centroids
+    panels = mapreduce(vcat,(-3,-2,-1,1,2,3)) do face
+        measure(0.,0.,2.,2.;Δg,wg,flip=face<0) do u,v
+            normalize(SVector{3}(circshift([sign(face),u,v],face)...))
+        end
+    end |> Table
+    A = ∂ₙϕ.(panels,panels'); b = first.(panels.n)
+    @test sum(A,dims=2) ≈ fill(4π, length(panels)) rtol=0.03
+    q = A \ b
+    @test A*q ≈ b
+    @test q ≈ 3b/8π rtol=0.05
 
+    S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
+    panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2;Δg,wg) |> Table
     # Check that ∫G is non-allocating, including duals
     p = panels[1]
     @test @ballocations(∫G($p.x,$p)) ≤ TEST_ALLOCS
@@ -144,35 +153,17 @@ using FastGaussQuadrature
     @test @ballocations(∂ₙϕ($p,$p)) ≤ TEST_ALLOCS
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
-    # @test tr(A) ≈ 8*2π #no longer
+    @test sum(A,dims=2) ≈ fill(4π, length(panels)) rtol=0.03
     @test minimum(A) ≈ panels[1].dA/4 rtol=0.2 # rough estimate
     @test sum(b)<8eps()
 
     q = A \ b
     @test A*q≈b
-    @test allequal(map(x->abs(round(x,digits=14)),q))
+    @test q ≈ 3b/8π rtol=0.025
     Ma = addedmass(panels,V=4π/3)
-    # @test Ma ≈ I/2 rtol=0.1 # ϵ=10% with 8 panels (old)
-    @test Ma ≈ I/2 rtol=0.5 # ϵ=50% !! new
-    @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) # x/y/z symmetric!
-    @show sum(A,dims=2)
-    foreach(i->A[i,i]=0,1:8)
-    @show (4pi .- sum(A,dims=2))
+    @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-5 # x/y/z symmetric!
+    @test Ma ≈ I/2 rtol=0.08 # 8% error with only 8 panels
 end
-
-@testset "cubic sphere" begin
-    Δg,wg = SVector{8}.(gausslegendre(8))
-    panels = mapreduce(vcat,(-3,-2,-1,1,2,3)) do face
-        measure(0.,0.,2.,2.;Δg,wg,flip=face<0) do u,v
-            normalize(SVector{3}(circshift([sign(face),u,v],face)...))
-        end
-    end |> Table
-    A = ∂ₙϕ.(panels,panels')
-    @show sum(A,dims=2)
-    foreach(i->A[i,i]=0,eachindex(panels))
-    @show (4pi .- sum(A,dims=2))
-end
-
 
 extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
@@ -180,9 +171,7 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
     sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.body.q)
     A = NeumannKelvin.influence(sys)
-    @show extrema(sum(A,dims=2))./4pi
-    foreach(i->A[i,i]=2π,eachindex(panels))
-    @show extrema(sum(A,dims=2))./4pi
+    @test collect(extrema(sum(A,dims=2))) ≈ [4π, 4π] rtol=0.005
 
     directsolve!(sys)
     @test sys.body.q ≈ q

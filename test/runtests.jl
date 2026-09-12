@@ -155,13 +155,35 @@ using FastGaussQuadrature
     # @test Ma ≈ I/2 rtol=0.1 # ϵ=10% with 8 panels (old)
     @test Ma ≈ I/2 rtol=0.5 # ϵ=50% !! new
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) # x/y/z symmetric!
+    @show sum(A,dims=2)
+    foreach(i->A[i,i]=0,1:8)
+    @show (4pi .- sum(A,dims=2))
 end
+
+@testset "cubic sphere" begin
+    Δg,wg = SVector{8}.(gausslegendre(8))
+    panels = mapreduce(vcat,(-3,-2,-1,1,2,3)) do face
+        measure(0.,0.,2.,2.;Δg,wg,flip=face<0) do u,v
+            normalize(SVector{3}(circshift([sign(face),u,v],face)...))
+        end
+    end |> Table
+    A = ∂ₙϕ.(panels,panels')
+    @show sum(A,dims=2)
+    foreach(i->A[i,i]=0,eachindex(panels))
+    @show (4pi .- sum(A,dims=2))
+end
+
 
 extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
     sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.body.q)
+    A = NeumannKelvin.influence(sys)
+    @show extrema(sum(A,dims=2))./4pi
+    foreach(i->A[i,i]=2π,eachindex(panels))
+    @show extrema(sum(A,dims=2))./4pi
+
     directsolve!(sys)
     @test sys.body.q ≈ q
     @test norm(steadyforce(sys)) < 4e-5

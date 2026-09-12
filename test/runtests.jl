@@ -128,11 +128,13 @@ end
 
 using LinearAlgebra
 using NeumannKelvin:∂ₙϕ
+using FastGaussQuadrature
 @testset "panel_method.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
-    panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2;cubature=true) |> Table
+    Δg,wg = SVector{8}.(gausslegendre(8))
+    panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2;Δg,wg) |> Table
     @test size(panels) == (8,)
-    @test panels.dA ≈ fill(π/2,8) rtol=1e-6 # cubature gives perfect areas
+    @test panels.dA ≈ fill(π/2,8) rtol=1e-6 # gausslegendre(8) gives perfect areas
     @test panels.n'panels.x ≈ 4√3 rtol=1e-6 # ...and centroids
 
     # Check that ∫G is non-allocating, including duals
@@ -142,16 +144,17 @@ using NeumannKelvin:∂ₙϕ
     @test @ballocations(∂ₙϕ($p,$p)) ≤ TEST_ALLOCS
 
     A,b = ∂ₙϕ.(panels,panels'),first.(panels.n)
-    # @test tr(A) ≈ 8*2π
+    # @test tr(A) ≈ 8*2π #no longer
     @test minimum(A) ≈ panels[1].dA/4 rtol=0.2 # rough estimate
     @test sum(b)<8eps()
 
     q = A \ b
     @test A*q≈b
     @test allequal(map(x->abs(round(x,digits=14)),q))
-    # Ma = addedmass(panels)
-    # @test Ma ≈ I/2 rtol=0.1 # ϵ=10% with 8 panels
-    # @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
+    Ma = addedmass(panels,V=4π/3)
+    # @test Ma ≈ I/2 rtol=0.1 # ϵ=10% with 8 panels (old)
+    @test Ma ≈ I/2 rtol=0.5 # ϵ=50% !! new
+    @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) # x/y/z symmetric!
 end
 
 extreme_cₚ(sys) = collect(extrema(cₚ(sys)))

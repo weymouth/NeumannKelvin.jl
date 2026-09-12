@@ -32,7 +32,7 @@ function ∫G(ξ, p, ::TriKernel; inside= ξ==p.x ? 1 : 0, ignore...)
         (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
     end
     Ω = 2atan(r[1]'*(r[2]×r[3]),prod(R)+sum(i->r[i]'r[i%3+1]*R[(i+1)%3+1],1:3))
-    @inbounds edges+r[1]'p.n*Ω-2π*sign(r[1]'p.n)*inside
+    @inbounds edges+r[1]'p.n*Ω-2π*r[1]'p.n*inside
 end
 ∫G(ξ,p;kwargs...) = ∫G(ξ,p,p.kernel;kwargs...)
 

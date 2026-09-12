@@ -69,9 +69,21 @@ using FastGaussQuadrature
 
     @testset "parametric plane triangles" begin
         tri1,tri2 = measure(panel.verts[1:3]...),measure(panel.verts[3:4]...,panel.verts[1])
-        ϕ(x) = ∫G(x,tri1;inside=1/2)+∫G(x,tri2;inside=1/2)
+        ϕ(x) = ∫G(x,tri1)+∫G(x,tri2)
         @test ϕ(panel.x) ≈ pϕ(1/2,1)
-        @test gradient(ϕ,panel.x) ≈ 2π*panel.n
+    end
+
+    @testset "polygon self-influence" begin
+        using NeumannKelvin: ∂ₙϕ
+        tri = measure(panel.verts[1:3]...)
+        quad = measure(panel.verts...) # rectangle: centroid sits exactly on the fan-triangulation diagonal
+        pent = measure(SA[0.,0,0], SA[1.,0,0], SA[1.5,1,0], SA[0.5,1.5,0], SA[-0.5,1,0])
+        # normal self-jump must be exactly 2π regardless of shape/symmetry
+        for p in (tri, quad, pent)
+            @test ∂ₙϕ(p,p) ≈ 2π
+        end
+        # tangential self-gradient vanishes only for centrally-symmetric shapes (e.g. the rectangle)
+        @test gradient(x->∫G(x,quad), quad.x) ≈ 2π*quad.n
     end
 
     @testset "spherical cap" begin
@@ -169,7 +181,7 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.body.q)
+    sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,2]),atol=1e-8); q = copy(sys.body.q)
     A = NeumannKelvin.influence(sys)
     @test collect(extrema(sum(A,dims=2))) ≈ [4π, 4π] rtol=0.005
 
@@ -380,7 +392,7 @@ using GeometryBasics,FileIO
     # panels = panelize(load("../examples/Icosahedron.stl"))
     panels = panelize(load("examples/Icosahedron.stl"))
     @test length(panels)==20
-    @test eltype(panels.kernel)==ext.TriKernel
+    @test eltype(panels.kernel)==NeumannKelvin.PolyKernel
     @test all([p.n'p.x>0 for p in panels]) # all outward facing
 
     sys = BodyPanelSystem(panels,wrap=PanelTree)

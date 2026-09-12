@@ -17,20 +17,24 @@ function ∫G(ξ,p,::QuadKernel; d²=5,ignore...)
     r²>d²*p.dA && return -p.dA/√r²
     quadgl(x->source(ξ,x),x=p.xg,w=p.wg)+(r²==0 ? 2π*(ξ-p.x)'p.n : 0)
 end
-""" ∫G(ξ,p,::TriKernel)
+""" ∫G(ξ,p,::PolyKernel)
 
-Exact integrated potential over a triangular panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
+Exact integrated potential over a polygonal panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
 """
-function ∫G(ξ, p, ::TriKernel; inside= ξ==p.x ? 1 : 0, ignore...)
-    r = p.verts .- Ref(ξ); R = norm.(r)
-    edges = sum(1:3) do i
-        m,t,j = p.inplane[i],p.tangents[i],i%3+1
+function ∫G(ξ, p, ::PolyKernel; ignore...)
+    r = p.verts .- Ref(ξ); R = norm.(r); N = length(p.verts)
+    edges = sum(1:N) do i
+        m,t,j = p.inplane[i],p.tangents[i],i%N+1
         numer = R[i] + r[i]'t
         denom = R[j] + r[j]'t
         (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
     end
-    Ω = 2atan(r[1]'*(r[2]×r[3]),prod(R)+sum(i->r[i]'r[i%3+1]*R[(i+1)%3+1],1:3))
-    @inbounds edges+r[1]'p.n*Ω-2π*r[1]'p.n*inside
+    ξ==p.x && return edges+2π*(ξ-p.x)'p.n # AD friendly self-jump
+    Ω = sum(2:N-1) do i # fan-triangulated solid angle (Van Oosterom & Strackee), reduces to single term at N=3
+        a,b,c = r[1],r[i],r[i+1]
+        2atan(a'*(b×c), R[1]*R[i]*R[i+1]+(a'b)*R[i+1]+(b'c)*R[1]+(c'a)*R[i])
+    end
+    @inbounds edges+r[1]'p.n*Ω
 end
 ∫G(ξ,p;kwargs...) = ∫G(ξ,p,p.kernel;kwargs...)
 

@@ -142,14 +142,18 @@ normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
 unwrap(a) = map(i->a[i],SA[1,2,4,3])
 
-struct TriKernel <: GreenKernel end
+struct PolyKernel <: GreenKernel end
 """
-    measure(v₁, v₂, v₃) -> (x,n,dA,verts)
+    measure(vᵢ...) -> (x,n,dA,verts)
 
-Measure the properties of a triangular panel defined by it's vertices in counter-clockwise order.
+Measure the properties of a planar polygonal panel defined by it's vertices in counter-clockwise order.
 """
-function measure(v₁, v₂, v₃)
-    n = (v₂-v₁) × (v₃-v₁); dA = norm(n)/2; n = normalize(n)
-    t₁ =  normalize(v₂ - v₁); t₂ = normalize(v₃-v₂); t₃ = normalize(v₁-v₃)
-    (x=(v₁+v₂+v₃)/3, n=n, dA=dA, verts=SA[v₁, v₂, v₃], tangents=SA[t₁, t₂, t₃], inplane=SA[t₁×n, t₂×n, t₃×n], kernel=TriKernel())
+function measure(verts::Vararg{SVector{3,T},N}) where {T,N}
+    v₁ = first(verts)
+    ndA = sum((verts[i]-v₁) × (verts[i+1]-v₁) for i in 2:N-1) # fan triangulation from v₁
+    dA = norm(ndA)/2; n = normalize(ndA)
+    nv = length(verts)
+    tangents = SVector{N}(ntuple(i -> normalize(verts[i%nv+1]-verts[i]), N))
+    inplane = SVector{N}(ntuple(i -> tangents[i]×n, N))
+    (; x=sum(verts)/N, n, dA, verts, tangents, inplane, kernel=PolyKernel())
 end

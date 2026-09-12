@@ -3,30 +3,40 @@
 Green function `G(x)` for a source at position `a`.
 """
 source(x,a) = -1/norm(x-a)
-""" ∫G_kernel(x,p) = p.dA*source(x,p.x)
+""" ∫G(x,p) = p.dA*source(x,p.x)
 
 Monopole Green's function for a source panel `p`.
 """
-∫G_kernel(x,p,args...) = p.dA*source(x,p.x)
-""" ∫G_kernel(ξ,p,::QuadKernel) = ∑ᵢ wgᵢ*source(ξ,xgᵢ)
+∫G(x,p,args...) = p.dA*source(x,p.x)
+""" ∫G(ξ,p,::QuadKernel; d²=25) = ∑ᵢ wgᵢ*source(ξ,xgᵢ)
 
-Gauss quadrature over source panel `p`.
+Gauss quadrature over source panel `p`. Uses a monopole if `r²/dA>d²`.
 """
-∫G_kernel(ξ,p,::QuadKernel) = (r²=sum(abs2,ξ-p.x); r²>5p.dA ? -p.dA/√r² : sum(w*source(ξ,x) for (x,w) in zip(p.xg,p.wg)))
-
-using ForwardDiff: value, partials, Dual
-"""
-    ∫G(x,p)
-
-Approximate integral `∫ₚ G(x,x')da'` over source panel `p`. This function enforces ∇∫G(x,x)=2π̂n.
-"""
-∫G(x,p) = ∫G_kernel(x,p,p.kernel)
-function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p) where {Tag,T,N}
-    val = ∫G_kernel(d,p,p.kernel) # use auto-diff
-    value(d) ≠ p.x && return val
-    ∂ = ntuple(i->2π*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
-    Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=2πn̂ contribution
+function ∫G(ξ,p,::QuadKernel; d²=5,ignore...)
+    r² = sum(abs2,ξ-p.x)
+    r²>d²*p.dA && return -p.dA/√r²
+    quadgl(x->source(ξ,x),x=p.xg,w=p.wg)+(r²==0 ? 2π*(ξ-p.x)'p.n : 0)
 end
+""" ∫G(ξ,p,::PolyKernel)
+
+Exact integrated potential over a polygonal panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
+"""
+function ∫G(ξ, p, ::PolyKernel; ignore...)
+    r = p.verts .- Ref(ξ); R = norm.(r); N = length(p.verts)
+    edges = sum(1:N) do i
+        m,t,j = p.inplane[i],p.tangents[i],i%N+1
+        numer = R[i] + r[i]'t
+        denom = R[j] + r[j]'t
+        (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
+    end
+    ξ==p.x && return edges+2π*(ξ-p.x)'p.n # AD friendly self-jump
+    Ω = sum(2:N-1) do i # fan-triangulated solid angle (Van Oosterom & Strackee), reduces to single term at N=3
+        a,b,c = r[1],r[i],r[i+1]
+        2atan(a'*(b×c), R[1]*R[i]*R[i+1]+(a'b)*R[i+1]+(b'c)*R[1]+(c'a)*R[i])
+    end
+    @inbounds edges+r[1]'p.n*Ω
+end
+∫G(ξ,p;kwargs...) = ∫G(ξ,p,p.kernel;kwargs...)
 
 """
     ∂ₙϕ(pᵢ,pⱼ;ϕ=∫G) = Aᵢⱼ
@@ -61,7 +71,7 @@ mapbody!(f,b,sys) = (AK.foreachindex(i-> b[i] = f(sys.body.x[i],sys), b); b)
 """
     u([x::SVector{3},] sys)
 
-Measure the velocity vector `u = U+∇Φ`. If no location `x` is given, a vector of 
+Measure the velocity vector `u = U+∇Φ`. If no location `x` is given, a vector of
 u at all body centers is calculated and is accelerated when Threads.nthreads()>1.
 
 See also: [`Φ`](@ref)

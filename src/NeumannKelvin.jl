@@ -5,7 +5,7 @@ using Reexport
 @reexport using TypedTables,StaticArrays
 Base.adjoint(t::Table) = permutedims(t)
 @reexport using ForwardDiff: derivative,gradient
-@reexport using LinearAlgebra: ×,⋅,tr,norm
+@reexport using LinearAlgebra: ×,⋅,tr,norm,det
 
 # Quadrature functions & utilities
 include("quad.jl")

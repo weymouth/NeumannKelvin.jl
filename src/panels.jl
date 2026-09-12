@@ -104,33 +104,56 @@ secant(Δ)=(Δ.b-Δ.a)/Δ.I
 abstract type GreenKernel end
 struct QuadKernel <: GreenKernel end
 using HCubature
+using ForwardDiff: jacobian
 """
     measure(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,xg,wg)
 
 Measures a parametric surface function `S(u,v)` for a `u,v ∈ [u±du/2]×[v±dv/2]` panel.
 Returns centroid point and normal `x,n`, the surface area `dA`, and the Gauss-point
-locations and weights `xg,wg`. Panel corner data `vertices,nvertices` is used only for plotting.
+locations and weights `xg,wg`.
  - `flip=true` flips the panel to point the other way.
  - `cubature=true` uses an adaptive "h-cubature" for `dA,x,n`.
 """
 function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3],wg=SA[1,1])
+    # define functions
     flip && return measure((v,u)->S(u,v),v,u,dv,du;cubature,Δg,wg)
-    # get Gauss-points
-    x₄ = S.(u .+ du*Δg/2, v .+ dv*Δg'/2)
-    n₄ = normal.(S, u .+ du*Δg/2, v .+ dv*Δg'/2)
-    dA₄ = norm.(n₄).*(wg*wg')*du*dv/4 # area-scaled weights
-    # get area
+    nda(uv) = normal(S,uv...); da = norm ∘ nda; Suv(uv) = S(uv...)
     cube(f) = hcubature(f,SA[u-du/2,v-dv/2],SA[u+du/2,v+dv/2],rtol=0.01)[1]
-    dA = cubature ? cube(uv->norm(normal(S,uv...))) : sum(dA₄)
-    # get centroid
-    x = cubature ? cube(uv->S(uv...)*norm(normal(S,uv...)))/dA : sum(x₄ .* dA₄)/dA
-    n = cubature ? normalize(cube(uv->normal(S,uv...))) : normalize(sum(n₄.*(wg*wg')))
-    # get corners (only for pretty plots)
-    xᵤᵥ = S.(u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2)
-    nᵤᵥ = normalize.(normal.(S, u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2))
+    # get Gauss-point values
+    uv₄ = SVector.(u .+ du*Δg/2, v .+ dv*Δg'/2)  # Gauss-point coordinates
+    x₄, n₄ = Suv.(uv₄), normalize.(nda.(uv₄))    # ... positions and normal vectors
+    w₄ = da.(uv₄) .* (wg*wg')*du*dv/4            # ... integral weights
+    # get corner values
+    uvᵤᵥ = unwrap(SVector.(u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2))
+    xᵤᵥ, nᵤᵥ = Suv.(uvᵤᵥ), normalize.(nda.(uvᵤᵥ))
+    # get area and area averages
+    dA = cubature ? cube(da) : sum(w₄)
+    x = cubature ? cube(uv->Suv(uv)*da(uv))/dA : sum(x₄ .* w₄)/dA
+    n = normalize(cubature ? cube(nda) : sum(n₄ .* w₄))
+    # closest point on the surface to centroid
+    uv₀ = SA[u,v]; duv = jacobian(Suv,uv₀)\(x-S(u,v)); uv₀ += duv
+    while duv'duv > 1e-8*du*dv
+        duv = jacobian(Suv,uv₀)\(x-Suv(uv₀)); uv₀ += duv
+    end
     # combine everything into named tuple
-    (;x, n, dA, xg=x₄, wg=dA₄ .* dA/sum(dA₄), ng=normalize.(n₄), verts=unwrap(xᵤᵥ), nverts=unwrap(nᵤᵥ), kernel=QuadKernel())
+    (;x=Suv(uv₀), n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=n₄, verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel())
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
 unwrap(a) = map(i->a[i],SA[1,2,4,3])
+
+struct PolyKernel <: GreenKernel end
+"""
+    measure(vᵢ...) -> (x,n,dA,verts)
+
+Measure the properties of a planar polygonal panel defined by it's vertices in counter-clockwise order.
+"""
+function measure(verts::Vararg{SVector{3,T},N}) where {T,N}
+    v₁ = first(verts)
+    ndA = sum((verts[i]-v₁) × (verts[i+1]-v₁) for i in 2:N-1) # fan triangulation from v₁
+    dA = norm(ndA)/2; n = normalize(ndA)
+    nv = length(verts)
+    tangents = SVector{N}(ntuple(i -> normalize(verts[i%nv+1]-verts[i]), N))
+    inplane = SVector{N}(ntuple(i -> tangents[i]×n, N))
+    (; x=sum(verts)/N, n, dA, verts, tangents, inplane, kernel=PolyKernel())
+end

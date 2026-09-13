@@ -15,13 +15,14 @@ Gauss quadrature over source panel `p`. Uses a monopole if `r²/dA>d²`.
 function ∫G(ξ,p,::QuadKernel; d²=5,ignore...)
     r² = sum(abs2,ξ-p.x)
     r²>d²*p.dA && return -p.dA/√r²
-    quadgl(x->source(ξ,x),x=p.xg,w=p.wg)+(r²==0 ? 2π*(ξ-p.x)'p.n : 0)
+    ξ==p.x && return p.ϕself+p.∇ϕself'*(ξ-p.x) # precomputed via singularity subtraction, AD-friendly linear surrogate
+    quadgl(x->source(ξ,x),x=p.xg,w=p.wg)
 end
 """ ∫G(ξ,p,::PolyKernel)
 
 Exact integrated potential over a polygonal panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
 """
-function ∫G(ξ, p, ::PolyKernel; ignore...)
+function ∫G(ξ, p, ::PolyKernel; Ω=ξ==p.x ? 2π : 0, ignore...)
     r = p.verts .- Ref(ξ); R = norm.(r); N = length(p.verts)
     edges = sum(1:N) do i
         m,t,j = p.inplane[i],p.tangents[i],i%N+1
@@ -29,12 +30,7 @@ function ∫G(ξ, p, ::PolyKernel; ignore...)
         denom = R[j] + r[j]'t
         (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
     end
-    ξ==p.x && return edges+2π*(ξ-p.x)'p.n # AD friendly self-jump
-    Ω = sum(2:N-1) do i # fan-triangulated solid angle (Van Oosterom & Strackee), reduces to single term at N=3
-        a,b,c = r[1],r[i],r[i+1]
-        2atan(a'*(b×c), R[1]*R[i]*R[i+1]+(a'b)*R[i+1]+(b'c)*R[1]+(c'a)*R[i])
-    end
-    @inbounds edges+r[1]'p.n*Ω
+    edges-Ω*r[1]'p.n
 end
 ∫G(ξ,p;kwargs...) = ∫G(ξ,p,p.kernel;kwargs...)
 

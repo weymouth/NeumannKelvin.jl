@@ -135,8 +135,16 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3
     while duv'duv > 1e-8*du*dv
         duv = jacobian(Suv,uv₀)\(x-Suv(uv₀)); uv₀ += duv
     end
+    x₀,J₀,dA₀ = Suv(uv₀), jacobian(Suv,uv₀), da(uv₀)
+    flat(uv) = x₀ + J₀*(uv-uv₀)
+    function Φself(ξ)
+        dA₀<1e-5*dA && return quadgl(x->source(ξ,x),x=x₄,w=w₄)    # cartesian fallback
+        diff(uv) = da(uv)*source(ξ,Suv(uv)) - dA₀*source(ξ,flat(uv))            # subtraction for singularity handling
+        quad_duffy(diff,uv₀,uvᵤᵥ,x=Δg,w=wg) + ∫G(ξ,measure(flat.(uvᵤᵥ)...);Ω=0) # polar difference integration
+    end
+    ϕself = Φself(x₀); ∇ϕself = 2π*n #+ gradient(Φself,x₀)
     # combine everything into named tuple
-    (;x=Suv(uv₀), n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=n₄, verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel())
+    (;x=x₀, n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=n₄, verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel(), ϕself, ∇ϕself)
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))

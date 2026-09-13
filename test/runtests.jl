@@ -4,10 +4,22 @@ TEST_ALLOCS = get(ENV, "CI", "false") == "true" ? 32 : 0
 BenchmarkTools.DEFAULT_PARAMETERS.seconds = 0.1
 
 using QuadGK
+Δg,wg = NeumannKelvin.xg8,NeumannKelvin.wg8
 @testset "quad.jl" begin
     xgl2,wgl2 = (-1/√3,1/√3),(1,1)
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,0,2,x=xgl2,w=wgl2)≈4
+
+    # integrating over a singularity is tough
+    target = quadgk(u->quadgk(v->-1/hypot(u,v),-1/2,0,1/2)[1],-1,0,1)[1]
+    @test NeumannKelvin.quadgl(u->NeumannKelvin.quadgl(v->-1/hypot(u,v),-1/2,1/2,x=Δg,w=wg),x=Δg,w=wg) ≈ target rtol=0.15 # 8^2 evals
+    @test NeumannKelvin.quadgl(u->NeumannKelvin.quadgl(v->-1/hypot(u,v),-1/2,1/2),-1,1) ≈ target rtol=0.05 # 32^2 evals
+
+    # Duffy transformation helps
+    verts,apex = NeumannKelvin.unwrap(SVector.(SA[-1/2,1/2],SA[-1.,1.]')),SA[0.,0.]
+    @test NeumannKelvin.quad_duffy(x->1,apex,verts) ≈ 2
+    @test NeumannKelvin.quad_duffy(x->-1/norm(x),apex,verts) ≈ target rtol=0.08           # 4*4 evals
+    @test NeumannKelvin.quad_duffy(x->-1/norm(x),apex,verts,x=Δg,w=wg) ≈ target rtol=8e-4 # 4*8^2 evals
 
     (a₁,f₁),(a₂,f₂)=NeumannKelvin.finite_ranges((0.,),x->x^2,4,Inf)
     @test [a₁,a₂]≈[-2,2] atol=0.3
@@ -31,8 +43,6 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
-using FastGaussQuadrature
-Δg,wg = SVector{8}.(gausslegendre(8))
 @testset "panels.jl" begin
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
@@ -62,15 +72,11 @@ using FastGaussQuadrature
         @test panel.dA ≈ 2
         @test panel.x ≈ [0,0,0] atol=1e-6
         @test panel.n ≈ [0,0,1]
+        @test panel.ϕself ≈ pϕ(1/2,1)
+        @test panel.∇ϕself ≈ 2π*panel.n
         ϕ(x) = ∫G(x,panel)
-        @test ϕ(panel.x) ≈ pϕ(1/2,1) rtol=0.5 # this is terrible
-        @test gradient(ϕ,panel.x) ≈ 2π*panel.n
-    end
-
-    @testset "parametric plane triangles" begin
-        tri1,tri2 = measure(panel.verts[1:3]...),measure(panel.verts[3:4]...,panel.verts[1])
-        ϕ(x) = ∫G(x,tri1)+∫G(x,tri2)
         @test ϕ(panel.x) ≈ pϕ(1/2,1)
+        @test gradient(ϕ,panel.x) ≈ 2π*panel.n
     end
 
     @testset "polygon self-influence" begin
@@ -82,8 +88,7 @@ using FastGaussQuadrature
         for p in (tri, quad, pent)
             @test ∂ₙϕ(p,p) ≈ 2π
         end
-        # tangential self-gradient vanishes only for centrally-symmetric shapes (e.g. the rectangle)
-        @test gradient(x->∫G(x,quad), quad.x) ≈ 2π*quad.n
+        @test ∫G(quad.x,quad) ≈ pϕ(1/2,1)
     end
 
     @testset "spherical cap" begin
@@ -91,9 +96,11 @@ using FastGaussQuadrature
         @test panel.dA ≈ 2π*(1-cos(1))
         @test panel.x ≈ [0,0,1] rtol=2e-5
         @test panel.n ≈ [0,0,1]
+        @test panel.ϕself ≈ -4π*sin(0.5) rtol=12e-5
+        @test panel.∇ϕself ≈ [0,0,2π*(1+sin(0.5))] rtol=1e-3
         ϕ(x) = ∫G(x,panel)
-        @test ϕ(panel.x) ≈ -4π*sin(0.5)
-        @test gradient(ϕ,panel.x) ≈ [0,0,2π*(1+sin(0.5))] rtol=0.01 # this example is nuts so even the 8x8 quadrature struggles
+        @test ϕ(panel.x) ≈ -4π*sin(0.5) rtol=12e-5
+        @test gradient(ϕ,panel.x) ≈ [0,0,2π*(1+sin(0.5))] rtol=1e-3
     end
 
     # Equal areas sanity checks
@@ -181,9 +188,9 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,2]),atol=1e-8); q = copy(sys.body.q)
+    sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.body.q)
     A = NeumannKelvin.influence(sys)
-    @test collect(extrema(sum(A,dims=2))) ≈ [4π, 4π] rtol=0.005
+    @test collect(extrema(sum(A,dims=2))) ≈ [4π, 4π] rtol=2e-3
 
     directsolve!(sys)
     @test sys.body.q ≈ q

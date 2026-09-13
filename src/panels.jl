@@ -160,8 +160,6 @@ function measure(verts::Vararg{SVector{3,T},N}) where {T,N}
     v₁ = first(verts)
     ndA = sum((verts[i]-v₁) × (verts[i+1]-v₁) for i in 2:N-1) # fan triangulation from v₁
     dA = norm(ndA)/2; n = normalize(ndA)
-    nv = length(verts)
-    tangents = SVector{N}(ntuple(i -> normalize(verts[i%nv+1]-verts[i]), N))
-    inplane = SVector{N}(ntuple(i -> tangents[i]×n, N))
-    (; x=sum(verts)/N, n, dA, verts, tangents, inplane, kernel=PolyKernel())
+    tangents = SVector{N}(ntuple(i -> normalize(verts[i%N+1]-verts[i]), N))
+    (; x=sum(verts)/N, n, dA, verts, tangents, inplane=map(t->t×n, tangents), kernel=PolyKernel())
 end

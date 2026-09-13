@@ -22,7 +22,7 @@ end
 
 Exact integrated potential over a polygonal panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
 """
-function ∫G(ξ, p, ::PolyKernel; Ω=ξ==p.x ? 2π : 0, ignore...)
+function ∫G(ξ, p, ::PolyKernel; Ω=nothing, ignore...)
     r = p.verts .- Ref(ξ); R = norm.(r); N = length(p.verts)
     edges = sum(1:N) do i
         m,t,j = p.inplane[i],p.tangents[i],i%N+1
@@ -30,7 +30,11 @@ function ∫G(ξ, p, ::PolyKernel; Ω=ξ==p.x ? 2π : 0, ignore...)
         denom = R[j] + r[j]'t
         (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
     end
-    edges-Ω*r[1]'p.n
+    isnothing(Ω) && (Ω = ξ==p.x ? -2π : sum(2:N-1) do i
+        a,b,c,Ra,Rb,Rc = r[1],r[i],r[i+1],R[1],R[i],R[i+1]
+        2atan(a'*(b×c), Ra*Rb*Rc + (a'b)*Rc + (b'c)*Ra + (c'a)*Rb)
+    end)
+    edges+Ω*r[1]'p.n
 end
 ∫G(ξ,p;kwargs...) = ∫G(ξ,p,p.kernel;kwargs...)
 

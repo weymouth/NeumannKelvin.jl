@@ -43,7 +43,7 @@ using QuadGK
     @test NeumannKelvin.complex_path(g,dg,rngs) ≈ I atol=1e-5
 end
 
-@testset "panels.jl" begin
+@testset "arclength and panelize" begin
     circ(u) = [4sin(u),4cos(u)]; ellip(u) = [3sin(u),cos(u)]
     @test NeumannKelvin.arcspeed(circ)(0.) == NeumannKelvin.arcspeed(circ)(0.5pi) ≈ 4
     @test NeumannKelvin.aₙ(circ,0.) ≈ NeumannKelvin.aₙ(circ,0.5pi) ≈ 4
@@ -63,46 +63,6 @@ end
     torus(θ₁,θ₂;r=0.3,R=1) = SA[(R+r*cos(θ₂))*cos(θ₁),(R+r*cos(θ₂))*sin(θ₁),r*sin(θ₂)]
     spheroid(θ₁,θ₂;a=1.,b=1.,c=3.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
     sphere(θ₁,θ₂) = spheroid(θ₁,θ₂; c=1.)
-    plane(u,v) = SA[u,v,0]
-
-    # measure checks
-    pϕ(a,b) = -4*(a*asinh(b/a) + b*asinh(a/b))
-    panel = measure(plane,0.,0.,1.,2.)
-    @testset "parametric plane" begin
-        @test panel.dA ≈ 2
-        @test panel.x ≈ [0,0,0] atol=1e-6
-        @test panel.n ≈ [0,0,1]
-        @test panel.ϕself ≈ pϕ(1/2,1)
-        @test panel.∇ϕself ≈ 2π*panel.n
-        ϕ(x) = ∫G(x,panel)
-        @test ϕ(panel.x) ≈ pϕ(1/2,1)
-        @test gradient(ϕ,panel.x) ≈ 2π*panel.n
-    end
-
-    @testset "polygon self-influence" begin
-        using NeumannKelvin: ∂ₙϕ
-        tri = measure(panel.verts[1:3]...)
-        quad = measure(panel.verts...) # rectangle: centroid sits exactly on the fan-triangulation diagonal
-        pent = measure(SA[0.,0,0], SA[1.,0,0], SA[1.5,1,0], SA[0.5,1.5,0], SA[-0.5,1,0])
-        # normal self-jump must be exactly 2π regardless of shape/symmetry
-        for p in (tri, quad, pent)
-            @test ∂ₙϕ(p,p) ≈ 2π
-        end
-        @test ∫G(quad.x,quad) ≈ pϕ(1/2,1)
-    end
-
-    @testset "spherical cap" begin
-        panel = measure(sphere,0.5,π,1,2π;Δg,wg)
-        @test panel.dA ≈ 2π*(1-cos(1))
-        @test panel.x ≈ [0,0,1] rtol=2e-5
-        @test panel.n ≈ [0,0,1]
-        @test panel.ϕself ≈ -4π*sin(0.5) rtol=12e-5
-        @test panel.∇ϕself ≈ [0,0,2π*(1+sin(0.5))] rtol=1e-3
-        ϕ(x) = ∫G(x,panel)
-        @test ϕ(panel.x) ≈ -4π*sin(0.5) rtol=12e-5
-        @test gradient(ϕ,panel.x) ≈ [0,0,2π*(1+sin(0.5))] rtol=1e-3
-    end
-
     # Equal areas sanity checks
     function area_checks(dA,goal)
         mdA = sum(dA)/length(dA)
@@ -136,6 +96,76 @@ end
 end
 
 using BenchmarkTools
+@testset "panels and kernels.jl" begin
+    spheroid(θ₁,θ₂;a=1.,b=1.,c=3.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
+    sphere(θ₁,θ₂) = spheroid(θ₁,θ₂; c=1.)
+    plane(u,v) = SA[u,v,0]
+
+    # measure checks
+    pϕ(a,b) = -4*(a*asinh(b/a) + b*asinh(a/b))
+    panel = measure(plane,0.,0.,1.,2.)
+    @testset "parametric plane" begin
+        @test panel.dA ≈ 2
+        @test panel.x ≈ [0,0,0] atol=1e-6
+        @test panel.n ≈ [0,0,1]
+        @test panel.ϕself ≈ pϕ(1/2,1)
+        @test panel.∇ϕself ≈ 2π*panel.n
+        ϕ(x) = ∫G(x,panel)
+        @test ϕ(panel.x) ≈ pϕ(1/2,1)
+        @test gradient(ϕ,panel.x) ≈ 2π*panel.n
+    end
+
+    @testset "polygon self-influence" begin
+        using NeumannKelvin: ∂ₙϕ
+        tri = measure(panel.verts[1:3]...)
+        quad = measure(panel.verts...) # rectangle: centroid sits exactly on the fan-triangulation diagonal
+        pent = measure(SA[0.,0,0], SA[1.,0,0], SA[1.5,1,0], SA[0.5,1.5,0], SA[-0.5,1,0])
+        # normal self-jump must be exactly 2π regardless of shape/symmetry
+        for p in (tri, quad, pent)
+            @test ∂ₙϕ(p,p) ≈ 2π
+        end
+        @test ∫G(quad.x,quad) ≈ pϕ(1/2,1)
+    end
+
+    @testset "PolyKernel general (non-self) evaluation" begin
+        panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
+        @test panel.x ≈ SA[2,1,0]/3
+        @test panel.n ≈ SA[0,0,1]
+        @test panel.dA ≈ 0.5
+        @test ∫G(SA[0,0,2],panel)/4π ≈ -0.01847387 rtol=1e-6
+        @test ∫G(SA[0,0,-0.5],panel)/4π ≈ -0.04558955 rtol=1e-6
+        @test ∫G(SA[0.5,1,0],panel)/4π ≈ -0.05806854 rtol=1e-6
+        @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ -0.03856218 rtol=1e-6
+        @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ -0.00495674 rtol=1e-6
+        @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
+        @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
+
+        panel = measure(SA_F32[-1/2,-1/2,0],SA_F32[1/2,-1/2,0],SA_F32[1/2,1/2,0],SA_F32[-1/2,1/2,0])
+        @test panel.x ≈ SA[0,0,0]
+        @test panel.n ≈ SA[0,0,1]
+        @test panel.dA ≈ 1
+        @test ∫G(SA[0,0,2],panel)/4π ≈ -0.03899412 rtol=1e-6
+        @test ∫G(SA[0,0,-0.5],panel)/4π ≈ -0.12626703 rtol=1e-6
+        @test ∫G(SA[0.5,1,0],panel)/4π ≈ -0.07396339 rtol=1e-6
+        @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ -0.11549639 rtol=1e-6
+        @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ -0.00992118 rtol=1e-6
+        @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
+        @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
+    end
+
+    @testset "spherical cap" begin
+        panel = measure(sphere,0.5,π,1,2π;Δg,wg)
+        @test panel.dA ≈ 2π*(1-cos(1))
+        @test panel.x ≈ [0,0,1] rtol=2e-5
+        @test panel.n ≈ [0,0,1]
+        @test panel.ϕself ≈ -4π*sin(0.5) rtol=12e-5
+        @test panel.∇ϕself ≈ [0,0,2π*(1+sin(0.5))] rtol=1e-3
+        ϕ(x) = ∫G(x,panel)
+        @test ϕ(panel.x) ≈ -4π*sin(0.5) rtol=12e-5
+        @test gradient(ϕ,panel.x) ≈ [0,0,2π*(1+sin(0.5))] rtol=1e-3
+    end
+end
+
 @testset "PanelSystem.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S, 0, 1f0π, 0, 2f0π, hᵤ=1/4f0)
@@ -188,7 +218,7 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.body.q)
+    sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,2]),atol=1e-8); q = copy(sys.body.q)
     A = NeumannKelvin.influence(sys)
     @test collect(extrema(sum(A,dims=2))) ≈ [4π, 4π] rtol=2e-3
 
@@ -383,18 +413,6 @@ end
 
 using GeometryBasics,FileIO
 @testset "GeometryBasics" begin
-    panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
-    @test panel.x ≈ SA[2,1,0]/3
-    @test panel.n ≈ SA[0,0,1]
-    @test panel.dA ≈ 0.5
-    @test ∫G(SA[0,0,2],panel)/4π ≈ -0.01847387 rtol=1e-6
-    @test ∫G(SA[0,0,-0.5],panel)/4π ≈ −0.04558955 rtol=1e-6
-    @test ∫G(SA[0.5,1,0],panel)/4π ≈ −0.05806854 rtol=1e-6
-    @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ −0.03856218 rtol=1e-6
-    @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ −0.00495674 rtol=1e-6
-    @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
-    @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
-
     ext = Base.get_extension(NeumannKelvin, :NeumannKelvinGeometryBasicsExt)
     # panels = panelize(load("../examples/Icosahedron.stl"))
     panels = panelize(load("examples/Icosahedron.stl"))

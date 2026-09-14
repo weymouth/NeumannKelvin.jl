@@ -104,7 +104,6 @@ secant(Δ)=(Δ.b-Δ.a)/Δ.I
 abstract type GreenKernel end
 struct QuadKernel <: GreenKernel end
 using HCubature
-using ForwardDiff: jacobian
 """
     measure(S,u,v,du,dv;flip=false,cubature=false) -> (x,n,dA,xg,wg)
 
@@ -130,21 +129,8 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3
     dA = cubature ? cube(da) : sum(w₄)
     x = cubature ? cube(uv->Suv(uv)*da(uv))/dA : sum(x₄ .* w₄)/dA
     n = normalize(cubature ? cube(nda) : sum(n₄ .* w₄))
-    # closest point on the surface to centroid
-    uv₀ = SA[u,v]; duv = jacobian(Suv,uv₀)\(x-S(u,v)); uv₀ += duv
-    while duv'duv > 1e-8*du*dv
-        duv = jacobian(Suv,uv₀)\(x-Suv(uv₀)); uv₀ += duv
-    end
-    x₀,J₀,dA₀ = Suv(uv₀), jacobian(Suv,uv₀), da(uv₀)
-    flat(uv) = x₀ + J₀*(uv-uv₀)
-    function Φself(ξ)
-        dA₀<1e-5*dA && return quadgl(x->source(ξ,x),x=x₄,w=w₄)                  # cartesian fallback
-        diff(uv) = da(uv)*source(ξ,Suv(uv)) - dA₀*source(ξ,flat(uv))            # subtraction for singularity handling
-        quad_duffy(diff,uv₀,uvᵤᵥ,x=Δg,w=wg) + ∫G(ξ,measure(flat.(uvᵤᵥ)...);Ω=0) # polar difference integration
-    end
-    ϕself = Φself(x₀); ∇ϕself = 2π*n + gradient(Φself,x₀)
     # combine everything into named tuple
-    (;x=x₀, n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=n₄, verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel(), ϕself, ∇ϕself)
+    (;x, n, dA, xg=x₄, wg=w₄ .* dA/sum(w₄), ng=n₄, verts=xᵤᵥ, nverts=nᵤᵥ, kernel=QuadKernel(), ϕ₀=quadgl(y->source(x,y),x=x₄,w=w₄))
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
@@ -157,9 +143,9 @@ struct PolyKernel <: GreenKernel end
 Measure the properties of a planar polygonal panel defined by it's vertices in counter-clockwise order.
 """
 function measure(verts::Vararg{SVector{3,T},N}) where {T,N}
-    v₁ = first(verts)
+    v₁ = first(verts); verts = SVector{N}(verts...)
     ndA = sum((verts[i]-v₁) × (verts[i+1]-v₁) for i in 2:N-1) # fan triangulation from v₁
     dA = norm(ndA)/2; n = normalize(ndA)
     tangents = SVector{N}(ntuple(i -> normalize(verts[i%N+1]-verts[i]), N))
-    (; x=sum(verts)/N, n, dA, verts, tangents, inplane=map(t->t×n, tangents), kernel=PolyKernel())
+    (;x=sum(verts)/N, n, dA, verts, tangents, inplane=map(t->t×n, tangents), kernel=PolyKernel())
 end

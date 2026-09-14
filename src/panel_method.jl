@@ -15,7 +15,7 @@ Gauss quadrature over source panel `p`. Uses a monopole if `r²/dA>d²`.
 function ∫G(ξ,p,::QuadKernel; d²=25,ignore...)
     r² = sum(abs2,ξ-p.x)
     r²>d²*p.dA && return -p.dA/√r²
-    ξ==p.x && return p.ϕself+p.∇ϕself'*(ξ-p.x) # precomputed via singularity subtraction, AD-friendly linear surrogate
+    ξ==p.x && return p.ϕ₀+2π*(ξ-p.x)'p.n # precomputed AD-friendly linear surrogate
     quadgl(x->source(ξ,x),x=p.xg,w=p.wg)
 end
 """ ∫G(ξ,p,::PolyKernel)

@@ -11,21 +11,6 @@ quadgl(f;x,w) = sum(i->w[i]*f(x[i]),eachindex(x,w))
 quadgl(f,a,b;x=xg32,w=wg32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 
 """
-    quad_duffy(f,apex,corners)
-
-Integrate `f(u)` over the polygon defined by `corners` (CCW) using a polar (Duffy) transform fanned from `apex`.
-"""
-quad_duffy(f,apex,corners::SVector{N};x=SA_F32[-1/√3,1/√3],w=SA_F32[1,1]) where N = sum(1:N) do i
-    function fp(ρ,s)
-        b,d = corners[i]-apex, corners[i%N+1]-corners[i]
-        e = b+s*d
-        J = abs(b[1]*e[2]-b[2]*e[1])
-        f(apex+ρ*e)*ρ*J
-    end
-    quadgl(ρ->quadgl(s->fp((ρ+1)/2,(s+1)/2);x,w);x,w)
-end/2
-
-"""
     complex_path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))
 
 Estimate the integral `∫f(t)dt` from `t=[-∞,∞]` using a complex path, see Gibbs 2024. The

@@ -1,7 +1,6 @@
 using FastGaussQuadrature
 const xlag,wlag = gausslaguerre(4)
 const xg32,wg32 = gausslegendre(32)
-const xg8,wg8 = gausslegendre(8)
 """
     quadgl(f,a=-1,b=1;x,w)
 

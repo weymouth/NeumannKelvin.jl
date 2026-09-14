@@ -3,8 +3,7 @@ using Test,BenchmarkTools
 TEST_ALLOCS = get(ENV, "CI", "false") == "true" ? 32 : 0
 BenchmarkTools.DEFAULT_PARAMETERS.seconds = 0.1
 
-using QuadGK
-Δg,wg = NeumannKelvin.xg8,NeumannKelvin.wg8
+using QuadGK,FastGaussQuadrature
 @testset "quad.jl" begin
     xgl2,wgl2 = (-1/√3,1/√3),(1,1)
     @test NeumannKelvin.quadgl(x->x^3-3x^2+4,x=xgl2,w=wgl2)≈6
@@ -85,6 +84,7 @@ end
 end
 
 using BenchmarkTools
+Δg,wg = gausslegendre(8)
 @testset "panels and kernels.jl" begin
     spheroid(θ₁,θ₂;a=1.,b=1.,c=3.) = SA[a*cos(θ₂)*sin(θ₁),b*sin(θ₂)*sin(θ₁),c*cos(θ₁)]
     sphere(θ₁,θ₂) = spheroid(θ₁,θ₂; c=1.)

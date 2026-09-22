@@ -38,6 +38,6 @@ function viz!(fig::Figure,ax::Axis3, panels::Union{Table,PanelTree}, values; vec
 end
 using Makie.GeometryBasics
 const quadface = decompose(QuadFace{GLIndex},Tessellation(Rect(0, 0, 1, 1), (2, 2)))
-panelmesh(p,::QuadKernel) = GeometryBasics.Mesh(Point3f.(p.verts), quadface, normal=Point3f.(p.nverts))
+panelmesh(p,::QuadKernel) = GeometryBasics.Mesh(Point3f.(p.verts), quadface, normal=Vec3f.(p.nverts))
 panelmesh(p,ignore...) = GeometryBasics.Mesh(Point3f.(p.verts), [TriangleFace{GLIndex}(1,2,3)])
 end

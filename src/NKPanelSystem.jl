@@ -101,6 +101,7 @@ function Ngk(x,y,z)
 end
 Ngk(X::SVector{3}) = Ngk(X...)
 
+using ForwardDiff: value
 # Wave-like disturbance
 function wavelike(x::T,y::T,z::T;γ=one)::T where T
     (x≥0 || z≤-10) && return zero(T)                 # trivial case

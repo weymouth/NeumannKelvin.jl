@@ -79,11 +79,16 @@ end
 # Singular part -2/π∫Im[(1+ζ+ζ²/2+ζ³/6)log(ζ)]dt using Newman's (1987) Uₘ,Vₘ, eqs 21-31
 function singular(x,y,z) # x,y ≥ 0
     R = hypot(x,y,z); ω = complex(-z,y)/(R+x) # ω = ρe^{iα}/(R+x)
-    sum(((p,q,r,isV,m,c),)->c*z^p*y^q*x^r*(isV ? V(m,ω) : U(m,R,x,z,ω)),Sterms)
+    P = ntuple(k->ω^k,8)
+    V = ntuple(m->W(imag,m,0,P),8)
+    u(m,Uₘ₋₂) = (oftype(R,Uc[m])-W(real,m,1,P)-(m-1)Uₘ₋₂)/m # recursion (29)
+    U₀,U₁ = 2log((R+x)/4),-2+2z/(R+x)
+    U₂ = u(2,U₀); U₄ = u(4,U₂); U₆ = u(6,U₄); U₈ = u(8,U₆)
+    U₃ = u(3,U₁); U₅ = u(5,U₃); U₇ = u(7,U₅)
+    U = (U₀,U₁,U₂,U₃,U₄,U₅,U₆,U₇,U₈)
+    sum(((p,q,r,isV,m,c),)->c*z^p*y^q*x^r*(isV ? V[m] : U[m+1]),Sterms)
 end
-V(m,ω) = W(imag,m,0,ω)
-U(m,R,x,z,ω) = m==0 ? 2log((R+x)/4) : m==1 ? -2+2z/(R+x) : (oftype(R,Uc[m])-W(real,m,1,ω)-(m-1)U(m-2,R,x,z,ω))/m
-W(f,m,e,ω) = ldexp(one(real(ω)),2-m)/m*sum(k->binomial(m,k)*(-1)^k*(m-2k)^e*f(ω^(m-2k)),0:(m-1)÷2)
+W(f,m,e,P) = ldexp(one(real(P[1])),2-m)/m*sum(k->binomial(m,k)*(-1)^k*(m-2k)^e*f(P[m-2k]),0:(m-1)÷2)
 const Uc = (0.,-1.,0.,1/4,0.,-1/8,0.,5/64)
 const Sterms = [(p,q,k-p-q,isodd(q),k+1+p+2j+isodd(q),(-1)^(p+(q+isodd(q))÷2)*binomial(q÷2,j)/
                 (factorial(p)*factorial(q)*factorial(k-p-q))) for k in 0:3 for p in 0:k for q in 0:k-p for j in 0:q÷2]

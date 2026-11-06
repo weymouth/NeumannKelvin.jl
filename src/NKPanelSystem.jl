@@ -73,8 +73,20 @@ function nearfield(x,y,z)
     R ≥ 10 ? l0+chebregions[][4](r2R(S)) :
     R ≥ 4  ? l0+chebregions[][3](S) :
     R ≥ 1  ? l0+chebregions[][2](S) :
-    R > 0  ? l0+chebregions[][1](S) : eltype(S)(-4.0)
+    R > 0  ? singular(abs(x),abs(y),z)+chebregions[][1](S) : eltype(S)(-4.0)
 end
+
+# Singular part -2/π∫Im[(1+ζ+ζ²/2+ζ³/6)log(ζ)]dt using Newman's (1987) Uₘ,Vₘ, eqs 21-31
+function singular(x,y,z) # x,y ≥ 0
+    R = hypot(x,y,z); ω = complex(-z,y)/(R+x) # ω = ρe^{iα}/(R+x)
+    sum(((p,q,r,isV,m,c),)->c*z^p*y^q*x^r*(isV ? V(m,ω) : U(m,R,x,z,ω)),Sterms)
+end
+V(m,ω) = W(imag,m,0,ω)
+U(m,R,x,z,ω) = m==0 ? 2log((R+x)/4) : m==1 ? -2+2z/(R+x) : (oftype(R,Uc[m])-W(real,m,1,ω)-(m-1)U(m-2,R,x,z,ω))/m
+W(f,m,e,ω) = ldexp(one(real(ω)),2-m)/m*sum(k->binomial(m,k)*(-1)^k*(m-2k)^e*f(ω^(m-2k)),0:(m-1)÷2)
+const Uc = (0.,-1.,0.,1/4,0.,-1/8,0.,5/64)
+const Sterms = [(p,q,k-p-q,isodd(q),k+1+p+2j+isodd(q),(-1)^(p+(q+isodd(q))÷2)*binomial(q÷2,j)/
+                (factorial(p)*factorial(q)*factorial(k-p-q))) for k in 0:3 for p in 0:k for q in 0:k-p for j in 0:q÷2]
 
 # Transformations to/from spherical (S) & Cartesian (X) coordinates
 S2X(S) = ((R,θ,α²)=S; α=√α²; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
@@ -84,19 +96,19 @@ r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1987
 # Create fast Chebychev interpolator for Ngk
 using FastChebInterp,QuadGK,SpecialFunctions
 const chebregions = Ref{NTuple{4,FastChebInterp.ChebPoly{3,Float64,Float64}}}()
-function makecheb(l,u;xfrm=identity,tol=1e-4)
+function makecheb(l,u;xfrm=identity,tol=1e-4,n=0)
     lb,ub = SA[l,0,0],SA[u,π/2-eps(),(π/2)^2];
     S = S2X.(xfrm.(chebpoints((16,16,8),lb,ub)))
     D = Array{Float64}(undef,size(S))
-    AK.foreachindex(i->D[i]=Ngk(S[i]),D)
+    AK.foreachindex(i->D[i]=Ngk(S[i]...;n),D)
     chebinterp(D,lb,ub;tol) # create interpolation function
 end
 
 # Computed desingularized ∫Nᵢdt using adaptive Gauss-Konrad quadrature
 using Base.MathConstants: γ
-function Ngk(x,y,z)
+function Ngk(x,y,z;n=0)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)+im*eps()
-    Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ) # desingularized, see Newman 1987
+    Ni(t) = imag(expintx(ζ(t))+evalpoly(ζ(t),(1,1,1/2,1/6)[1:n+1])*log(ζ(t))+γ) # desingularized to O(ζⁿ⁺¹logζ)
     2/π*quadgk(Ni,-1,0,1)[1]
 end
 Ngk(X::SVector{3}) = Ngk(X...)

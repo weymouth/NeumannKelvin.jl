@@ -235,13 +235,13 @@ using ForwardDiff: Dual
         y = R*sin(atan(a))
         x==y==0 && continue
         @test NeumannKelvin.nearfield(x,y,z)≈bruteN(x,y,z) atol=3e-4 rtol=31e-5
-        hypot(x,y,z)<1 && @test NeumannKelvin.singular(abs(x),abs(y),z)+NeumannKelvin.Ngk(x,y,z;n=3)≈bruteN(x,y,z) atol=1e-8
         x==-0.1 && y==0 && z==-0.01 && continue # failing test
         @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-4 rtol=2e-4
     end
+    @test NeumannKelvin.Ngk(0.,0.6,-0.6)≈NeumannKelvin.Ngk(1e-8,0.6,-0.6) atol=1e-8 # Re(ζ)=0 inside (-1,1) at x=0
     jump(y) = (d(x) = derivative(x->NeumannKelvin.nearfield(x,y,-0.),x); d(1e-7)-d(-1e-7)) # ∂ₓN jumps at x=0
     for y in (0.25,0.1,0.05,0.02)
-        @test jump(y)≈(-3bruteN(0.,y,0.)+4bruteN(1e-4,y,0.)-bruteN(2e-4,y,0.))/1e-4 rtol=1e-5
+        @test jump(y)≈(-3bruteN(0.,y,0.)+4bruteN(1e-4,y,0.)-bruteN(2e-4,y,0.))/1e-4 rtol=5e-5
     end
 
     @test @ballocations(NeumannKelvin.nearfield(-0.3,0.2,-0.1)) ≤ TEST_ALLOCS

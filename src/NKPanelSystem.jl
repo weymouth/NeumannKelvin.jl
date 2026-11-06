@@ -73,25 +73,10 @@ function nearfield(x,y,z)
     R ≥ 10 ? l0+chebregions[][4](r2R(S)) :
     R ≥ 4  ? l0+chebregions[][3](S) :
     R ≥ 1  ? l0+chebregions[][2](S) :
-    R > 0  ? singular(abs(x),abs(y),z)+chebregions[][1](S) : eltype(S)(-4.0)
+    R > 0  ? l0+Nlog(abs(x),abs(y),z)+chebregions[][1](S) : eltype(S)(-4.0)
 end
-
-# Singular part -2/π∫Im[(1+ζ+ζ²/2+ζ³/6)log(ζ)]dt using Newman's (1987) Uₘ,Vₘ, eqs 21-31
-function singular(x,y,z) # x,y ≥ 0
-    R = hypot(x,y,z); ω = complex(-z,y)/(R+x) # ω = ρe^{iα}/(R+x)
-    P = ntuple(k->ω^k,8)
-    V = ntuple(m->W(imag,m,0,P),8)
-    u(m,Uₘ₋₂) = (oftype(R,Uc[m])-W(real,m,1,P)-(m-1)Uₘ₋₂)/m # recursion (29)
-    U₀,U₁ = 2log((R+x)/4),-2+2z/(R+x)
-    U₂ = u(2,U₀); U₄ = u(4,U₂); U₆ = u(6,U₄); U₈ = u(8,U₆)
-    U₃ = u(3,U₁); U₅ = u(5,U₃); U₇ = u(7,U₅)
-    U = (U₀,U₁,U₂,U₃,U₄,U₅,U₆,U₇,U₈)
-    sum(((p,q,r,isV,m,c),)->c*z^p*y^q*x^r*(isV ? V[m] : U[m+1]),Sterms)
-end
-W(f,m,e,P) = ldexp(one(real(P[1])),2-m)/m*sum(k->binomial(m,k)*(-1)^k*(m-2k)^e*f(P[m-2k]),0:(m-1)÷2)
-const Uc = (0.,-1.,0.,1/4,0.,-1/8,0.,5/64)
-const Sterms = [(p,q,k-p-q,isodd(q),k+1+p+2j+isodd(q),(-1)^(p+(q+isodd(q))÷2)*binomial(q÷2,j)/
-                (factorial(p)*factorial(q)*factorial(k-p-q))) for k in 0:3 for p in 0:k for q in 0:k-p for j in 0:q÷2]
+# log(R) part of Newman's singular expansion to O(R⁴logR), the only part not smooth in S
+Nlog(x,y,z) = -x*(1+3z/4-x^2/8+y^2/16+5z^2/16)*log(hypot(x,y,z))
 
 # Transformations to/from spherical (S) & Cartesian (X) coordinates
 S2X(S) = ((R,θ,α²)=S; α=√α²; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
@@ -101,20 +86,20 @@ r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1987
 # Create fast Chebychev interpolator for Ngk
 using FastChebInterp,QuadGK,SpecialFunctions
 const chebregions = Ref{NTuple{4,FastChebInterp.ChebPoly{3,Float64,Float64}}}()
-function makecheb(l,u;xfrm=identity,tol=1e-4,n=0)
+function makecheb(l,u;xfrm=identity,tol=1e-4,f=Ngk)
     lb,ub = SA[l,0,0],SA[u,π/2-eps(),(π/2)^2];
     S = S2X.(xfrm.(chebpoints((16,16,8),lb,ub)))
     D = Array{Float64}(undef,size(S))
-    AK.foreachindex(i->D[i]=Ngk(S[i]...;n),D)
+    AK.foreachindex(i->D[i]=f(S[i]...),D)
     chebinterp(D,lb,ub;tol) # create interpolation function
 end
 
 # Computed desingularized ∫Nᵢdt using adaptive Gauss-Konrad quadrature
 using Base.MathConstants: γ
-function Ngk(x,y,z;n=0)
+function Ngk(x,y,z)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)+im*eps()
-    Ni(t) = imag(expintx(ζ(t))+evalpoly(ζ(t),(1,1,1/2,1/6)[1:n+1])*log(ζ(t))+γ) # desingularized to O(ζⁿ⁺¹logζ)
-    2/π*quadgk(Ni,-1,0,1)[1]
+    Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ) # desingularized, see Newman 1987
+    2/π*quadgk(Ni,-1,0,-z/(hypot(y,z)+eps()),1)[1] # split at Re(ζ)=0 for y ≥ 0
 end
 Ngk(X::SVector{3}) = Ngk(X...)
 

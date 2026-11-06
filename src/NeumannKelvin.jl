@@ -83,5 +83,5 @@ loadNURBS(args...;kwargs...) = @warn "Load NURBS and FileIO for loadNURBS functi
 export viz,viz!,components,extent,loadNURBS
 
 # Initialize chebregions on precompile instead of when `using NeumannKelvin`
-__init__() = chebregions[] = (makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R))
+__init__() = chebregions[] = (makecheb(eps(),1;tol=1e-6,f=(x,y,z)->Ngk(x,y,z)-Nlog(x,y,z)),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R))
 end

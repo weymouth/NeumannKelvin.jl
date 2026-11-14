@@ -8,12 +8,15 @@ Approximate ∫f(x)dx from x=[a,b] using the Gauss-Legendre weights and points `
 """
 quadgl(f;x,w) = sum(i->w[i]*f(x[i]),eachindex(x,w))
 quadgl(f,a,b;x=xg32,w=wg32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
+const xg16,wg16 = gausslegendre(16)
+# split at t=0, nearest the √(1+t²) branch points at t=±i
+quadgl0(f,a,b) = a<0<b ? quadgl(f,a,0;x=xg16,w=wg16)+quadgl(f,0,b;x=xg16,w=wg16) : quadgl(f,a,b;x=xg16,w=wg16)
 
 """
     complex_path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))
 
 Estimate the integral `∫f(t)dt` from `t=[-∞,∞]` using a complex path, see Gibbs 2024. The
-finite phase ranges `rngs` are integrated along the real line with QuadGK. The range end
+finite phase ranges `rngs` are integrated along the real line with `quadgl0`. The range end
 points where `flag=true` are integrated to ±∞ in the complex-plane using `±nsp(t₀,g,dg,γ)`.
 """
 @inline function complex_path(g,dg,rngs;γ=one,
@@ -24,7 +27,7 @@ points where `flag=true` are integrated to ±∞ in the complex-plane using `±n
     for i in 1:2:length(rngs)
         (t₁,∞₁),(t₂,∞₂) = rngs[i],rngs[i+1]
         ∞₁ && (val -= nsp(t₁,g,dg,γ))
-        val += quadgl(f,t₁,t₂)
+        val += quadgl0(f,t₁,t₂)
         ∞₂ && (val += nsp(t₂,g,dg,γ))
     end; val
 end

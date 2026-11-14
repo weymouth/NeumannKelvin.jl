@@ -291,7 +291,6 @@ using ForwardDiff: Dual
         y = R*sin(atan(a))
         x==y==0 && continue
         @test NeumannKelvin.nearfield(x,y,z)≈bruteN(x,y,z) atol=3e-4 rtol=31e-5
-        x==-0.1 && y==0 && z==-0.01 && continue # failing test
         @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-4 rtol=2e-4
     end
     @test NeumannKelvin.Ngk(0.,0.6,-0.6)≈NeumannKelvin.Ngk(1e-8,0.6,-0.6) atol=1e-8 # Re(ζ)=0 inside (-1,1) at x=0

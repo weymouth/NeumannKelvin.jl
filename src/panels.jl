@@ -134,3 +134,17 @@ end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
 unwrap(a) = map(i->a[i],SA[1,2,4,3])
+
+struct PolyKernel <: GreenKernel end
+"""
+    measure(vᵢ...) -> (x,n,dA,verts)
+
+Measure the properties of a planar polygonal panel defined by its vertices in counter-clockwise order.
+"""
+function measure(verts::Vararg{SVector{3,T},N}) where {T,N}
+    v₁ = first(verts); verts = SVector{N}(verts...)
+    ndA = sum((verts[i]-v₁) × (verts[i+1]-v₁) for i in 2:N-1) # fan triangulation from v₁
+    dA = norm(ndA)/2; n = normalize(ndA)
+    tangents = SVector{N}(ntuple(i -> normalize(verts[i%N+1]-verts[i]), N))
+    (;x=sum(verts)/N, n, dA, verts, tangents, inplane=map(t->t×n, tangents), kernel=PolyKernel())
+end

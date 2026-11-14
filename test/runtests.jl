@@ -126,6 +126,48 @@ using NeumannKelvin:∂ₙϕ
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
 end
 
+@testset "PolyKernel" begin
+    @testset "self-influence" begin
+        pϕ(a,b) = -4*(a*asinh(b/a) + b*asinh(a/b)) # rectangle [±a,±b] centroid potential
+        v = (SA[-1/2,-1,0],SA[1/2,-1,0],SA[1/2,1,0],SA[-1/2,1,0])
+        tri = measure(v[1:3]...)
+        quad = measure(v...) # centroid sits exactly on the fan-triangulation diagonal
+        pent = measure(SA[0.,0,0], SA[1.,0,0], SA[1.5,1,0], SA[0.5,1.5,0], SA[-0.5,1,0])
+        for p in (tri, quad, pent)
+            @test ∂ₙϕ(p,p) ≈ 2π # self-jump regardless of shape/symmetry
+        end
+        @test ∫G(quad.x,quad) ≈ pϕ(1/2,1)
+    end
+
+    @testset "triangle" begin
+        panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
+        @test panel.x ≈ SA[2,1,0]/3
+        @test panel.n ≈ SA[0,0,1]
+        @test panel.dA ≈ 0.5
+        @test ∫G(SA[0,0,2],panel)/4π ≈ -0.01847387 rtol=1e-6
+        @test ∫G(SA[0,0,-0.5],panel)/4π ≈ -0.04558955 rtol=1e-6
+        @test ∫G(SA[0.5,1,0],panel)/4π ≈ -0.05806854 rtol=1e-6
+        @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ -0.03856218 rtol=1e-6
+        @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ -0.00495674 rtol=1e-6
+        @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
+        @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
+    end
+
+    @testset "square" begin
+        panel = measure(SA_F32[-1/2,-1/2,0],SA_F32[1/2,-1/2,0],SA_F32[1/2,1/2,0],SA_F32[-1/2,1/2,0])
+        @test panel.x ≈ SA[0,0,0]
+        @test panel.n ≈ SA[0,0,1]
+        @test panel.dA ≈ 1
+        @test ∫G(SA[0,0,2],panel)/4π ≈ -0.03899412 rtol=1e-6
+        @test ∫G(SA[0,0,-0.5],panel)/4π ≈ -0.12626703 rtol=1e-6
+        @test ∫G(SA[0.5,1,0],panel)/4π ≈ -0.07396339 rtol=1e-6
+        @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ -0.11549639 rtol=1e-6
+        @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ -0.00992118 rtol=1e-6
+        @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
+        @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
+    end
+end
+
 extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
@@ -330,22 +372,9 @@ end
 
 using GeometryBasics,FileIO
 @testset "GeometryBasics" begin
-    panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
-    @test panel.x ≈ SA[2,1,0]/3
-    @test panel.n ≈ SA[0,0,1]
-    @test panel.dA ≈ 0.5
-    @test ∫G(SA[0,0,2],panel)/4π ≈ -0.01847387 rtol=1e-6
-    @test ∫G(SA[0,0,-0.5],panel)/4π ≈ −0.04558955 rtol=1e-6
-    @test ∫G(SA[0.5,1,0],panel)/4π ≈ −0.05806854 rtol=1e-6
-    @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ −0.03856218 rtol=1e-6
-    @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ −0.00495674 rtol=1e-6
-    @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
-    @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
-
-    ext = Base.get_extension(NeumannKelvin, :NeumannKelvinGeometryBasicsExt)
-    panels = panelize(load("../examples/Icosahedron.stl"))
+    panels = panelize(load(joinpath(@__DIR__,"..","examples","Icosahedron.stl")))
     @test length(panels)==20
-    @test eltype(panels.kernel)==ext.TriKernel
+    @test eltype(panels.kernel)==NeumannKelvin.PolyKernel
     @test all([p.n'p.x>0 for p in panels]) # all outward facing
 
     sys = BodyPanelSystem(panels,wrap=PanelTree)

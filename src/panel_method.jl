@@ -13,6 +13,24 @@ Monopole Green's function for a source panel `p`.
 Gauss quadrature over source panel `p`.
 """
 ∫G_kernel(ξ,p,::QuadKernel) = (r²=sum(abs2,ξ-p.x); r²>5p.dA ? -p.dA/√r² : sum(w*source(ξ,x) for (x,w) in zip(p.xg,p.wg)))
+""" ∫G_kernel(ξ,p,::PolyKernel)
+
+Exact integrated potential over a planar polygonal panel. See Katz and Plotkin, "Low-Speed Aerodynamics" (2001)
+"""
+function ∫G_kernel(ξ,p,::PolyKernel)
+    r = p.verts .- Ref(ξ); R = norm.(r); N = length(p.verts)
+    edges = sum(1:N) do i
+        m,t,j = p.inplane[i],p.tangents[i],i%N+1
+        numer = R[i] + r[i]'t
+        denom = R[j] + r[j]'t
+        (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
+    end
+    Ω = ξ==p.x ? -2π : sum(2:N-1) do i # solid angle, fan-triangulated from v₁
+        a,b,c,Ra,Rb,Rc = r[1],r[i],r[i+1],R[1],R[i],R[i+1]
+        2atan(a'*(b×c), Ra*Rb*Rc + (a'b)*Rc + (b'c)*Ra + (c'a)*Rb)
+    end
+    edges+Ω*r[1]'p.n
+end
 
 using ForwardDiff: value, partials, Dual
 """

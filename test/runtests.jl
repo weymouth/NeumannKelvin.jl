@@ -72,9 +72,23 @@ end
     panels = panelize(sphere,0,pi,0,2pi,hᵤ=0.6,flip=true)
     @test all(p->p.x'p.n<-0.9,panels)
 
-    # Check submerged
-    panels = panelize(spheroid,0,2pi/3,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
-    @test all(x->x[3]<0,panels.verts)
+    # Check submerged: every meridian strip crosses z=0 at θ₁=π/2
+    panels = panelize(spheroid,π/6,2π/3,0,2π,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
+    @test length(panels) > 0
+    @test all(v->all(x->x[3]<0,v),panels.verts)
+    @test sum(panels.dA) ≈ 2π*quadgk(θ->sin(θ)*√(9sin(θ)^2+cos(θ)^2),π/2,2π/3)[1] rtol=1e-5
+
+    # Strips that don't cross z=0 warn: wet strips are kept whole, dry strips dropped
+    deep(θ₁,θ₂) = spheroid(θ₁,θ₂)-SA[0,0,4]
+    wet = @test_logs (:warn,r"cross z=0") panelize(deep,π/6,2π/3,0,2π,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
+    @test wet.x == panelize(deep,π/6,2π/3,0,2π,hᵤ=0.6,hᵥ=0.3,transpose=true).x
+    dry = @test_logs (:warn,r"cross z=0") panelize((θ₁,θ₂)->spheroid(θ₁,θ₂)+SA[0,0,4],π/6,2π/3,0,2π,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
+    @test length(dry) == 0
+
+    # A collapsed edge throws, the other strip direction works, and tiny patches are skipped
+    @test_throws ArgumentError panelize(sphere,0,π/2,0,2π,hᵤ=0.3,transpose=true)
+    @test sum(panelize(sphere,0,π/2,0,2π,hᵤ=0.3).dA) ≈ 2π rtol=1e-5
+    @test length(panelize(sphere,0,0.01,0,0.01,hᵤ=0.5)) == 0
 
     # Check inputs
     @test_throws ArgumentError panelize(spheroid,0,pi,0,2pi,hᵤ=0)

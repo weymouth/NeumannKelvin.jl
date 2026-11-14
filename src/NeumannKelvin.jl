@@ -66,6 +66,7 @@ passing arguments to define the free surface extents and resolution for `NKPanel
     viz(sys;fsargs=(s=2)) # view NK solution with free surface extent s=2
 """
 viz(args...; kwargs...) = @warn "Load GLMakie or WGLMakie for viz functionality."
+viz!(args...; kwargs...) = @warn "Load GLMakie or WGLMakie for viz functionality."
 function cₚu(sys)
     vectors = u(sys); U² = sum(abs2,sys.U); cp = @. 1-sum(abs2,vectors)/U²
     return cp,vectors
@@ -78,8 +79,9 @@ function xyζ(sys::FSPanelSystem; ignore...)
     x,y,_ = reshape.(components(sys.freesurf.x),Ref(size(sys.fsm)))
     return x,y,ζ(sys) .* sys.ℓ
 end
-export viz,components,extent
+loadNURBS(args...;kwargs...) = @warn "Load NURBS and FileIO for loadNURBS functionality."
+export viz,viz!,components,extent,loadNURBS
 
 # Initialize chebregions on precompile instead of when `using NeumannKelvin`
-__init__() = chebregions[] = (makecheb(eps(),1),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R))
+__init__() = chebregions[] = (makecheb(eps(),1;tol=1e-6,f=(x,y,z)->Ngk(x,y,z)-Nlog(x,y,z)),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R))
 end

@@ -73,8 +73,10 @@ function nearfield(x,y,z)
     R ≥ 10 ? l0+chebregions[][4](r2R(S)) :
     R ≥ 4  ? l0+chebregions[][3](S) :
     R ≥ 1  ? l0+chebregions[][2](S) :
-    R > 0  ? l0+chebregions[][1](S) : eltype(S)(-4.0)
+    R > 0  ? l0+Nlog(abs(x),abs(y),z)+chebregions[][1](S) : eltype(S)(-4.0)
 end
+# log(R) part of Newman's singular expansion to O(R⁴logR), the only part not smooth in S
+Nlog(x,y,z) = -x*(1+3z/4-x^2/8+y^2/16+5z^2/16)*log(hypot(x,y,z))
 
 # Transformations to/from spherical (S) & Cartesian (X) coordinates
 S2X(S) = ((R,θ,α²)=S; α=√α²; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
@@ -84,11 +86,11 @@ r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1987
 # Create fast Chebychev interpolator for Ngk
 using FastChebInterp,QuadGK,SpecialFunctions
 const chebregions = Ref{NTuple{4,FastChebInterp.ChebPoly{3,Float64,Float64}}}()
-function makecheb(l,u;xfrm=identity,tol=1e-4)
+function makecheb(l,u;xfrm=identity,tol=1e-4,f=Ngk)
     lb,ub = SA[l,0,0],SA[u,π/2-eps(),(π/2)^2];
     S = S2X.(xfrm.(chebpoints((16,16,8),lb,ub)))
     D = Array{Float64}(undef,size(S))
-    AK.foreachindex(i->D[i]=Ngk(S[i]),D)
+    AK.foreachindex(i->D[i]=f(S[i]...),D)
     chebinterp(D,lb,ub;tol) # create interpolation function
 end
 
@@ -97,7 +99,7 @@ using Base.MathConstants: γ
 function Ngk(x,y,z)
     ζ(t) = (z*sqrt(1-t^2)+y*t+im*abs(x))*sqrt(1-t^2)+im*eps()
     Ni(t) = imag(expintx(ζ(t))+log(ζ(t))+γ) # desingularized, see Newman 1987
-    2/π*quadgk(Ni,-1,0,1)[1]
+    2/π*quadgk(Ni,-1,0,-z/(hypot(y,z)+eps()),1)[1] # split at Re(ζ)=0 for y ≥ 0
 end
 Ngk(X::SVector{3}) = Ngk(X...)
 

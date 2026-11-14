@@ -23,14 +23,15 @@ TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [weakdeps]
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NURBS = "dde13934-061e-461b-aa91-2c0fad390a0d"
-GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 
 [extensions]
-NeumannKelvinMakieExt = "Makie"
-NeumannKelvinNURBSExt = "NURBS"
 NeumannKelvinGeometryBasicsExt = "GeometryBasics"
+NeumannKelvinMakieExt = "Makie"
+NeumannKelvinNURBSExt = ["NURBS", "FileIO"]
 
 [compat]
 AcceleratedKernels = "0.4.3"
@@ -38,6 +39,7 @@ BenchmarkTools = "1.6.3"
 DataInterpolations = "8.0.1"
 FastChebInterp = "1"
 FastGaussQuadrature = "1"
+FileIO = "1.19.0"
 ForwardDiff = "0.10"
 HCubature = "1.7.0"
 ImplicitBVH = "0.7.0"
@@ -56,9 +58,9 @@ julia = "1.9"
 [extras]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
-NURBS = "dde13934-061e-461b-aa91-2c0fad390a0d"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 MeshIO = "7269a6da-0436-5bbc-96c2-40638cbb6118"
+NURBS = "dde13934-061e-461b-aa91-2c0fad390a0d"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]

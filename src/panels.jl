@@ -56,6 +56,7 @@ function panelize(surface,u₀=0,u₁=1f0,v₀=0,v₁=1f0;hᵤ=1,hᵥ=hᵤ,devli
     length(panels) ≤ N_max && return Table(panels)
     throw(ArgumentError("length(panels)=$(length(panels))>$N_max. Increase hᵤ,hᵥ,devlimit and/or N_max."))
 end
+panelize(patches::AbstractArray,args...;kwargs...) = mapreduce(patch->panelize(patch,args...;kwargs...),vcat,patches)
 function newlimits(r,low,high)
     z(u) = r(u)[3]+√eps(u)
     zero = find_zero(z,(low,high))
@@ -128,7 +129,7 @@ function measure(S,u,v,du,dv;flip=false,cubature=false,Δg=SA_F32[-1/√3,1/√3
     xᵤᵥ = S.(u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2)
     nᵤᵥ = normalize.(normal.(S, u .+ SA[-du,du]/2, v .+ SA[-dv,dv]'/2))
     # combine everything into named tuple
-    (x=x, n=n, dA=dA, xg=x₄, wg=dA₄ .* dA/sum(dA₄), verts=unwrap(xᵤᵥ), nverts=unwrap(nᵤᵥ), kernel=QuadKernel())
+    (;x, n, dA, xg=x₄, wg=dA₄ .* dA/sum(dA₄), ng=normalize.(n₄), verts=unwrap(xᵤᵥ), nverts=unwrap(nᵤᵥ), kernel=QuadKernel())
 end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))

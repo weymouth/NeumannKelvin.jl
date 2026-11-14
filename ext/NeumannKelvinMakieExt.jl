@@ -1,6 +1,6 @@
 module NeumannKelvinMakieExt
 using NeumannKelvin,Makie
-import NeumannKelvin: viz,cₚu,xyζ,QuadKernel,AbstractPanelSystem
+import NeumannKelvin: viz,viz!,cₚu,xyζ,QuadKernel,AbstractPanelSystem
 
 # viz wrappers
 function viz(panels::Union{Table,PanelTree},values=panels.dA; vectors=panels.n, title="", kwargs...)
@@ -24,7 +24,7 @@ end
 
 # Generate mesh from Table data
 function viz!(fig::Figure,ax::Axis3, panels::Union{Table,PanelTree}, values; vectors=nothing, 
-    vscale=1, label="", colormap=:viridis, colorrange=extrema(values), kwargs...)
+    vscale=1, label="", colormap=:viridis, colorrange=extrema(values), colorbar_position=(1,2), kwargs...)
 
     # Mesh geometry (vertices, normals, and colors)
     obj = mesh!(ax, panelmesh.(panels,panels.kernel); color=values, colorrange, colormap, kwargs...)
@@ -34,7 +34,7 @@ function viz!(fig::Figure,ax::Axis3, panels::Union{Table,PanelTree}, values; vec
         lengthscale=0.1vscale, color=values, colorrange, colormap, kwargs...)
 
     # Colorbar
-    Colorbar(fig[1,2],obj;label,kwargs...)
+    Colorbar(fig[colorbar_position...],obj;label,kwargs...)
 end
 using Makie.GeometryBasics
 const quadface = decompose(QuadFace{GLIndex},Tessellation(Rect(0, 0, 1, 1), (2, 2)))

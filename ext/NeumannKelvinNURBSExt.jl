@@ -1,6 +1,7 @@
 module NeumannKelvinNURBSExt
-using NeumannKelvin,NURBS
+using NeumannKelvin,NURBS,FileIO
 using StaticArrays
+import NeumannKelvin: loadNURBS, panelize, measure
 
 # Define a gNURBS struct that can be called as a function to evaluate the NURBS surface at given parameters (u,v)
 struct gNURBS{du,dv,A<:AbstractMatrix,U<:AbstractVector,V<:AbstractVector,W<:AbstractMatrix} <: Function
@@ -58,7 +59,12 @@ end
 
 # Define a wrapper for NURBSsurface and use it in exported panel functions
 gNURBS(patch::NURBSsurface) = gNURBS(patch.controlPoints, patch.uBasis.knotVec, patch.vBasis.knotVec, patch.weights)
-NeumannKelvin.panelize(patches::AbstractArray{T},args...;kwargs...) where {T<: NURBSsurface} = mapreduce(patch->panelize(patch,args...;kwargs...),vcat,patches)
-NeumannKelvin.panelize(patch::NURBSsurface,args...;kwargs...) = panelize(gNURBS(patch),args...;kwargs...)
-NeumannKelvin.measure(patch::NURBSsurface,args...;kwargs...) = measure(gNURBS(patch),args...;kwargs...)
+gNURBS(patches::AbstractArray{T} where {T<:NURBSsurface}) = [gNURBS(p) for p in patches]
+loadNURBS(filename::String;options...) = load(filename;options...) |> gNURBS
+panelize(patch::NURBSsurface,args...;kwargs...) = panelize(gNURBS(patch),args...;kwargs...)
+measure(patch::NURBSsurface,args...;kwargs...) = measure(gNURBS(patch),args...;kwargs...)
+
+# Pretty printing
+Base.show(io::IO, sys::gNURBS) = print(io,"NURBS{$(size(sys.pnts,1))x$(size(sys.pnts,2))} patch")
+Base.show(io::IO, ::MIME"text/plain", sys::gNURBS) = (println(io,"NURBS");show(io,sys.pnts))
 end

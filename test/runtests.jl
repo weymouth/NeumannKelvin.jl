@@ -286,6 +286,13 @@ using ForwardDiff: Dual
         @test jump(y)≈(-3bruteN(0.,y,0.)+4bruteN(1e-4,y,0.)-bruteN(2e-4,y,0.))/1e-4 rtol=5e-5
     end
 
+    # ∇N is smooth across the Chebyshev zone boundaries, so the one-sided gradients must agree
+    ∇N(X) = gradient(X->NeumannKelvin.nearfield(X...),X)
+    for (Rb,bound) in ((1,3e-4),(4,1.5e-3),(10,4e-3)), θ in (0.05,0.3,0.7,1.2,1.5), α in (0.,0.4,0.9,1.3,π/2)
+        X = NeumannKelvin.S2X(SA[Rb,θ,α^2]); g⁺ = ∇N(X*(1+1e-8))
+        @test norm(g⁺-∇N(X*(1-1e-8))) ≤ bound*norm(g⁺)
+    end
+
     @test @ballocations(NeumannKelvin.nearfield(-0.3,0.2,-0.1)) ≤ TEST_ALLOCS
     @test @ballocations(NeumannKelvin.nearfield(Dual(-0.3,0),Dual(0.2,0),Dual(-0.1,0))) ≤ TEST_ALLOCS
     @test @ballocations(NeumannKelvin.nearfield(Dual(-0.3f0,0),Dual(0.2f0,0),Dual(-0.1f0,0))) ≤ TEST_ALLOCS

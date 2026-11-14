@@ -7,7 +7,9 @@ Panelize a parametric `surface` of `u∈[u₀,u₁]` and `v∈[v₀,v₁]`, retu
 The surface is split into strips roughly `hᵤ` wide which are split into panels roughly `hᵥ` high which are then `measure`d.
 The parameter `devlimit` sets the max deviation `δ/(hᵤ+hᵥ)` from the surface by reducing panel size in regions of high curvature.
 Use `transpose=true` to change the strip direction, `flip=true` to flip the normal direction, and submerge=`true` to trim surface for `z≥0`.
-This function throws an error if the adaptive routine gives more than `N_max` panels.
+With `submerge=true`, strips that don't cross `z=0` are dropped if dry and kept whole if wet, with a warning.
+Patches with both edges shorter than `hᵤ/2` are skipped. This function throws an error if only one edge is that short
+(use `transpose` to change the strip direction) or if the adaptive routine gives more than `N_max` panels.
 """
 function panelize(surface,u₀=0,u₁=1f0,v₀=0,v₁=1f0;hᵤ=1,hᵥ=hᵤ,devlimit=5f-2,
                   transpose=false,flip=false,N_max=1000,verbose=false,submerge=false,kwargs...)
@@ -29,17 +31,21 @@ function panelize(surface,u₀=0,u₁=1f0,v₀=0,v₁=1f0;hᵤ=1,hᵥ=hᵤ,devli
     verbose && @show S₀,S₁
 
     # Define strips
-    min(S₀,S₁) ≤ hᵤ/2 && return Table(init)      # check min width
+    max(S₀,S₁) ≤ hᵤ/2 && return Table(init)      # skip tiny patches
+    min(S₀,S₁) ≤ hᵤ/2 && throw(ArgumentError("A patch edge is shorter than hᵤ/2 (collapsed?). Toggle `transpose` to change the strip direction."))
     S,_,s⁻¹ = max((S₀,1,s₀⁻¹),(S₁,2,s₁⁻¹))        # get longer edge
     N = round(Int,S/hᵤ); uᵢ = s⁻¹(range(0,S,N+1)) # define strips
     verbose && @show N
 
     # Mapreduce across strips
+    missed = Ref(0) # strips that don't cross z=0
     panels = mapreduce(vcat,1:N; init) do i
         u,du = (uᵢ[i+1]+uᵢ[i])/2,uᵢ[i+1]-uᵢ[i] # Parametric center & width
 
         # Find equidistant points along strip center
-        uv₀,uv₁ = submerge ? newlimits(v->surface(u,v),v₀,v₁) : (v₀,v₁)
+        uv₀,uv₁,crosses = submerge ? newlimits(v->surface(u,v),v₀,v₁) : (v₀,v₁,true)
+        crosses || (missed[] += 1)
+        uv₀==uv₁ && return init               # dry strip
         S,s⁻¹ = arclength(v->surface(u,v),hᵥ,devlimit,uv₀,uv₁)
         verbose && @show i,S
         S ≤ hᵥ/2 && return init               # not enough height
@@ -52,6 +58,8 @@ function panelize(surface,u₀=0,u₁=1f0,v₀=0,v₁=1f0;hᵤ=1,hᵥ=hᵤ,devli
         @. measure(surface,u,v,du,dv;flip,kwargs...)
     end
 
+    missed[]>0 && @warn "$(missed[]) of $N strips don't cross z=0: dry strips dropped, wet strips kept whole."
+
     # Check length and return as a Table
     length(panels) ≤ N_max && return Table(panels)
     throw(ArgumentError("length(panels)=$(length(panels))>$N_max. Increase hᵤ,hᵥ,devlimit and/or N_max."))
@@ -59,8 +67,11 @@ end
 panelize(patches::AbstractArray,args...;kwargs...) = mapreduce(patch->panelize(patch,args...;kwargs...),vcat,patches)
 function newlimits(r,low,high)
     z(u) = r(u)[3]+√eps(u)
+    a,b = z(low),z(high)
+    a<0 && b<0 && return low,high,false   # wet: keep whole
+    a≥0 && b≥0 && return high,high,false  # dry: empty
     zero = find_zero(z,(low,high))
-    return z(low)<0 ? (low,zero) : (zero,high)
+    return a<0 ? (low,zero,true) : (zero,high,true)
 end
 using QuadGK,DataInterpolations
 """
@@ -134,3 +145,17 @@ end
 normal(S,u,v) = derivative(u->S(u,v),u)×derivative(v->S(u,v),v)
 normalize(v::SVector{n,T}) where {n,T} = v/(eps(T)+norm(v))
 unwrap(a) = map(i->a[i],SA[1,2,4,3])
+
+struct PolyKernel <: GreenKernel end
+"""
+    measure(vᵢ...) -> (x,n,dA,verts)
+
+Measure the properties of a planar polygonal panel defined by its vertices in counter-clockwise order.
+"""
+function measure(verts::Vararg{SVector{3,T},N}) where {T<:Number,N}
+    v₁ = first(verts); verts = SVector{N}(verts...)
+    ndA = sum((verts[i]-v₁) × (verts[i+1]-v₁) for i in 2:N-1) # fan triangulation from v₁
+    dA = norm(ndA)/2; n = normalize(ndA)
+    tangents = SVector{N}(ntuple(i -> normalize(verts[i%N+1]-verts[i]), N))
+    (;x=sum(verts)/N, n, dA, verts, tangents, inplane=map(t->t×n, tangents), kernel=PolyKernel())
+end

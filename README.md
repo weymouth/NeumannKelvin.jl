@@ -20,17 +20,17 @@ The package also defines:
 
 ## Installation & version info
 
-The package is registered, so after installing Julia (version ≥1.9), you only need to open the REPL and type
+The package is registered, so after installing Julia (version ≥1.10), you only need to open the REPL and type
 ```julia
 ] add NeumannKelvin
 ```
 The first install will take a few seconds as a few functions precompile, but the following times should be immediate.
 
-The solver is still in development (v0.8), but the interface and methods are stablizing. We should be ready for v1.0 after feedback from users.
+The solver is still in development (v0.9), but the interface and methods are stabilizing. We should be ready for v1.0 after feedback from users.
 
 ## Basic usage
 
-The panels themselves can either be defined by reading in a triangle-based Mesh object or by measuring a parametric surface. For example a spheroid under the free-surface may be defined as:
+The panels themselves can either be defined by reading in a Mesh of planar polygons or by measuring a parametric surface. For example a spheroid under the free-surface may be defined as:
 ```julia
 using NeumannKelvin
 h = 0.1 # spacing
@@ -43,8 +43,7 @@ The `measure` function measures a parametric surface into a single panel given a
 Next the panel system can be defined and solved. For an unbounded potential flow solution with a small number of panels like this one, we can use
 ```julia
 julia> sys = BodyPanelSystem(body) |> directsolve!
-Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
-└ @ NeumannKelvin c:\Users\gweymouth\Documents\GitHub\NeumannKelvin.jl\src\solvers.jl:72
+┌ Warning: This routine is memory intensive. See help?>directsolve!.
   0.000332 seconds (132 allocations: 168.391 KiB)
 BodyPanelSystem
   body: Table with 9 columns and 96 rows
@@ -209,16 +208,16 @@ FSPanelSystem
   Kelvin length ℓ: 0.09
   body: PanelTree(1373 panels, 12 levels, θ²: 9)
      area & volume: 0.4362399, 0.013043594
-     panel type: NeumannKelvinGeometryBasicsExt.TriKernel
+     panel type: NeumannKelvin.PolyKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, 1, 1],)
   strength extrema: (-0.24442716f0, 0.19687507f0)
 ```
-Note that the body panel type is now `TriKernel` because it is defined by the STL Mesh instead of a parametric surface.
+Note that the body panel type is now `PolyKernel` because it is defined by the STL Mesh instead of a parametric surface. `PolyKernel` panels integrate the source potential exactly over any planar polygon.
 
 Let's take a look at the geometry and flow using Makie!
 ```julia
-using GLMakie # can also use WGLMakie for rendering in browsers
+using GLMakie # or any other Makie backend, e.g. WGLMakie for browsers
 viz(sys)
 ```
 ![FSPanelSystem used a STL dolphin Mesh](examples//dolphin_waves.png)
@@ -236,8 +235,7 @@ halfbody = panelize(S,0,π,0,π,hᵤ=h)
 ```
 ```julia
 julia> NKsys = NKPanelSystem(halfbody;ℓ,sym_axes=2) |> directsolve!
-┌ Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
-└ @ NeumannKelvin c:\Users\gweymouth\Documents\GitHub\NeumannKelvin.jl\src\solvers.jl:72
+┌ Warning: This routine is memory intensive. See help?>directsolve!.
   0.003006 seconds (132 allocations: 107.078 KiB)
 NKPanelSystem
   Neumann-Kelvin args: (ℓ = 0.25, filter = true, contour = false)
@@ -258,9 +256,8 @@ It is encouraging that the `FSPanelSystem` solution and forces match to within a
 
 The `NKPanelSystem` solve is much faster than `FSPanelSystem` - in fact it is only around 10x slower than a double body flow computed using `BodyPanelSystem` which can't predict drag and gets the wrong vertical force as well!
 ```julia
-julia> BodyPanelSystem(halfbody;sym_axes=(2,3)) |> directsolve! |> steadyforce!
-┌ Warning: This routine ignores free surface panels and is memory intensive. See help?>directsolve!.
-└ @ NeumannKelvin c:\Users\gweymouth\Documents\GitHub\NeumannKelvin.jl\src\solvers.jl:72
+julia> BodyPanelSystem(halfbody;sym_axes=(2,3)) |> directsolve! |> steadyforce
+┌ Warning: This routine is memory intensive. See help?>directsolve!.
   0.000361 seconds (132 allocations: 104.891 KiB)
 3-element SVector{3, Float64} with indices SOneTo(3):
  -2.2957434790946685e-12

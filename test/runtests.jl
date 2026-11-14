@@ -72,9 +72,23 @@ end
     panels = panelize(sphere,0,pi,0,2pi,hᵤ=0.6,flip=true)
     @test all(p->p.x'p.n<-0.9,panels)
 
-    # Check submerged
-    panels = panelize(spheroid,0,2pi/3,0,2pi,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
-    @test all(x->x[3]<0,panels.verts)
+    # Check submerged: every meridian strip crosses z=0 at θ₁=π/2
+    panels = panelize(spheroid,π/6,2π/3,0,2π,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
+    @test length(panels) > 0
+    @test all(v->all(x->x[3]<0,v),panels.verts)
+    @test sum(panels.dA) ≈ 2π*quadgk(θ->sin(θ)*√(9sin(θ)^2+cos(θ)^2),π/2,2π/3)[1] rtol=1e-5
+
+    # Strips that don't cross z=0 warn: wet strips are kept whole, dry strips dropped
+    deep(θ₁,θ₂) = spheroid(θ₁,θ₂)-SA[0,0,4]
+    wet = @test_logs (:warn,r"cross z=0") panelize(deep,π/6,2π/3,0,2π,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
+    @test wet.x == panelize(deep,π/6,2π/3,0,2π,hᵤ=0.6,hᵥ=0.3,transpose=true).x
+    dry = @test_logs (:warn,r"cross z=0") panelize((θ₁,θ₂)->spheroid(θ₁,θ₂)+SA[0,0,4],π/6,2π/3,0,2π,hᵤ=0.6,hᵥ=0.3,transpose=true,submerge=true)
+    @test length(dry) == 0
+
+    # A collapsed edge throws, the other strip direction works, and tiny patches are skipped
+    @test_throws ArgumentError panelize(sphere,0,π/2,0,2π,hᵤ=0.3,transpose=true)
+    @test sum(panelize(sphere,0,π/2,0,2π,hᵤ=0.3).dA) ≈ 2π rtol=1e-5
+    @test length(panelize(sphere,0,0.01,0,0.01,hᵤ=0.5)) == 0
 
     # Check inputs
     @test_throws ArgumentError panelize(spheroid,0,pi,0,2pi,hᵤ=0)
@@ -124,6 +138,48 @@ using NeumannKelvin:∂ₙϕ
     Ma = addedmass(panels,V=4π/3)
     @test Ma ≈ I/2 rtol=0.1 # ϵ=10% with 8 panels
     @test diag(Ma) ≈ fill(sum(diag(Ma))/3,3) rtol=1e-3 # x/y/z symmetric!
+end
+
+@testset "PolyKernel" begin
+    @testset "self-influence" begin
+        pϕ(a,b) = -4*(a*asinh(b/a) + b*asinh(a/b)) # rectangle [±a,±b] centroid potential
+        v = (SA[-1/2,-1,0],SA[1/2,-1,0],SA[1/2,1,0],SA[-1/2,1,0])
+        tri = measure(v[1:3]...)
+        quad = measure(v...) # centroid sits exactly on the fan-triangulation diagonal
+        pent = measure(SA[0.,0,0], SA[1.,0,0], SA[1.5,1,0], SA[0.5,1.5,0], SA[-0.5,1,0])
+        for p in (tri, quad, pent)
+            @test ∂ₙϕ(p,p) ≈ 2π # self-jump regardless of shape/symmetry
+        end
+        @test ∫G(quad.x,quad) ≈ pϕ(1/2,1)
+    end
+
+    @testset "triangle" begin
+        panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
+        @test panel.x ≈ SA[2,1,0]/3
+        @test panel.n ≈ SA[0,0,1]
+        @test panel.dA ≈ 0.5
+        @test ∫G(SA[0,0,2],panel)/4π ≈ -0.01847387 rtol=1e-6
+        @test ∫G(SA[0,0,-0.5],panel)/4π ≈ -0.04558955 rtol=1e-6
+        @test ∫G(SA[0.5,1,0],panel)/4π ≈ -0.05806854 rtol=1e-6
+        @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ -0.03856218 rtol=1e-6
+        @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ -0.00495674 rtol=1e-6
+        @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
+        @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
+    end
+
+    @testset "square" begin
+        panel = measure(SA_F32[-1/2,-1/2,0],SA_F32[1/2,-1/2,0],SA_F32[1/2,1/2,0],SA_F32[-1/2,1/2,0])
+        @test panel.x ≈ SA[0,0,0]
+        @test panel.n ≈ SA[0,0,1]
+        @test panel.dA ≈ 1
+        @test ∫G(SA[0,0,2],panel)/4π ≈ -0.03899412 rtol=1e-6
+        @test ∫G(SA[0,0,-0.5],panel)/4π ≈ -0.12626703 rtol=1e-6
+        @test ∫G(SA[0.5,1,0],panel)/4π ≈ -0.07396339 rtol=1e-6
+        @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ -0.11549639 rtol=1e-6
+        @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ -0.00992118 rtol=1e-6
+        @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
+        @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
+    end
 end
 
 extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
@@ -244,6 +300,13 @@ using ForwardDiff: Dual
         @test jump(y)≈(-3bruteN(0.,y,0.)+4bruteN(1e-4,y,0.)-bruteN(2e-4,y,0.))/1e-4 rtol=5e-5
     end
 
+    # ∇N is smooth across the Chebyshev zone boundaries, so the one-sided gradients must agree
+    ∇N(X) = gradient(X->NeumannKelvin.nearfield(X...),X)
+    for (Rb,bound) in ((1,3e-4),(4,1.5e-3),(10,4e-3)), θ in (0.05,0.3,0.7,1.2,1.5), α in (0.,0.4,0.9,1.3,π/2)
+        X = NeumannKelvin.S2X(SA[Rb,θ,α^2]); g⁺ = ∇N(X*(1+1e-8))
+        @test norm(g⁺-∇N(X*(1-1e-8))) ≤ bound*norm(g⁺)
+    end
+
     @test @ballocations(NeumannKelvin.nearfield(-0.3,0.2,-0.1)) ≤ TEST_ALLOCS
     @test @ballocations(NeumannKelvin.nearfield(Dual(-0.3,0),Dual(0.2,0),Dual(-0.1,0))) ≤ TEST_ALLOCS
     @test @ballocations(NeumannKelvin.nearfield(Dual(-0.3f0,0),Dual(0.2f0,0),Dual(-0.1f0,0))) ≤ TEST_ALLOCS
@@ -330,22 +393,9 @@ end
 
 using GeometryBasics,FileIO
 @testset "GeometryBasics" begin
-    panel = measure(SA_F32[0,0,0],SA_F32[1,0,0],SA_F32[1,1,0])
-    @test panel.x ≈ SA[2,1,0]/3
-    @test panel.n ≈ SA[0,0,1]
-    @test panel.dA ≈ 0.5
-    @test ∫G(SA[0,0,2],panel)/4π ≈ -0.01847387 rtol=1e-6
-    @test ∫G(SA[0,0,-0.5],panel)/4π ≈ −0.04558955 rtol=1e-6
-    @test ∫G(SA[0.5,1,0],panel)/4π ≈ −0.05806854 rtol=1e-6
-    @test ∫G(SA[-0.25,0.25,0.5],panel)/4π ≈ −0.03856218 rtol=1e-6
-    @test ∫G(SA[0.1,0.4,8],panel)/4π ≈ −0.00495674 rtol=1e-6
-    @test @ballocations(∫G($panel.x,$panel)) ≤ TEST_ALLOCS
-    @test @ballocations(gradient(x′->∫G(x′,$panel),$panel.x)) ≤ TEST_ALLOCS
-
-    ext = Base.get_extension(NeumannKelvin, :NeumannKelvinGeometryBasicsExt)
-    panels = panelize(load("../examples/Icosahedron.stl"))
+    panels = panelize(load(joinpath(@__DIR__,"..","examples","Icosahedron.stl")))
     @test length(panels)==20
-    @test eltype(panels.kernel)==ext.TriKernel
+    @test eltype(panels.kernel)==NeumannKelvin.PolyKernel
     @test all([p.n'p.x>0 for p in panels]) # all outward facing
 
     sys = BodyPanelSystem(panels,wrap=PanelTree)

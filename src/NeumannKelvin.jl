@@ -55,7 +55,7 @@ and the `vectors` are plotted extending from each panel center. If `freesurf` is
 a free-surface panel system, the free surface is also plotted. The `fsargs` keyword tuple allows 
 passing arguments to define the free surface extents and resolution for `NKPanelSystem`s.
 
-** Note ** you must load a Makie backend (GLMakie or WGLMakie) to use this function.
+** Note ** you must load a Makie backend (e.g. GLMakie, WGLMakie or CairoMakie) to use this function.
 
 # Example
     using NeumannKelvin,WGLMakie
@@ -65,8 +65,8 @@ passing arguments to define the free surface extents and resolution for `NKPanel
     sys = NKPanelSystem(panels,ℓ=1/4) |> directsolve!
     viz(sys;fsargs=(s=2)) # view NK solution with free surface extent s=2
 """
-viz(args...; kwargs...) = @warn "Load GLMakie or WGLMakie for viz functionality."
-viz!(args...; kwargs...) = @warn "Load GLMakie or WGLMakie for viz functionality."
+viz(args...; kwargs...) = @warn "Load a Makie backend for viz functionality."
+viz!(args...; kwargs...) = @warn "Load a Makie backend for viz functionality."
 function cₚu(sys)
     vectors = u(sys); U² = sum(abs2,sys.U); cp = @. 1-sum(abs2,vectors)/U²
     return cp,vectors
@@ -83,5 +83,5 @@ loadNURBS(args...;kwargs...) = @warn "Load NURBS and FileIO for loadNURBS functi
 export viz,viz!,components,extent,loadNURBS
 
 # Initialize chebregions on precompile instead of when `using NeumannKelvin`
-__init__() = chebregions[] = (makecheb(eps(),1;tol=1e-6,f=(x,y,z)->Ngk(x,y,z)-Nlog(x,y,z)),makecheb(1,4),makecheb(4,10),makecheb(1e-5,1;xfrm=r2R))
+__init__() = chebregions[] = (makecheb(eps(),1;tol=1e-6,f=(x,y,z)->Ngk(x,y,z)-Nlog(x,y,z)),makecheb(1,4;tol=1e-6),makecheb(4,10;tol=1e-6),makecheb(1e-5,1;xfrm=r2R,tol=1e-6))
 end

@@ -44,16 +44,16 @@ Next the panel system can be defined and solved. For an unbounded potential flow
 ```julia
 julia> sys = BodyPanelSystem(body) |> directsolve!
 ┌ Warning: This routine is memory intensive. See help?>directsolve!.
-  0.000332 seconds (132 allocations: 168.391 KiB)
+  0.000336 seconds (132 allocations: 168.748 KiB)
 BodyPanelSystem
-  body: Table with 9 columns and 96 rows
-     area & volume: 0.5019560344511921, 0.02079102608493166
+  body: Table with 10 columns and 96 rows
+     area & volume: 0.5019560344518552, 0.02079102608593207
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, 1, 1],)
-  strength extrema: (-0.07478205822184282, 0.07478205822184263)
+  strength extrema: (-0.07491122118178008, 0.07491122118178041)
 ```
-You can see that some basic properties of the panelized body, panel type, flow parameters, and solution are shown. You can also see the solution method is very fast, 330μs on my laptop for this small 96 panel system.
+You can see that some basic properties of the panelized body, panel type, flow parameters, and solution are shown. You can also see the solution method is very fast, about 340μs for this small 96 panel system.
 
 For larger systems, it's very helpful to accelerate the solution by wrapping the panels in a `PanelTree` and using the matrix-free iterative solver:
 ```julia
@@ -69,7 +69,8 @@ SimpleStats
  residuals: []
  Aresiduals: []
  κ₂(A): []
- timer: 792.14ms
+ allocation timer: 111.50μs
+ timer: 761.31ms
  status: solution good enough given atol and rtol
 
 BodyPanelSystem
@@ -78,7 +79,7 @@ BodyPanelSystem
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, 1, 1],)
-  strength extrema: (-0.0870901881812638, 0.08709074525159503)
+  strength extrema: (-0.08700271219873901, 0.08697166053668488)
 ```
 This 20k panel system still takes less than a second to solve using this approach. See the documentation for `PanelTree` and `gmressolve!` for details. 
 
@@ -96,7 +97,8 @@ SimpleStats
  residuals: []
  Aresiduals: []
  κ₂(A): []
- timer: 479.57ms
+ allocation timer: 66.70μs
+ timer: 453.50ms
  status: solution good enough given atol and rtol
 
 BodyPanelSystem
@@ -105,20 +107,20 @@ BodyPanelSystem
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, -1, 1], [1, 1, 1])
-  strength extrema: (-0.08747539911219676, 0.08749685245478724)
+  strength extrema: (-0.08736540542958579, 0.08738513455998373)
 ```
 Where we see half the number of panels and approximately half the solve time, but also the new `mirror=[1,-1,1]` enforcing symmetry and therefore nearly identical solution extrema.
 
 With the system solved, we can now measure any properties of interest. For example, the extreme values of the pressure coefficient and the added mass.
 ```julia
 julia> extrema(cₚ(sys))
-(-0.12323837497458068, 0.977864810013905)
+(-0.12317301867194641, 0.9783847521294856)
 
 julia> addedmass(sys)
 3-element SVector{3, Float64} with indices SOneTo(3):
- 0.05907144178034771
- 7.054090093897268e-5
- 3.247604894181291e-5
+ 0.05901657514120391
+ 6.955271772423463e-5
+ 3.081097114965209e-5
 ```
 The max cₚ=1 because of the stagnation point, but the added mass is small because the flow direction was aligned with the long axis of the spheroid. We can compute the other added mass coefficient by rotating the body or (easier) the background flow U:
 
@@ -127,9 +129,9 @@ The max cₚ=1 because of the stagnation point, but the added mass is small beca
 ```julia
 julia> directsolve!(BodyPanelSystem(body,U=SA[0,-1,0]),verbose=false) |> addedmass
 3-element SVector{3, Float64} with indices SOneTo(3):
- 1.3036900728907295e-18
- 0.8487489964044264
- 7.117332991687825e-17
+  1.2222094432762491e-18
+  0.842469234761613
+ -3.181818583995835e-17
 ```
 The added mass force is larger when the flow is broadside to the body, as expected.
 
@@ -153,7 +155,8 @@ SimpleStats
  residuals: []
  Aresiduals: []
  κ₂(A): []
- timer: 1.53s
+ allocation timer: 429.70μs
+ timer: 1.49s
  status: solution good enough given atol and rtol
 
 FSPanelSystem
@@ -162,11 +165,11 @@ FSPanelSystem
      panel type: NeumannKelvin.QuadKernel
   Kelvin length ℓ: 0.25
   body: PanelTree(72 panels, 8 levels, θ²: 16)
-     area & volume: 0.25097206316403453, 0.010422384595950107
+     area & volume: 0.25097206316425236, 0.010422384596360848
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, -1, 1], [1, 1, 1])
-  strength extrema: (-0.09670047456210028, 0.07706274641204487)
+  strength extrema: (-0.09699756190564257, 0.07722387316628594)
 ```
 Both the body and freesurf panels are wrapped in a `PanelTree` by default for `FSPanelSystems` (because the free-surface meshes are unavoidably large) but you can disable this using `wrap=identity` or adjust the Barnes-Hut cutoff using the `θ²` keyword argument.
 
@@ -176,9 +179,9 @@ Despite the large number of panels and increased iterations, the solve is still 
 ```julia
 julia> steadyforce(FSsys)
 3-element SVector{3, Float64} with indices SOneTo(3):
-  0.020252107305114217
-  0.09698749907738831
- -0.00966715094756456
+ -0.02032244940087064
+ -0.09702212943654699
+  0.009539807044513205
 ```
 Note that we've used y-symmetry, and integrating over the half-body artificially produced a non-zero side force. However, the dynamic drag and vertical forces coefficients have been appropriately scaled by the (half) body surface area.
 
@@ -211,7 +214,7 @@ FSPanelSystem
      panel type: NeumannKelvin.PolyKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, 1, 1],)
-  strength extrema: (-0.24442716f0, 0.19687507f0)
+  strength extrema: (-0.24442711f0, 0.19687495f0)
 ```
 Note that the body panel type is now `PolyKernel` because it is defined by the STL Mesh instead of a parametric surface. `PolyKernel` panels integrate the source potential exactly over any planar polygon.
 
@@ -236,33 +239,33 @@ halfbody = panelize(S,0,π,0,π,hᵤ=h)
 ```julia
 julia> NKsys = NKPanelSystem(halfbody;ℓ,sym_axes=2) |> directsolve!
 ┌ Warning: This routine is memory intensive. See help?>directsolve!.
-  0.003006 seconds (132 allocations: 107.078 KiB)
+  0.002496 seconds (132 allocations: 107.732 KiB)
 NKPanelSystem
   Neumann-Kelvin args: (ℓ = 0.25, filter = true, contour = false)
-  body: Table with 9 columns and 72 rows
-     area & volume: 0.25097206316403453, 0.010422384595950107
+  body: Table with 10 columns and 72 rows
+     area & volume: 0.25097206316425236, 0.01042238459636084
      panel type: NeumannKelvin.QuadKernel
   background flow U: [-1, 0, 0]
   mirrors: ([1, -1, 1], [1, 1, 1])
-  strength extrema: (-0.09838582154859293, 0.07720677207281905)
+  strength extrema: (-0.09859585787724742, 0.07742193761789852)
 
 julia> steadyforce(NKsys)
 3-element SVector{3, Float64} with indices SOneTo(3):
-  0.02188382689421088
-  0.0961015016623305
- -0.009347630235111046
+ -0.021857839611607574
+ -0.09583414604004667
+  0.009237706149040239
 ```
 It is encouraging that the `FSPanelSystem` solution and forces match to within a few percent of the `NKPanelSystem` solution despite that method's finite free-surface quadrature, numerical wave damping and (potentially) reflections.
 
-The `NKPanelSystem` solve is much faster than `FSPanelSystem` - in fact it is only around 10x slower than a double body flow computed using `BodyPanelSystem` which can't predict drag and gets the wrong vertical force as well!
+The `NKPanelSystem` solve is much faster than `FSPanelSystem` - in fact it is only around 7x slower than a double body flow computed using `BodyPanelSystem` which can't predict drag and gets the wrong vertical force as well!
 ```julia
 julia> BodyPanelSystem(halfbody;sym_axes=(2,3)) |> directsolve! |> steadyforce
 ┌ Warning: This routine is memory intensive. See help?>directsolve!.
-  0.000361 seconds (132 allocations: 104.891 KiB)
+  0.000338 seconds (132 allocations: 104.967 KiB)
 3-element SVector{3, Float64} with indices SOneTo(3):
- -2.2957434790946685e-12
-  0.0741385277429429
- -0.006076003552147477
+ -2.4133229572120962e-12
+ -0.07406809807845047
+  0.006010113760375897
 ```
 
 Despite many advantages, the `NKPanelSystem` does have its own limitations:

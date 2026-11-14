@@ -44,12 +44,19 @@ slowly varying compared to `g` over `h`.
 """
 @fastmath function nsp(h₀,g,dg,γ=one;xlag=xlag,wlag=wlag,atol=1e-3)
     # Sum over complex Gauss-Laguerre points
-    g₀,h = promote(g(h₀),h₀)
+    g₀,h = promote(g(h₀),h₀); dgh,q = dg(h),zero(eltype(xlag))
     s = zero(typeof(imag(g₀)))
     for (p,w) in zip(xlag,wlag)
-        h = find_zero((h->g(h)-g₀-im*p,dg),h,Roots.Newton();atol)
-        s += w*imag(γ(h)*exp(im*g₀)*im/dg(h))
+        h = newton(h->g(h)-g₀-im*p,dg,h+im*(p-q)/dgh;atol)
+        dgh,q = dg(h),p
+        s += w*imag(γ(h)*exp(im*g₀)*im/dgh)
     end;s
+end
+function newton(f,df,x;atol,n=10)
+    for _ in 1:n
+        fx = f(x); abs2(fx) < atol^2 && return x
+        x -= fx/df(x)
+    end; x
 end
 
 """

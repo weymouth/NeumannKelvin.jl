@@ -152,7 +152,7 @@ struct PolyKernel <: GreenKernel end
 
 Measure the properties of a planar polygonal panel defined by its vertices in counter-clockwise order.
 """
-function measure(verts::Vararg{SVector{3,T},N}) where {T,N}
+function measure(verts::Vararg{SVector{3,T},N}) where {T<:Number,N}
     v₁ = first(verts); verts = SVector{N}(verts...)
     ndA = sum((verts[i]-v₁) × (verts[i+1]-v₁) for i in 2:N-1) # fan triangulation from v₁
     dA = norm(ndA)/2; n = normalize(ndA)

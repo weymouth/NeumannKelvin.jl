@@ -10,7 +10,7 @@ quadgl(f;x,w) = sum(i->w[i]*f(x[i]),eachindex(x,w))
 quadgl(f,a,b;x=xg32,w=wg32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 const xg16,wg16 = gausslegendre(16)
 # split at t=0, nearest the √(1+t²) branch points at t=±i
-quadgl0(f,a,b) = a<0<b ? quadgl(f,a,0;x=xg16,w=wg16)+quadgl(f,0,b;x=xg16,w=wg16) : quadgl(f,a,b;x=xg16,w=wg16)
+quadgl0(f::F,a,b) where F = a<0<b ? quadgl(f,a,0;x=xg16,w=wg16)+quadgl(f,0,b;x=xg16,w=wg16) : quadgl(f,a,b;x=xg16,w=wg16)
 
 """
     complex_path(g,dg,rngs;atol=1e-3,γ=one,f=Im(γ*exp(im*g)))

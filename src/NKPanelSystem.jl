@@ -87,6 +87,7 @@ r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1987
 # Create fast Chebychev interpolator for Ngk
 using FastChebInterp,QuadGK,SpecialFunctions
 const chebregions = Ref{NTuple{4,FastChebInterp.ChebPoly{3,Float64,Float64}}}()
+# Skip the domain check, which rejects Duals on a bound in ForwardDiff ≥1 (JuliaMath/FastChebInterp.jl#42)
 cheb(c::FastChebInterp.ChebPoly{N},S) where N = FastChebInterp.evaluate((@. (S-c.lb)*2/(c.ub-c.lb)-1),c.coefs,Val{N}(),1,length(c.coefs))
 function makecheb(l,u;xfrm=identity,tol=1e-4,f=Ngk)
     lb,ub = SA[l,0,0],SA[u,π/2-eps(),(π/2)^2];

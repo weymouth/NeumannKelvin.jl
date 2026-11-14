@@ -69,23 +69,25 @@ end
 # Near-field disturbance via zonal Chebychev polynomial approximation as in Newman 1987
 function nearfield(x,y,z)
     S = X2S(x,y,z); R = S[1]
-    l0 = -2*(1-z/(R+abs(x)))
-    R ≥ 10 ? l0+chebregions[][4](r2R(S)) :
-    R ≥ 4  ? l0+chebregions[][3](S) :
-    R ≥ 1  ? l0+chebregions[][2](S) :
-    R > 0  ? l0+Nlog(abs(x),abs(y),z)+chebregions[][1](S) : eltype(S)(-4.0)
+    l0 = -2*(1-z/(R+absx(x)))
+    R ≥ 10 ? l0+cheb(chebregions[][4],r2R(S)) :
+    R ≥ 4  ? l0+cheb(chebregions[][3],S) :
+    R ≥ 1  ? l0+cheb(chebregions[][2],S) :
+    R > 0  ? l0+Nlog(absx(x),abs(y),z)+cheb(chebregions[][1],S) : eltype(S)(-4.0)
 end
+absx(x) = x≥0 ? x : -x # same x=0 side as wavelike's x≥0, so N+W stays smooth
 # log(R) part of Newman's singular expansion to O(R⁴logR), the only part not smooth in S
 Nlog(x,y,z) = -x*(1+3z/4-x^2/8+y^2/16+5z^2/16)*log(hypot(x,y,z))
 
 # Transformations to/from spherical (S) & Cartesian (X) coordinates
 S2X(S) = ((R,θ,α²)=S; α=√α²; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
-X2S(x,y,z) = (R = hypot(x,y,z); SA[R,min(asin(abs(x)/R),π/2-eps()),z==0 ? (π/2)^2 : atan(abs(y/z))^2])
+X2S(x,y,z) = (R = hypot(x,y,z); SA[R,min(asin(absx(x)/R),π/2-eps()),z==0 ? (π/2)^2 : atan(abs(y/z))^2])
 r2R(S) = SA[10/S[1],S[2],S[3]] # 1/R mapping for outer zone, see Newman 1987
 
 # Create fast Chebychev interpolator for Ngk
 using FastChebInterp,QuadGK,SpecialFunctions
 const chebregions = Ref{NTuple{4,FastChebInterp.ChebPoly{3,Float64,Float64}}}()
+cheb(c::FastChebInterp.ChebPoly{N},S) where N = FastChebInterp.evaluate((@. (S-c.lb)*2/(c.ub-c.lb)-1),c.coefs,Val{N}(),1,length(c.coefs))
 function makecheb(l,u;xfrm=identity,tol=1e-4,f=Ngk)
     lb,ub = SA[l,0,0],SA[u,π/2-eps(),(π/2)^2];
     S = S2X.(xfrm.(chebpoints((16,16,8),lb,ub)))

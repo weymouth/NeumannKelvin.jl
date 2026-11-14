@@ -41,7 +41,7 @@ Approximate integral `∫ₚ G(x,x')da'` over source panel `p`. This function en
 ∫G(x,p) = ∫G_kernel(x,p,p.kernel)
 function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p) where {Tag,T,N}
     val = ∫G_kernel(d,p,p.kernel) # use auto-diff
-    value(d) ≠ p.x && return val
+    value.(d) ≠ p.x && return val
     ∂ = ntuple(i->2π*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
     Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=2πn̂ contribution
 end

@@ -121,7 +121,7 @@ end
 g(x,y,t) = (x+y*t)*kₓ(t)                  # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/kₓ(t)        # it's derivative
 kₓ(t) = ⎷(1+t^2)                          # x-wavenumber
-⎷(z::Complex) = π/2≤angle(z)≤π ? -√z : √z # move √ branch-cut
+⎷(z::Complex) = real(z)≤0 && !signbit(imag(z)) ? -√z : √z # move √ branch-cut
 ⎷(x) = √x
 
 # Return points where dg=0

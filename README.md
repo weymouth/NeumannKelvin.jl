@@ -26,7 +26,7 @@ The package is registered, so after installing Julia (version ≥1.10), you only
 ```
 The first install will take a few seconds as a few functions precompile, but the following times should be immediate.
 
-The solver is still in development (v0.9), but the interface and methods are stabilizing. We should be ready for v1.0 after feedback from users.
+The solver is still in development (v0.10), but the interface and methods are stabilizing. We should be ready for v1.0 after feedback from users.
 
 ## Basic usage
 

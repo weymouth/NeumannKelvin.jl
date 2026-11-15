@@ -3,23 +3,23 @@ h = 0.1 # spacing
 freesurf = measure.((u,v)->SA[u,v,0],2:-h:-4,(2:-h:-2)',h,h)
 S(θ₁,θ₂) = SA[0.5cos(θ₁),-0.1sin(θ₂)*sin(θ₁),0.1cos(θ₂)*sin(θ₁)-0.15]
 body = panelize(S,0,π,0,2π,hᵤ=h)
-sys = BodyPanelSystem(body) |> directsolve!
+sys = PanelSystem(body) |> directsolve!
 
 bigbody = panelize(S,0,π,0,2π,hᵤ=1/200,N_max=Inf); #20k panels
-sys = BodyPanelSystem(bigbody,wrap=PanelTree) |> gmressolve!
+sys = PanelSystem(PanelTree(bigbody)) |> gmressolve!
 
 halfbody = panelize(S,0,π,0,π,hᵤ=1/200,N_max=Inf); # half the θ₂ range
-BodyPanelSystem(halfbody,wrap=PanelTree,sym_axes=2) |> gmressolve!
+PanelSystem(PanelTree(halfbody),domain=Unbounded(sym_axes=2)) |> gmressolve!
 
-directsolve!(BodyPanelSystem(body,U=SA[0,-1,0]),verbose=false) |> addedmass
+directsolve!(PanelSystem(body,U=SA[0,-1,0]),verbose=false) |> addedmass
 
 ℓ = 1/4; h = 0.3ℓ # Kelvin-length and spacing
 # Make the free-surface grid using y-symmetry and resolving ℓ
 freesurf = measure.((u,v)->SA[u,-v,0],2:-h:-4,(h/2:h:2)',h,h)
 halfbody = panelize(S,0,π,0,π,hᵤ=h)
 
-FSsys = FSPanelSystem(halfbody,freesurf;
-                  ℓ,sym_axes=2,θ²=16) |> gmressolve!
+FSsys = PanelSystem((PanelTree(halfbody;θ²=16),FreeSurface(freesurf;ℓ,θ²=16)),
+                    domain=Unbounded(sym_axes=2)) |> gmressolve!
 steadyforce(FSsys)
 
 # Read mesh, place it, and filter out panels intersecting z=0
@@ -36,22 +36,22 @@ end
 
 # The rest of the system matches the example above
 h,s = 4f-2, 66f-2; freesurf = measure.((u,v)->SA[u,-v,0],s:-h:-2s,(-s:h:s)',h,h); # Float32 to match the Mesh
-Meshsys = FSPanelSystem(dolphin,freesurf;ℓ=9f-2) |> gmressolve!
+Meshsys = PanelSystem((PanelTree(dolphin),FreeSurface(freesurf;ℓ=9f-2))) |> gmressolve!
 
 using GLMakie
 viz(Meshsys)
 
 ℓ = 1/4; h = 0.3ℓ # Kelvin-length and spacing
 halfbody = panelize(S,0,π,0,π,hᵤ=h)
-NKsys = NKPanelSystem(halfbody;ℓ,sym_axes=2) |> directsolve!
+NKsys = PanelSystem(halfbody,domain=Kelvin(ℓ,sym_axes=2)) |> directsolve!
 steadyforce(NKsys)
 
-DBsys = BodyPanelSystem(halfbody;sym_axes=(2,3)) |> directsolve! |> steadyforce
+DBsys = PanelSystem(halfbody,domain=Unbounded(sym_axes=(2,3))) |> directsolve! |> steadyforce
 
 function wigley(hᵤ,hᵥ=hᵤ;B=1/8,D=1/6,kwargs...)
     S(u,v) = SA[u-0.5,-2B*u*(1-u)*(v)*(2-v),D*(v-1)]
     panelize(S;hᵤ,hᵥ,kwargs...)
 end
-NKsys = NKPanelSystem(wigley(0.025);
-          ℓ=1/2π,sym_axes=2,contour=true) |> directsolve!
+NKsys = PanelSystem(wigley(0.025),
+          domain=Kelvin(1/2π,sym_axes=2,contour=true)) |> directsolve!
 viz(NKsys)

@@ -1,29 +1,31 @@
 module NeumannKelvinMakieExt
 using NeumannKelvin,Makie
-import NeumannKelvin: viz,viz!,cₚu,xyζ,QuadKernel,AbstractPanelSystem
+import NeumannKelvin: viz,viz!,xyζ,bodies,QuadKernel,PanelWrapper
 
 # viz wrappers
-function viz(panels::Union{Table,PanelTree},values=panels.dA; vectors=panels.n, title="", kwargs...)
+function viz(panels::Union{Table,PanelWrapper},values=panels.dA; vectors=panels.n, title="", kwargs...)
     fig=Figure(); ax=Axis3(fig[1,1], aspect=:data; title)
     viz!(fig,ax,panels,values;vectors,kwargs...)
     return fig
 end
-function viz(sys::AbstractPanelSystem; freesurf=true, title="", fsargs=NamedTuple(), kwargs...)
-    # body plot
+function viz(sys::PanelSystem; freesurf=true, title="", fsargs=NamedTuple(), kwargs...)
+    # body plots
     fig=Figure(); ax=Axis3(fig[1,1], aspect=:data; title)
-    cp,vectors = cₚu(sys)
-    viz!(fig,ax,sys.body,cp;vectors,label="cₚ",kwargs...)
-    (typeof(sys)<:BodyPanelSystem || !freesurf) && return fig
+    for (k,b) in enumerate(bodies(sys))
+        viz!(fig,ax,b,cₚ(b,sys);vectors=u(b,sys),label="cₚ",colorbar_position=(1,1+k),kwargs...)
+    end
+    fs = xyζ(sys;fsargs...)
+    (isnothing(fs) || !freesurf) && return fig
     # add free surface
-    x,y,z = xyζ(sys;fsargs...)
+    x,y,z = fs
     ζmax  = maximum(abs, z); @. z[abs(z)<ζmax/20] = 0
     zeta = surface!(ax,x,y,z;shading = NoShading, colormap = :balance, colorrange = (-ζmax,ζmax))
-    Colorbar(fig[1,3],zeta;label="ζ")
+    Colorbar(fig[1,2+length(bodies(sys))],zeta;label="ζ")
     return fig
 end
 
 # Generate mesh from Table data
-function viz!(fig::Figure,ax::Axis3, panels::Union{Table,PanelTree}, values; vectors=nothing, 
+function viz!(fig::Figure,ax::Axis3, panels::Union{Table,PanelWrapper}, values; vectors=nothing, 
     vscale=1, label="", colormap=:viridis, colorrange=extrema(values), colorbar_position=(1,2), kwargs...)
 
     # Mesh geometry (vertices, normals, and colors)

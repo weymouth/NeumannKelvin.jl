@@ -103,18 +103,18 @@ using BenchmarkTools
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S, 0, 1f0π, 0, 2f0π, hᵤ=1/4f0)
     @test eltype(panels.dA) == Float32
-    sys = BodyPanelSystem(panels)
-    @test sys.body.q == zeros(Float32,length(panels))
+    sys = PanelSystem(panels)
+    @test sys.boundaries[1].q == zeros(Float32,length(panels))
     q = rand(Float32,length(panels))
     @test @ballocations(NeumannKelvin.set_q!($sys,$q)) ≤ TEST_ALLOCS
-    @test sys.body.q == q
+    @test sys.boundaries[1].q == q
     @test bodyarea(sys) ≈ 4π rtol=1e-5
     @test bodyvol(sys) ≈ 4π/3 rtol=5e-3
 end
 
 using LinearAlgebra
 using NeumannKelvin:∂ₙϕ
-@testset "panel_method.jl" begin
+@testset "kernels.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = measure.(S,[π/4,3π/4]',π/4:π/2:2π,π/2,π/2,cubature=true) |> Table
     @test size(panels) == (8,)
@@ -182,13 +182,32 @@ end
     end
 end
 
+@testset "Dipole" begin
+    ring(x,V) = sum(eachindex(V)) do i # Biot-Savart of a unit-circulation vortex ring
+        A,B = x-V[i], x-V[i%length(V)+1]; c = A×B
+        c/(c'c)*((B-A)'*(A/norm(A)-B/norm(B)))/4π
+    end
+    v = (SA[0.,0,0],SA[1.,0,0],SA[1.,2,0],SA[0.,2,0])
+    p = merge(measure(v...),(;kernel=NeumannKelvin.Dipole(NeumannKelvin.PolyKernel())))
+    for x in (SA[0.3,0.4,0.5],SA[1.5,1.0,0.0],SA[0.5,3.0,0.0],SA[4.,-3,1]) # off-plane, in-plane, far
+        @test gradient(x->∫G(x,p),x) ≈ -4π*ring(x,v) atol=1e-12 # constant-strength dipole panel ≡ vortex ring
+    end
+    @test NeumannKelvin.∂ₙϕ(p,p) ≈ -4π*ring(p.x,v)[3] # self-influence
+
+    # in a Kelvin domain, the dipole is still the derivative of the source WRT its position
+    sink(t) = measure((v .+ Ref(SA[0,0,t-1]))...) # source panel moved by t*n from z=-1
+    p,d,x,h = merge(sink(0),(;kernel=p.kernel)),Kelvin(0.5),SA[0.3,-0.2,-0.5],1e-4
+    ϕ = NeumannKelvin.ϕ
+    @test ϕ(x,p,d) ≈ (ϕ(x,sink(h),d)-ϕ(x,sink(-h),d))/2h rtol=1e-6
+end
+
 extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 @testset "solvers.jl" begin
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
-    sys = gmressolve!(BodyPanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = copy(sys.body.q)
+    sys = gmressolve!(PanelSystem(panels,U=SA[3,4,0]),atol=1e-8); q = NeumannKelvin.get_q(sys)
     directsolve!(sys)
-    @test sys.body.q ≈ q
+    @test NeumannKelvin.get_q(sys) ≈ q
     @test norm(steadyforce(sys)) < 4e-5
     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.02
 
@@ -199,15 +218,15 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
 
     #check symmetry enforcement
     panels = panelize(S,0,π/2,0,π,hᵤ=0.12) # quarter plane
-    sys = gmressolve!(BodyPanelSystem(panels,sym_axes=(2,3)),atol=1e-6); q = copy(sys.body.q)
+    sys = gmressolve!(PanelSystem(panels,domain=Unbounded(sym_axes=(2,3))),atol=1e-6); q = NeumannKelvin.get_q(sys)
     directsolve!(sys)
-    @test sys.body.q ≈ q
+    @test NeumannKelvin.get_q(sys) ≈ q
     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.02
 end
 
 using ImplicitBVH
 using NeumannKelvin:fill_nodes,treesum,aggregate!
-@testset "BarnesHutCore.jl" begin
+@testset "barneshut.jl" begin
     cen = SA[0,0,1]
     S(θ₁,θ₂) = SA[cos(θ₂)*sin(θ₁),sin(θ₂)*sin(θ₁),cos(θ₁)]+cen
     panels = panelize(S,0,π,0,2π,hᵤ=0.12)
@@ -238,9 +257,9 @@ end
     @test @ballocations(NeumannKelvin.set_q!($BH,$q)) ≤ TEST_ALLOCS
     @test BH.q == q
 
-    sys = gmressolve!(BodyPanelSystem(panels,wrap=PanelTree))
+    sys = gmressolve!(PanelSystem(PanelTree(panels)))
     q = ∂ₙϕ.(panels,panels')\components(panels.n,1)
-    @test norm(sys.body.q-q)/norm(q) < 0.0032
+    @test norm(NeumannKelvin.get_q(sys)-q)/norm(q) < 0.0032
     @test norm(steadyforce(sys)) < 4e-3
     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.015
     @test @ballocations(Φ($panels.x[1],$sys)) ≤ TEST_ALLOCS
@@ -251,29 +270,31 @@ function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,kwargs...)
     panelize(S,0,π,0,π,hᵤ=h*√AR,hᵥ=h/√AR;kwargs...)
 end
 halfplane(L,ℓ;hᵤ=0.3f0ℓ,hᵥ=hᵤ,s=L/2+2f0π*ℓ) = measure.((x,y)->SA[x,y,0],s:-hᵤ:-2s,(hᵥ/2:hᵥ:4s/3)',hᵤ,hᵥ,flip=true)
-@testset "FSPanelSystem.jl" begin
+@testset "FreeSurface.jl" begin
     ℓ = 0.45^2; freesurf = halfplane(1.,ℓ); body = spheroid(1/60)
-    sys = FSPanelSystem(body,freesurf,sym_axes=2,ℓ=0,wrap=identity)
+    fs = FreeSurface(freesurf,ℓ=0,wrap=identity)
+    sys = PanelSystem((body,fs),domain=Unbounded(sym_axes=2))
     q = NeumannKelvin.get_q(sys)
     @test length(q)==length(body)+length(freesurf)
-    @test sys.body.dA == body.dA
-    @test sys.ℓ == 0
+    @test sys.boundaries[1].dA == body.dA
+    @test fs.ℓ == 0
     @test sys.U == SA[-1,0,0]
 
     badsurf = measure.((u,v)->SA[u,v,0],-4:1:2,(1/2:1:2)',1,1,flip=true)
-    @test_throws ArgumentError FSPanelSystem(body,badsurf;ℓ)
+    @test_throws ArgumentError FreeSurface(badsurf;ℓ)
 
     # Setting ℓ=0 turns freesurf into reflection wall
     gmressolve!(sys)
-    sys2 = gmressolve!(BodyPanelSystem(body,sym_axes=(2,3),wrap=PanelTree))
+    sys2 = gmressolve!(PanelSystem(PanelTree(body),domain=Unbounded(sym_axes=(2,3))))
     @test extreme_cₚ(sys)≈extreme_cₚ(sys2) rtol=0.03
     @test @ballocations(Φ($body.x[1],$sys)) ≤ TEST_ALLOCS
 
     # Setting ℓ>0 turns on freesurf, but it's slow to converge
-    sys = FSPanelSystem(body,freesurf;sym_axes=2,ℓ,θ²=16)
+    fs = FreeSurface(freesurf;ℓ,θ²=16)
+    sys = PanelSystem((PanelTree(body;θ²=16),fs),domain=Unbounded(sym_axes=2))
     gmressolve!(sys,itmax=160)                      # should converge...
     @test -2steadyforce(sys,S=1)[1] ≈ 6.2e-3 rtol=0.066 # Analytic Linear FSBC solution
-    mn,mx = extrema(ζ(sys))
+    mn,mx = extrema(ζ(fs,sys))
     @test -2mn > mx # trough is much bigger than crest
 end
 
@@ -328,17 +349,18 @@ wigley(hᵤ;B=0.125,D=0.05,hᵥ=0.25) = measure.(
     0.5hᵤ:hᵤ:1,(0.5hᵥ:hᵥ:1)',hᵤ,hᵥ,flip=true) |> Table
 @testset "NeumannKelvin.jl" begin
     # Compare submerged spheroid drag to Farell/Baar
-    sys = NKPanelSystem(spheroid(0.04),sym_axes=2,ℓ=0.5^2) |> directsolve!
-    @test @ballocations(Φ($sys.body.x[1],$sys)) ≤ TEST_ALLOCS
-    @test @ballocations(cₚ($sys.body.x[1],$sys)) ≤ TEST_ALLOCS
+    sys = PanelSystem(spheroid(0.04),domain=Kelvin(0.5^2,sym_axes=2)) |> directsolve!
+    x = sys.boundaries[1].x[1]
+    @test @ballocations(Φ($x,$sys)) ≤ TEST_ALLOCS
+    @test @ballocations(cₚ($x,$sys)) ≤ TEST_ALLOCS
     @test -steadyforce(sys,S=1/2)[1] ≈ 6e-3 rtol=0.023
 
     # Compare elliptical prism drag to Guevel/Baar (no WL contour)
-    sys = NKPanelSystem(prism(0.1),sym_axes=2,ℓ=0.55^2) |> directsolve!
+    sys = PanelSystem(prism(0.1),domain=Kelvin(0.55^2,sym_axes=2)) |> directsolve!
     @test -steadyforce(sys,S=1/2)[1] ≈ 0.062 rtol=0.03
 
     # Compare thin-ship wigley to Tuck 2008 (no WL contour)
-    sys = NKPanelSystem(wigley(0.05),sym_axes=2,ℓ=0.51^2) |> directsolve!
+    sys = PanelSystem(wigley(0.05),domain=Kelvin(0.51^2,sym_axes=2)) |> directsolve!
     @test -steadyforce(sys)[1] ≈ 0.0088-0.003 rtol=0.03 # Remove ITTC Cf
 end
 
@@ -383,7 +405,7 @@ using NURBS,FileIO
     panels = panelize(sphere,hᵤ=0.25)
     @test all( 0.9 .< extrema(panels.dA) ./ 0.25^2 .< 4/3)
 
-    sys = directsolve!(BodyPanelSystem(panels))
+    sys = directsolve!(PanelSystem(panels))
     @test bodyarea(sys) ≈ 4π rtol=1e-5
     @test bodyvol(sys) ≈ 4π/3 rtol=0.01
     @test extreme_cₚ(sys) ≈ [-1.25,1] rtol=0.04
@@ -397,8 +419,8 @@ using GeometryBasics,FileIO
     @test eltype(panels.kernel)==NeumannKelvin.PolyKernel
     @test all([p.n'p.x>0 for p in panels]) # all outward facing
 
-    sys = BodyPanelSystem(panels,wrap=PanelTree)
-    @test sys.body.bvh.leaves[1].volume isa ImplicitBVH.BBox # triggered correct BV
+    sys = PanelSystem(PanelTree(panels))
+    @test sys.boundaries[1].bvh.leaves[1].volume isa ImplicitBVH.BBox # triggered correct BV
     @test bodyarea(sys) ≈ 957 rtol=1e-3
     @test bodyvol(sys) ≈ 2475 rtol=3e-2
 

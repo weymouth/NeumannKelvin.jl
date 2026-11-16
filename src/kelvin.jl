@@ -24,7 +24,7 @@ Nlog(x,y,z) = -x*(1+3z/4-x^2/8+y^2/16+5z^2/16)*log(hypot(x,y,z))
 
 # Transformations to/from spherical (S) & Cartesian (X) coordinates
 S2X(S) = ((R,θ,α²)=S; α=√α²; SA[R*sin(θ),R*cos(θ)*sin(α),-R*cos(θ)*cos(α)])
-X2S(x,y,z) = (R = hypot(x,y,z); SA[R,min(asin(absx(x)/R),π/2-eps()),z==0 ? (π/2)^2 : atan(abs(y/z))^2])
+X2S(x,y,z) = (R = hypot(x,y,z); SA[R,min(asin(absx(x)/R),π/2-eps()),primal(z)==0 ? (π/2)^2 : atan(abs(y/z))^2])
 r2R(S) = SA[max(10/S[1],1e-2),S[2],S[3]] # 10/R mapping for outer zone, held at R=1000 beyond
 
 # Create fast Chebychev interpolator for Ngk

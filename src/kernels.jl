@@ -25,7 +25,7 @@ function ∫G_kernel(ξ,p,::PolyKernel)
         denom = R[j] + r[j]'t
         (numer > 0 && denom > 0) ? r[i]'m * log(numer/denom) : zero(r[i]'m)
     end
-    Ω = ξ==p.x ? -2π : sum(2:N-1) do i # solid angle, fan-triangulated from v₁
+    Ω = primal.(ξ)==p.x ? -2π : sum(2:N-1) do i # solid angle, fan-triangulated from v₁
         a,b,c,Ra,Rb,Rc = r[1],r[i],r[i+1],R[1],R[i],R[i+1]
         2atan(a'*(b×c), Ra*Rb*Rc + (a'b)*Rc + (b'c)*Ra + (c'a)*Rb)
     end
@@ -38,7 +38,7 @@ end
 Dipole panel kernel: the derivative of the `source` kernel with respect to the panel position along `p.n`.
 """
 struct Dipole{K<:GreenKernel} <: GreenKernel; source::K; end
-∫G_kernel(x,p,d::Dipole) = x==p.x ? 2π*one(eltype(x)) : derivative(t->∫G_kernel(x-t*p.n,p,d.source),0) # inside limit at the centroid; moving x by -t*n ≡ moving the panel by t*n
+∫G_kernel(x,p,d::Dipole) = primal.(x)==p.x ? 2π*one(eltype(x)) : derivative(t->∫G_kernel(x-t*p.n,p,d.source),0) # inside limit at the centroid; moving x by -t*n ≡ moving the panel by t*n
 
 """
     Wake()
@@ -52,6 +52,7 @@ function ∫G_kernel(x,p,::Wake) # solid angle of the spherical triangle (a,b,-x
 end
 
 using ForwardDiff: value, partials, Dual, hessian
+primal(x::Dual) = primal(value(x)); primal(x) = x # strip every Dual layer: ForwardDiff ≥1 `==` also compares partials
 """
     ∫G(x,p)
 
@@ -60,7 +61,7 @@ Approximate integral `∫ₚ G(x,x')da'` over panel `p`. This function enforces 
 ∫G(x,p) = ∫G_kernel(x,p,p.kernel)
 function ∫G(d::AbstractVector{<:Dual{Tag,T,N}},p) where {Tag,T,N}
     val = ∫G_kernel(d,p,p.kernel) # use auto-diff
-    value.(d) ≠ p.x && return val
+    primal.(d) ≠ p.x && return val
     ∂ₙ = ∂ₙself(p,p.kernel)
     ∂ = ntuple(i->∂ₙ*sum(j->partials(d[j])[i]*p.n[j],eachindex(d)),N)
     Dual{Tag}(value(val),∂...) # overwrite partials with ∇∫G(x,x)=∂ₙself*n̂ contribution

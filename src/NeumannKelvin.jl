@@ -41,6 +41,11 @@ export gmressolve!,directsolve!
 include("FreeSurface.jl")
 export FreeSurface,ζ
 
+# Lifting boundary: dipole panels with a trailing wake
+include("surfacegradient.jl")
+include("Lifting.jl")
+export Lifting
+
 # General support functions
 components(data,i) = getindex.(data, i)
 components(data::AbstractArray{S}) where {S<:SVector{n}} where n = ntuple(i->components(data,i),n)

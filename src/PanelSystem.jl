@@ -25,11 +25,11 @@ end
 PanelSystem(boundary;kwargs...) = PanelSystem((boundary,);kwargs...)
 function PanelSystem(boundaries::Tuple;domain=Unbounded(),U=SA[-1,0,0])
     allequal(map(b->eltype(b.dA),boundaries)) || throw(ArgumentError("Floating point type of all panels must match"))
-    sys = PanelSystem(map(withq,boundaries),domain,U)
+    sys = PanelSystem(map(b->setup(b,domain),boundaries),domain,U)
     check(domain,sys); foreach(b->check(b,sys),boundaries); sys
 end
-withq(table::Table) = Table(table; q=zeros_like(table.dA))
-withq(boundary) = boundary
+setup(table::Table,domain) = Table(table; q=zeros_like(table.dA))
+setup(boundary,domain) = boundary
 check(domain_or_boundary,sys) = nothing
 
 Base.show(io::IO,table::Table) = println(io,"Table with $(length(propertynames(table))) columns and $(length(table)) rows")
@@ -58,7 +58,9 @@ isbody(boundary) = true
 bodies(sys) = filter(isbody,sys.boundaries)
 @inline set_q!(table::Table,q) = table.q .= q
 rhs(b::Body,sys) = map(n->-sys.U'n,b.n)
-bc!(r,b::Body,sys) = AK.foreachindex(i->r[i] = Φₙ(b[i],sys),r)
+bc!(r,b,sys) = AK.foreachindex(i->r[i] = condition(b,i,x->Φ(x,sys)),r)
+condition(b::Body,i,f) = derivative(t->f(b.x[i]+t*b.n[i]),0)
+unit(b,j,domain) = (p = b[j]; x->ϕ(x,p,domain))
 precon!(z,boundary) = z # identity
 
 """

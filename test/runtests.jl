@@ -224,6 +224,77 @@ extreme_cₚ(sys) = collect(extrema(cₚ(sys)))
     @test extreme_cₚ(sys) ≈ [-1.25,1.0] rtol=0.02
 end
 
+using GeometryBasics,FileIO
+function icosphere(n) # Icosahedron.stl with each triangle split in four n times, vertices on the unit sphere
+    T = [map(v->normalize(SVector{3,Float64}(v)),Tuple(p.verts)) for p in panelize(load(joinpath(@__DIR__,"..","examples","Icosahedron.stl")))]
+    split((a,b,c)) = (ab = normalize(a+b); bc = normalize(b+c); ca = normalize(c+a); [(a,ab,ca),(ab,b,bc),(ca,bc,c),(ab,bc,ca)])
+    for _ in 1:n; T = reduce(vcat,split.(T)); end
+    Table(map(t->(p = measure(t...); p.n'p.x>0 ? p : measure(reverse(t)...)),T))
+end
+const noTE = Tuple{SVector{3,Float64},SVector{3,Float64}}[]
+
+@testset "surfacegradient.jl" begin
+    w = NeumannKelvin.loopweights(icosphere(2),noTE,Unbounded().mirrors)
+    @test maximum(wᵢ->norm(sum(last,wᵢ)),w) < 1e-10 # uniform q induces no surface velocity
+end
+
+@testset "Lifting.jl" begin
+    # a trailing strip = a dipole panel of length L + the strip trailing from its far end
+    v₁,v₂,L = SA[0.,0,0],SA[0.,1,0],10
+    strip(a,b) = (;x=(a+b)/2,n=SA[0.,0,1],verts=SA[a,b],kernel=NeumannKelvin.Wake())
+    panel = merge(measure(v₁,v₂,v₂-SA[L,0,0],v₁-SA[L,0,0]),(;kernel=NeumannKelvin.Dipole(NeumannKelvin.PolyKernel())))
+    for x in (SA[0.3,0.4,0.5],SA[0.2,0.5,-0.05],SA[-12.,1.5,0.3])
+        ϕ(x) = ∫G(x,panel)+∫G(x,strip(v₁-SA[L,0,0],v₂-SA[L,0,0]))
+        @test ∫G(x,strip(v₁,v₂)) ≈ ϕ(x)
+        @test gradient(x->∫G(x,strip(v₁,v₂)),x) ≈ gradient(ϕ,x)
+    end
+    # ...and for the Kelvin part, the strip minus the strip L downstream = small dipole panels covering [0,L]
+    ∫k(x,p,k) = NeumannKelvin.∫kelvin(x,p,k,0.25,-0.0)
+    a,b,X,h,w = SA[0.,0,-0.3],SA[0.,0.2,-0.3],SA[1.,0,0],0.005,0.025
+    for x in (SA[0.5,0.1,-0.2],SA[-1.,0.05,-0.25]) # upstream and downstream of the strip edge
+        chain = sum(Iterators.product(0:h:1-h/2,0:w:0.2-w/2)) do (t,y)
+            ∫k(x,measure(a+SA[-t,y,0],a+SA[-t,y+w,0],a+SA[-t-h,y+w,0],a+SA[-t-h,y,0]),NeumannKelvin.Dipole(NeumannKelvin.PolyKernel()))
+        end
+        @test ∫k(x,strip(a,b),NeumannKelvin.Wake())-∫k(x,strip(a-X,b-X),NeumannKelvin.Wake()) ≈ chain rtol=1e-3
+    end
+
+    # closed sphere without a wake: cₚ converges faster than first order
+    function cₚerror(n)
+        sys = directsolve!(PanelSystem(Lifting(icosphere(n),noTE)),verbose=false); x = sys.boundaries[1].x
+        sum(abs.(cₚ(sys) .- map(x->1-9/4*(1-x[1]^2/x'x),x)))/length(x)
+    end
+    @test cₚerror(2) < cₚerror(1)/2
+
+    # elliptic wing with a closed NACA0012 section: unit root chord, aspect ratio AR, nose up by α
+    naca(s) = 0.6*(0.2969√s-0.1260s-0.3516s^2+0.2843s^3-0.1036s^4)
+    AR,α = 6,deg2rad(5); b = π*AR/4; area = π*b/4; R = SA[cos(α) 0 -sin(α);0 1 0;sin(α) 0 cos(α)]
+    W(θ,φ,depth) = (s=(1+cos(θ))/2; c=sinpi(φ/π); R*SA[c*(1/4-s), b/2*cos(φ), -sign(sin(θ))*c*naca(s)]-SA[0,0,depth])
+    function wing(φ;depth=0)
+        X = [W(θ,φ,depth) for θ in range(0,2π,33), φ in φ]; X[end,:] = X[1,:] # θ=0,2π: trailing edge
+        Table([measure(X[i,j],X[i+1,j],X[i+1,j+1],X[i,j+1]) for i in 1:32 for j in 1:length(φ)-1]),[(X[1,j],X[1,j+1]) for j in 1:length(φ)-1]
+    end
+    CLΓ(sys,S) = (w = sys.boundaries[1].wake; sum(k->4π*w.q[k]*(sys.U×(w.verts[k][2]-w.verts[k][1]))[3],eachindex(w))/(S/2)) # Kutta–Joukowski
+    sys = directsolve!(PanelSystem(Lifting(wing(range(0,π,25))...)),verbose=false)
+    @test CLΓ(sys,area)/α ≈ 2π/(1+2/AR) rtol=0.01 # thin-foil lifting line
+    @test steadyforce(sys;S=area)[3]/α ≈ 2π/(1+2/AR) rtol=0.02
+
+    half = directsolve!(PanelSystem(Lifting(wing(range(0,π/2,13))...),domain=Unbounded(sym_axes=2)),verbose=false)
+    @test half.boundaries[1].wake.q ≈ sys.boundaries[1].wake.q[1:12] rtol=1e-8 # symmetric domain = full wing
+    @test CLΓ(half,area/2) ≈ CLΓ(sys,area) rtol=1e-8
+
+    q = randn(length(sys.boundaries[1])); NeumannKelvin.set_q!(sys,q); r = similar(q); NeumannKelvin.bc!(r,sys)
+    @test NeumannKelvin.influence(sys)*q ≈ r # direct and matrix-free operators agree
+
+    # below a free surface: ℓ→0 is a rigid wall at z=0, and a deep foil makes no waves
+    solve(depth,domain) = directsolve!(PanelSystem(Lifting(wing(range(0,π/2,13);depth)...);domain),verbose=false)
+    @test CLΓ(solve(1,Kelvin(0.01,sym_axes=2)),area/2) ≈ CLΓ(solve(1,Unbounded(sym_axes=(2,3))),area/2) rtol=2e-3
+    deep,wall = solve(4,Kelvin(0.5,sym_axes=2)),solve(4,Unbounded(sym_axes=(2,3)))
+    @test CLΓ(deep,area/2) ≈ CLΓ(wall,area/2) rtol=1e-3
+    @test steadyforce(deep;S=area/2)[1] ≈ steadyforce(wall;S=area/2)[1] atol=1e-5
+    v = icosphere(1).verts[1]
+    @test_throws ArgumentError Lifting(icosphere(1),[(v[1],(v[1]+v[2])/2)]) # half a panel edge
+end
+
 using ImplicitBVH
 using NeumannKelvin:fill_nodes,treesum,aggregate!
 @testset "barneshut.jl" begin

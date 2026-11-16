@@ -78,13 +78,13 @@ function directsolve!(sys;verbose=true)
     end; set_q!(sys,q)
 end
 function influence(sys)
-    all(b->b isa Body,sys.boundaries) || throw(ArgumentError("directsolve! only supports body boundaries"))
+    any(b->b isa FreeSurface,sys.boundaries) && throw(ArgumentError("directsolve! can't solve a FreeSurface"))
     I = slices(sys); N = last(last(I))
     A = zeros(eltype(first(sys.boundaries).dA),N,N)
     for (bᵢ,Iᵢ) in zip(sys.boundaries,I), (bⱼ,Iⱼ) in zip(sys.boundaries,I)
         influence!(view(A,Iᵢ,Iⱼ),bᵢ,bⱼ,sys.domain)
     end; A
 end
-influence!(A,bᵢ,bⱼ,domain) = AK.foraxes(A,2) do j; pⱼ = bⱼ[j]; for i in axes(A,1)
-    @inbounds A[i,j] = derivative(t->ϕ(bᵢ.x[i]+t*bᵢ.n[i],pⱼ,domain),0)
-end; end
+influence!(A,bᵢ,bⱼ,domain) = (C = CartesianIndices(A); AK.foreachindex(A) do k; i,j = Tuple(C[k])
+    @inbounds A[k] = condition(bᵢ,i,unit(bⱼ,j,domain))
+end; A)

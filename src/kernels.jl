@@ -38,7 +38,18 @@ end
 Dipole panel kernel: the derivative of the `source` kernel with respect to the panel position along `p.n`.
 """
 struct Dipole{K<:GreenKernel} <: GreenKernel; source::K; end
-∫G_kernel(x,p,d::Dipole) = derivative(t->∫G_kernel(x-t*p.n,p,d.source),0) # moving x by -t*n ≡ moving the panel by t*n
+∫G_kernel(x,p,d::Dipole) = x==p.x ? 2π*one(eltype(x)) : derivative(t->∫G_kernel(x-t*p.n,p,d.source),0) # inside limit at the centroid; moving x by -t*n ≡ moving the panel by t*n
+
+"""
+    Wake()
+
+Kernel of a dipole strip trailing from the edge `p.verts` to x=-∞, i.e. a horseshoe vortex.
+"""
+struct Wake <: GreenKernel end
+function ∫G_kernel(x,p,::Wake) # solid angle of the spherical triangle (a,b,-x̂)
+    a,b = p.verts .- Ref(x); A,B = norm(a),norm(b)
+    2atan(a'*(b×SA[-1,0,0]), A*B+a'b-b[1]*A-a[1]*B)
+end
 
 using ForwardDiff: value, partials, Dual, hessian
 """

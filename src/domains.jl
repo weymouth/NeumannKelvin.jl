@@ -48,7 +48,7 @@ function check(::Kelvin,sys)
     checkU(sys)
     any(b->any(x->x[3]≥0,b.x),sys.boundaries) && throw(ArgumentError("Kelvin panels must be below z=0"))
 end
-checkU((;U)) = U[1]<0 && iszero(U[2]) && iszero(U[3]) || throw(ArgumentError("free-surface flows need U=[-|U|,0,0]"))
+checkU((;U)) = U[1]<0 && iszero(U[2]) && iszero(U[3]) || throw(ArgumentError("U must be [-|U|,0,0]"))
 
 green(d::Kelvin) = (x,p)->∫K(x,p,d)
 @inline function ∫K(x,p,(;ℓ,filter,contour)::Kelvin)
@@ -63,3 +63,13 @@ end
 @inline onwaterline(p) = any(x->x[3]≥-1e-4,p.verts)
 ∫kelvin(x,p,::GreenKernel,ℓ,z_max) = p.dA*kelvin(x,p.x;ℓ,z_max)
 ∫kelvin(x,p,::Dipole,ℓ,z_max) = derivative(t->p.dA*kelvin(x,p.x+t*p.n;ℓ,z_max),0) # kelvin isn't translation invariant in z
+function ∫kelvin(x,p,::Wake,ℓ,z_max) # stopgap until #27: half-wave panels where waves reach x, then a sinh-mapped tail
+    (v₁,v₂),n = p.verts,p.n; e = v₂-v₁; w = norm(e×SA[1,0,0])/2
+    sum((-1/√3,1/√3)) do g
+        v = v₁+(1+g)/2*e; tw = max(0,value(v[1]-x[1])); d = max(hypot(value(x[2]-v[2]),value(x[3]+v[3])),ℓ/10)
+        f(t) = derivative(τ->kelvin(x,v-SA[t,0,0]+τ*n;ℓ,z_max),0)
+        m = ceil(Int,tw/(π*ℓ))
+        wave = sum(i->quadgl(f,(i-1)*tw/m,i*tw/m;x=xg16,w=wg16),1:m;init=zero(eltype(x)))
+        w*(wave+quadgl(u->d*cosh(u)*f(tw+d*sinh(u)),0,12))
+    end
+end

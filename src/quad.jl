@@ -40,7 +40,8 @@ Integrate the contributions of `imag(∫γ(h)exp(im*g(h))dh)` from
 `h = [h₀,∞]` using numerical stationary phase. The complex path
 is found as the roots of `ϵ(h)=g(h)-g(h₀)-im*p=0` where `p` are
 Gauss-Laguerre integration points. The pre-function `γ` must be
-slowly varying compared to `g` over `h`.
+slowly varying compared to `g` over `h`. Returns `NaN` if a root
+is not found, which happens when the path passes close to a saddle.
 """
 @fastmath function nsp(h₀,g,dg,γ=one;xlag=xlag,wlag=wlag,atol=1e-3)
     # Sum over complex Gauss-Laguerre points
@@ -56,7 +57,7 @@ function newton(f,df,x;atol,n=10)
     for _ in 1:n
         fx = f(x); abs2(fx) < atol^2 && return x
         x -= fx/df(x)
-    end; x
+    end; x*NaN
 end
 
 """

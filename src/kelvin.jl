@@ -61,9 +61,10 @@ function wavelike(x::T,y::T,z::T;γ=one)::T where T
     S = filter(s->-R<s<R,stationary_points(xv,yv))   # g'=0 points
     f(t) = γ(t)*exp(z*(1+t^2))*sin(g(x,y,t))         # integrand
     length(S)==0 && return 4quadgl0(f,-R,R)          # real-line case
-    rngs = finite_ranges(S,t->g(xv,yv,t),Δg,R)       # finite phase ranges
-    4complex_path(t->g(x,y,t)-im*z*(1+t^2),          # complex case: complex phase
-                  t->dg(x,y,t)-2im*z*t, rngs; f,γ)   # ...and it's derivative
+    W(Δg) = 4complex_path(t->g(x,y,t)-im*z*(1+t^2),  # complex case: complex phase
+                  t->dg(x,y,t)-2im*z*t,              # ...and it's derivative
+                  finite_ranges(S,t->g(xv,yv,t),Δg,R); f,γ) # finite phase ranges
+    w = W(Δg); isnan(w) ? W(2Δg/3) : w
 end
 g(x,y,t) = (x+y*t)*kₓ(t)                  # phase function
 dg(x,y,t) = (x*t+y*(2t^2+1))/kₓ(t)        # it's derivative

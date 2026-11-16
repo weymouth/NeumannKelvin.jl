@@ -385,6 +385,12 @@ using ForwardDiff: Dual
         @test NeumannKelvin.nearfield(x,y,z)≈bruteN(x,y,z) atol=3e-4 rtol=31e-5
         @test NeumannKelvin.wavelike(x,y,z)≈bruteW(x,y,z) atol=1e-4 rtol=2e-4
     end
+    X = (-44.97301565342592, 9.974575242736076, -3.8834898419795976)
+    @test NeumannKelvin.wavelike(X...)≈bruteW(X...) atol=1e-6
+    Wz(z) = NeumannKelvin.wavelike(X[1]+0z,X[2]+0z,z)
+    ∂zW(h) = (Wz(X[3]+h)-Wz(X[3]-h))/2h
+    @test ∂zW(1e-4)≈∂zW(1e-6) rtol=1e-6
+    @test derivative(Wz,X[3])≈∂zW(1e-4) rtol=1e-6
     @test NeumannKelvin.Ngk(0.,0.6,-0.6)≈NeumannKelvin.Ngk(1e-8,0.6,-0.6) atol=1e-8 # Re(ζ)=0 inside (-1,1) at x=0
     jump(y) = (d(x) = derivative(x->NeumannKelvin.nearfield(x,y,-0.),x); d(1e-7)-d(-1e-7)) # ∂ₓN jumps at x=0
     for y in (0.25,0.1,0.05,0.02)

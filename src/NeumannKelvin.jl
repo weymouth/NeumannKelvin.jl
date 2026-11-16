@@ -53,12 +53,12 @@ extent(a) = (p = extrema(a); p[2]-p[1])
 zeros_like(array::AbstractArray) = (a = similar(array); a .= 0; a)
 """
     viz(panels::Table, values=panels.dA; vectors=panels.n, kwargs...)
-    viz(sys::PanelSystem; freesurf=true, fsargs=(;s=1/2+2πℓ,h=ℓ/3,half=true), kwargs...)
+    viz(sys::PanelSystem; freesurf=true, fsargs=(;s=1/2+2πℓ,h=ℓ/3,half=true,x=-2s:h:s,y=0:h:s), kwargs...)
 
 Vizualizes a table of `panels` or a `PanelSystem` in 3D. Panels are colored by the `value` array
 and the `vectors` are plotted extending from each panel center. If `freesurf` is true (default) for
 a free-surface panel system, the free surface is also plotted. The `fsargs` keyword tuple allows
-passing arguments to define the free surface extents and resolution for the `Kelvin` domain.
+passing arguments to define the free surface extents and resolution for the `Kelvin` domain, or its `x,y` grid directly.
 
 ** Note ** you must load a Makie backend (e.g. GLMakie, WGLMakie or CairoMakie) to use this function.
 
@@ -77,8 +77,7 @@ function xyζ(sys;kwargs...) # free surface grid & elevation, or nothing
     isnothing(i) ? xyζ(sys.domain,sys;kwargs...) : xyζ(sys.boundaries[i],sys)
 end
 xyζ(::Unbounded,sys;ignore...) = nothing
-function xyζ(d::Kelvin,sys;s=1/2+2π*d.ℓ,h=d.ℓ/3,half=true)
-    x,y=-2s:h:s,ifelse(half,0,-s):h:s
+function xyζ(d::Kelvin,sys;s=1/2+2π*d.ℓ,h=d.ℓ/3,half=true,x=-2s:h:s,y=ifelse(half,0,-s):h:s)
     return x,y,ζ(x,y,sys) .* d.ℓ
 end
 function xyζ(fs::FreeSurface,sys)

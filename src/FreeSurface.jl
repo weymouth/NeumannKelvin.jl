@@ -64,9 +64,9 @@ See also: [`Φ`](@ref)
 """
 ζ(x::SVector{3},sys) = derivative(t->Φ(x+t*SA[1,0,0],sys),0)/norm(sys.U)
 function ζ(x::AbstractVector,y::AbstractVector,sys)
-    z = zeros(eltype(first(sys.boundaries).dA),length(x),length(y))
-    AK.foraxes(z,1) do i; for j in axes(z,2)
-        z[i,j] = ζ(SA[x[i],y[j],0],sys)
-    end; end; z
+    z = zeros(eltype(first(sys.boundaries).dA),length(x),length(y)); C = CartesianIndices(z)
+    AK.foreachindex(z) do k; i,j = Tuple(C[k])
+        z[k] = ζ(SA[x[i],y[j],0],sys)
+    end; z
 end
 ζ(fs::FreeSurface,sys) = (AK.foreachindex(i-> fs.fsm[i] = ζ(fs.x[i],sys),fs.fsm); fs.fsm)

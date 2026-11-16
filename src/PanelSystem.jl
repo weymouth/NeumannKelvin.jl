@@ -39,7 +39,8 @@ function Base.show(io::IO,::MIME"text/plain",sys::PanelSystem)
     println(io,"  domain: ",sys.domain)
     println(io,"  background flow U: ",sys.U)
     foreach(b->(print(io,"  boundary: "); show(io,b)),sys.boundaries)
-    print(io,"  body area & volume: ",bodyarea(sys),", ",bodyvol(sys))
+    println(io,"  body area & volume: ",bodyarea(sys),", ",bodyvol(sys))
+    print(io,"  strength extrema: ",extrema(get_q(sys)))
 end
 
 """

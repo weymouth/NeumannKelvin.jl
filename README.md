@@ -15,6 +15,7 @@ A potential flow problem is a fluid domain with boundary conditions. Each condit
 2. The panelled `boundaries`, each applying its own boundary condition:
    - A solid body, defined using a set of source panels with the Neumann (flow tangency) condition applied to each panel.
    - A `FreeSurface`, defined using a set of source panels with the linear FSBC applied to each panel.
+   - A `Lifting` body, defined using a closed set of dipole panels with zero potential inside, and a wake whose strength is set by the Kutta condition.
 
 The package also defines:
  - `PanelTree` struct to accelerate the evaluation of the potential over a set of panels using a Barnes-Hut style monopole approximation for panels far from the query point.
@@ -272,3 +273,21 @@ viz(NKsys)
 ```
 ![Wigley hull in the Kelvin domain](examples//wigley_waves.png)
 This is a fisheye view so you can see the pressure distribution and the high-resolution wave pattern. The `contour=true` flag turns on the waterline contour contribution to the potential, although this is a small contribution for the fine-bow of the Wigley hull.
+
+## Lifting surfaces
+
+A `Lifting` boundary is a closed body of dipole panels (the derivative of a source panel) with a flat wake trailing to x=-∞ from each trailing edge, and the wake strength set by the Kutta condition. The panels must share vertices, which `panelize` grids don't, so the mesh is built directly. [examples/hydrofoil.jl](examples/hydrofoil.jl) builds the rectangular H105 hydrofoil of [Nicolas et al. (2023)](https://doi.org/10.5957/jst/2023.8.10.183) (aspect ratio 4, α=2°) with rounded tips. Its core is
+```julia
+foil = wing(h=1) # Lifting(panels,te): closed dipole panels & the trailing edges, mid-chord one chord deep
+sys = PanelSystem(foil,domain=Kelvin(0.5^2,sym_axes=2)) |> directsolve! # chord Froude number 0.5
+steadyforce(sys;S=2) # lift & drag on the half-wing area
+waves = viz(sys,colorrange=(-1,1),fsargs=(x=-6:1/8:2,y=0:1/6:5)); resize!(waves,1200,600)
+ax3 = content(waves[1,1]); ax3.elevation = -π/5; ax3.viewmode = :stretch # look up from below
+```
+![H105 hydrofoil in the Kelvin domain](examples//hydrofoil_waves.png)
+
+This fisheye view shows the pressure side of the foil and its wave pattern. 
+
+Sweeping the depth and Froude number, the lift relative to its deep-water value matches the boundary element results of Nicolas et al. within 0.01 for h/c ≥ 1.5, including the gain at low Froude number and the loss at high Froude number. The linear Neumann-Kelvin method diverges when the depth is very small. 
+
+![Lift and drag ratios against Nicolas et al.](examples//hydrofoil_forces.png)

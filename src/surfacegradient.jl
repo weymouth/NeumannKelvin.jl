@@ -29,14 +29,14 @@ function images(panels,cuts,mirrors) # panels and cuts plus the mirror images to
     Table(P),C,owner
 end
 function loopweights(i,panels,J,cuts)
-    link(a,b,v) = (e = shared(panels[a],panels[b]); !isnothing(e) && !any(c->along(e,c),cuts) && along(v,e))
+    link(a,b,v) = (e = shared(panels[a],panels[b],v); !isnothing(e) && !any(c->along(e,c),cuts))
     segs = Tuple{Int,eltype(panels.x),eltype(panels.x)}[]
     for v in nodes(i,panels,J)
         group,around = [i],filter(j->onedges(v,panels[j]),J) # panels reachable around v from i without crossing a cut
         while (k = findfirst(b->b∉group && any(a->link(a,b,v),group),around))≠nothing; push!(group,around[k]); end
         for a in group[2:end]
             any(c->along(v,c) && onedges(c,panels[a]),cuts) && push!(segs,(a,panels.x[a],v))
-            for b in group[2:end]; a<b && link(a,b,v) && push!(segs,crossing(a,b,panels,panels.n[i])...); end
+            for b in group[2:end]; a<b && link(a,b,v) && push!(segs,crossing(a,b,v,panels)...); end
         end
     end
     foreach(c->onedges(c,panels[i]) && push!(segs,(i,c...)),cuts)
@@ -44,9 +44,9 @@ function loopweights(i,panels,J,cuts)
     area = sum(((j,f,t),)->(f-x)×(t-x),loop)'n/2 # signed, so the weights don't depend on the loop's direction
     [j=>(t-f)×n/area for (j,f,t) in loop]
 end
-function crossing(a,b,panels,n) # centroid a to centroid b, split where the line crosses their shared edge
-    xa,xb,(e₁,e₂) = panels.x[a],panels.x[b],shared(panels[a],panels[b])
-    d,e = xb-xa,e₂-e₁; X = xa+((e₁-xa)×e)'n/((d×e)'n)*d
+function crossing(a,b,v,panels) # centroid a to centroid b, split at the point closest to their shared edge through v
+    xa,xb,(e₁,e₂) = panels.x[a],panels.x[b],shared(panels[a],panels[b],v)
+    d,e = xb-xa,e₂-e₁; n = d×e; X = xa+((e₁-xa)×e)'n/(n'n)*d
     (a,xa,X),(b,X,xb)
 end
 function chain(segs) # join the segments end-to-end into a closed loop
@@ -65,10 +65,10 @@ edges(p) = ((p.verts[k],p.verts[k%length(p.verts)+1]) for k in eachindex(p.verts
 along(v::SVector,(a,b)) = (d=b-a; t=(v-a)'d/(d'd); ϵ=√eps(typeof(t)); -ϵ<t<1+ϵ && norm(v-a-t*d)<ϵ*norm(d)) # v on segment ab
 along((a,b)::Tuple,s) = along(a,s) && along(b,s) # segment ab within s
 onedges(s,p) = any(e->along(s,e),edges(p)) # point or segment s on the edges of panel p
-function shared(p,q) # the stretch of edge common to panels p and q, or nothing
+function shared(p,q,v) # the stretch of edge common to panels p and q through point v, or nothing
     for e in edges(p), f in edges(q)
         (e[1]≈e[2] || f[1]≈f[2]) && continue
-        along(f,e) && return f
-        along(e,f) && return e
+        along(f,e) && along(v,f) && return f
+        along(e,f) && along(v,e) && return e
     end
 end

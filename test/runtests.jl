@@ -264,6 +264,8 @@ end
         sum(abs.(cₚ(sys) .- map(x->1-9/4*(1-x[1]^2/x'x),x)))/length(x)
     end
     @test cₚerror(2) < cₚerror(1)/2
+    Φerror(n) = abs(Φ(SA[2.,0,0],directsolve!(PanelSystem(Lifting(icosphere(n),noTE)),verbose=false))+1/8) # Φ=U⋅x/2r³, empty wake
+    @test Φerror(2) < Φerror(1)/3 # second order
 
     # elliptic wing with a closed NACA0012 section: unit root chord, aspect ratio AR, nose up by α
     naca(s) = 0.6*(0.2969√s-0.1260s-0.3516s^2+0.2843s^3-0.1036s^4)
@@ -293,6 +295,7 @@ end
     @test steadyforce(deep;S=area/2)[1] ≈ steadyforce(wall;S=area/2)[1] atol=1e-5
     v = icosphere(1).verts[1]
     @test_throws ArgumentError Lifting(icosphere(1),[(v[1],(v[1]+v[2])/2)]) # half a panel edge
+    @test_throws ArgumentError PanelSystem((icosphere(1),Lifting(icosphere(1),noTE))) # sources and dipoles on one surface
 end
 
 using ImplicitBVH

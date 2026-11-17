@@ -25,6 +25,7 @@ end
 PanelSystem(boundary;kwargs...) = PanelSystem((boundary,);kwargs...)
 function PanelSystem(boundaries::Tuple;domain=Unbounded(),U=SA[-1,0,0])
     allequal(map(b->eltype(b.dA),boundaries)) || throw(ArgumentError("Floating point type of all panels must match"))
+    allunique(x for b in boundaries for x in b.x) || throw(ArgumentError("Boundaries can't share panels"))
     sys = PanelSystem(map(b->setup(b,domain),boundaries),domain,U)
     check(domain,sys); foreach(b->check(b,sys),boundaries); sys
 end
@@ -49,7 +50,7 @@ end
 Potential `Φ(x) = ∫ₛ q(x')ϕ(x-x')da'` induced by **solved** panel system `sys`.
 """
 Φ(x,sys) = sum(map(b->Φ_boundary(x,b,sys.domain),sys.boundaries))
-@inline Φ_boundary(x,panels,d) = (G = green(d); sum(m->(xₘ = x .* m; sum(p->p.q*G(xₘ,p),panels)),d.mirrors))
+@inline Φ_boundary(x,panels,d) = isempty(panels) ? zero(eltype(x)) : (G = green(d); sum(m->(xₘ = x .* m; sum(p->p.q*G(xₘ,p),panels)),d.mirrors))
 Φₙ(p,sys) = derivative(t->Φ(p.x+t*p.n,sys),0)
 ∇Φ(x,sys) = gradient(x′->Φ(x′,sys),x)
 

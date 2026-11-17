@@ -278,16 +278,17 @@ This is a fisheye view so you can see the pressure distribution and the high-res
 
 A `Lifting` boundary is a closed body of dipole panels (the derivative of a source panel) with a flat wake trailing to x=-∞ from each trailing edge, and the wake strength set by the Kutta condition. The panels must share vertices, which `panelize` grids don't, so the mesh is built directly. [examples/hydrofoil.jl](examples/hydrofoil.jl) builds the rectangular H105 hydrofoil of [Nicolas et al. (2023)](https://doi.org/10.5957/jst/2023.8.10.183) (aspect ratio 4, α=2°) with rounded tips. Its core is
 ```julia
-foil = wing(h=1) # Lifting(panels,te): closed dipole panels & the trailing edges, mid-chord one chord deep
-sys = PanelSystem(foil,domain=Kelvin(0.5^2,sym_axes=2)) |> directsolve! # chord Froude number 0.5
+foil,te = wing(h=1) # define foil geometry and trailing edge at depth `h=1`
+sys = PanelSystem(Lifting(foil,te),domain=Kelvin(0.5^2,sym_axes=2)) |> directsolve! # Fn_chord = 0.5
 steadyforce(sys;S=2) # lift & drag on the half-wing area
 waves = viz(sys,colorrange=(-1,1),fsargs=(x=-6:1/8:2,y=0:1/6:5)); resize!(waves,1200,600)
-ax3 = content(waves[1,1]); ax3.elevation = -π/5; ax3.viewmode = :stretch # look up from below
 ```
 ![H105 hydrofoil in the Kelvin domain](examples//hydrofoil_waves.png)
 
 This fisheye view shows the pressure side of the foil and its wave pattern. 
 
-Sweeping the depth and Froude number, the lift relative to its deep-water value matches the boundary element results of Nicolas et al. within 0.01 for h/c ≥ 1.5, including the gain at low Froude number and the loss at high Froude number. The linear Neumann-Kelvin method diverges when the depth is very small. 
+Sweeping the depth and Froude number, the lift relative to its deep-water value matches the boundary element results of Nicolas et al. within 0.01 for h/c ≥ 1.5, including the gain at low Froude number and the loss at high Froude number, although the linear Neumann-Kelvin method diverges when the depth is very small.
 
 ![Lift and drag ratios against Nicolas et al.](examples//hydrofoil_forces.png)
+
+Nicolas et al. use the boundary element code PUFFIn and [Perali et al. (2024)](https://archimer.ifremer.fr/doc/00904/101579/113081.pdf) report that a typical PUFFIn case takes a few minutes on a desktop computer. In contrast, our linear `Lifting+Kelvin` prediction takes about 0.3 s per case above on a 20-thread laptop.

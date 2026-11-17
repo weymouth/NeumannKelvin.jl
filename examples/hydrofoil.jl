@@ -25,21 +25,22 @@ function wing(;AR=4,α=deg2rad(2),h=1,nc=40,ns=6,nt=4)
     thin(i) = π/2*max(half(i),half(i+1)) < abs(S[i][1]-S[i+1][1]) # tip arc shorter than the row
     for i in 2:m-1; thin(i-1) && thin(i) && (X[i,2:nt] .= Ref(X[i,1])); end # one panel round the tip in thin rows
     panels = Table(filter(p->p.dA>0,[measure(X[i,j],X[i+1,j],X[i+1,j+1],X[i,j+1]) for i in 1:m-1 for j in 1:n]))
-    Lifting(panels,[(X[1,j],X[1,j+1]) for j in nt+1:n]) # the tip's trailing edge is a point
+    panels,[(X[1,j],X[1,j+1]) for j in nt+1:n] # the tip's trailing edge is a point
 end
 
 # Lift and drag ratios to the unbounded flow, sweeping the depth and Froude number Frc=U/√(gc), so ℓ=Frc²
 CLD(sys) = (F = steadyforce(sys;S=2); SA[F[3],-F[1]]) # half-wing planform area AR/2
-deep = CLD(PanelSystem(wing(),domain=Unbounded(sym_axes=2)) |> directsolve!)
+deep = CLD(PanelSystem(Lifting(wing()...),domain=Unbounded(sym_axes=2)) |> directsolve!)
 hs,Frs = [0.5,1,1.5,2,3,4],[0.5,1.1,6.3]
-ratios = [CLD(PanelSystem(wing(;h),domain=Kelvin(Fr^2,sym_axes=2)) |> directsolve!) ./ deep for h in hs, Fr in Frs]
+ratios = [CLD(PanelSystem(Lifting(wing(;h)...),domain=Kelvin(Fr^2,sym_axes=2)) |> directsolve!) ./ deep for h in hs, Fr in Frs]
 
 # Nicolas et al. Fig. 5 (AR=4), read by eye to ±0.01; NaN is off their plot
 paper = (CL=[1.11 0.57 0.765; 1.12 0.865 0.885; 1.072 0.976 0.932; 1.044 1.01 0.955; 1.021 1.016 0.977; 1.012 1.012 0.985],
          CD=[NaN 1.79 0.98; 1.17 1.53 1.11; 0.97 1.235 1.115; 0.945 1.08 1.10; 0.955 0.98 1.075; 0.965 0.97 1.055])
 
 using GLMakie
-sys = PanelSystem(wing(),domain=Kelvin(0.5^2,sym_axes=2)) |> directsolve! # Frc=0.5, h/c=1
+foil,te = wing(h=1)
+sys = PanelSystem(Lifting(foil,te),domain=Kelvin(0.5^2,sym_axes=2)) |> directsolve! # Frc=0.5, h/c=1
 waves = viz(sys,colorrange=(-1,1),fsargs=(x=-6:1/8:2,y=0:1/6:5)); resize!(waves,1200,600) # 6 chords downstream, 5 to the side
 ax3 = content(waves[1,1]); ax3.elevation = -π/5; ax3.viewmode = :stretch # fish-eye view from below, filling the figure
 

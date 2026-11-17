@@ -25,7 +25,7 @@ end
 PanelSystem(boundary;kwargs...) = PanelSystem((boundary,);kwargs...)
 function PanelSystem(boundaries::Tuple;domain=Unbounded(),U=SA[-1,0,0])
     allequal(map(b->eltype(b.dA),boundaries)) || throw(ArgumentError("Floating point type of all panels must match"))
-    allunique(x for b in boundaries for x in b.x) || throw(ArgumentError("Boundaries can't share panels"))
+    allunique(x for b in boundaries for x in b.x) || throw(ArgumentError("Panel centroids must be unique"))
     sys = PanelSystem(map(b->setup(b,domain),boundaries),domain,U)
     check(domain,sys); foreach(b->check(b,sys),boundaries); sys
 end

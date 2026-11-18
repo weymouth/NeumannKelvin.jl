@@ -20,7 +20,7 @@ and Statistical Computing, 7(3), 856-869.
 
 # Example
 ```julia
-sys = BodyPanelSystem(panels,wrap=PanelTree)  # set-up
+sys = PanelSystem(PanelTree(panels))  # set-up
 gmressolve!(sys)         # approximate solve
 extrema(cₚ(sys))          # measure
 ```
@@ -37,16 +37,19 @@ function gmressolve!(sys;atol=1e-3,verbose=true,kwargs...)
     verbose && println(stats)
     set_q!(sys,q)
 end
-@inline rhs(sys) = rhs(sys.body,sys.U)
-@inline rhs(panels,U) = -sum(components(panels.n) .* U)
-@inline bc!(b,sys) = AK.foreachindex(i-> b[i] = Φₙ(sys.body[i],sys),b) # body: Φₙ = -Uₙ
-@inline precon!(z,sys,r) = z .= r # identity
+# Stack the boundaries' strengths, right-hand-sides, residuals, and preconditioners
+@inline slices(sys) = map((b,n)->n-length(b)+1:n,sys.boundaries,cumsum(length.(sys.boundaries)))
+@inline get_q(sys) = reduce(vcat,map(b->b.q,sys.boundaries))
+@inline set_q!(sys::PanelSystem,q) = (map((b,I)->set_q!(b,view(q,I)),sys.boundaries,slices(sys)); sys)
+rhs(sys) = reduce(vcat,map(b->rhs(b,sys),sys.boundaries))
+bc!(r,sys) = map((b,I)->bc!(view(r,I),b,sys),sys.boundaries,slices(sys))
+precon!(z,sys,r) = (z .= r; map((b,I)->precon!(view(z,I),b),sys.boundaries,slices(sys)); z)
 """
     directsolve!(sys)
 
 Solve a panel system using a direct construction and solve such that the normal
 velocity boundary condition `∂ₙϕ(pᵢ,pⱼ)*qⱼ = -U⋅nᵢ` is satisfied on body panels.
-This function can not be used to solve an `FSPanelSystem`.
+This function can not be used to solve a system with a `FreeSurface`.
 
 **Note**: This function is memory (and therefore time) intensive for large number of
 panels N because it constructs the full N² matrix elements. It is *not* accelerated
@@ -61,24 +64,27 @@ Modified `sys` with updated body panel strengths `q`
 
 # Example
 ```julia
-sys = BodyPanelSystem(panels) # set-up
+sys = PanelSystem(panels)     # set-up
 directsolve!(sys)             # solve
 extrema(cₚ(sys))               # measure
 ```
 """
 function directsolve!(sys;verbose=true)
-    typeof(sys)<:FSPanelSystem && throw(ArgumentError("Cannot directsolve! an FSPanelSystem"))
     q = if verbose
         @warn "This routine is memory intensive. See help?>directsolve!."
-        @time influence(sys)\rhs(sys.body,sys.U)
+        @time influence(sys)\rhs(sys)
     else
-        influence(sys)\rhs(sys.body,sys.U)
-    end; set_q!(sys.body,q); sys
+        influence(sys)\rhs(sys)
+    end; set_q!(sys,q)
 end
-influence((;body,mirrors)::AbstractPanelSystem) = influence(body,mirrors,∫G)
-function influence(body,mirrors,ϕ)
-    A = zeros(eltype(body.dA), length(body), length(body))
-    AK.foraxes(A,2) do j; for m in mirrors, i in axes(A,1)
-        @inbounds A[i,j] += derivative(t->ϕ((body.x[i]+t*body.n[i]) .* m, body[j]), 0)
-    end; end; A
+function influence(sys)
+    any(b->b isa FreeSurface,sys.boundaries) && throw(ArgumentError("directsolve! can't solve a FreeSurface"))
+    I = slices(sys); N = last(last(I))
+    A = zeros(eltype(first(sys.boundaries).dA),N,N)
+    for (bᵢ,Iᵢ) in zip(sys.boundaries,I), (bⱼ,Iⱼ) in zip(sys.boundaries,I)
+        influence!(view(A,Iᵢ,Iⱼ),bᵢ,bⱼ,sys.domain)
+    end; A
 end
+influence!(A,bᵢ,bⱼ,domain) = (C = CartesianIndices(A); AK.foreachindex(A) do k; i,j = Tuple(C[k])
+    @inbounds A[k] = condition(bᵢ,i,unit(bⱼ,j,domain))
+end; A)

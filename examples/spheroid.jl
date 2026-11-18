@@ -49,26 +49,23 @@ function spheroid(h;L=1,Z=-1/8,r=1/12,AR=1/2r,kwargs...)
     S(θ₁,θ₂) = SA[0.5L*cos(θ₁),-r*sin(θ₂)*sin(θ₁),r*cos(θ₂)*sin(θ₁)+Z]
     panelize(S,0,π,0,π,hᵤ=h*√AR,hᵥ=h/√AR;kwargs...)
 end
-∫kelvin_S₂(x,p;kwargs...) = ∫kelvin(x,p;kwargs...)+∫kelvin(x,reflect(p,SA[1,-1,1]);kwargs...)
-Cw(panels;kwargs...) = 2steady_force(influence(panels;kwargs...)\first.(panels.n),panels;kwargs...)[1]
-kwargs = (ϕ=∫kelvin_S₂,ℓ=0.5^2)
+solve(panels,Fn) = directsolve!(PanelSystem(panels,domain=Kelvin(Fn^2,sym_axes=2,filter=false)),verbose=false)
+Cw(sys) = -2steadyforce(sys,S=1)[1] # wave drag on both sides
 dat = map(0.5 .^ (3:0.5:5.5)) do h
 	panels = spheroid(h)
-	(h=h,N=length(panels),Cw=Cw(panels;kwargs...))
+	(h=h,N=length(panels),Cw=Cw(solve(panels,0.5)))
 end |> Table
 CSV.write("submerged_spheroid_Cw_convergence.csv",dat)
 
-kwargs = (ϕ=∫kelvin_S₂,ℓ=0.2^2)
-plot(); for (n,c) in zip((20,40,60,80),colorschemes[:Blues_4])
-	h = 1/n; panels = spheroid(h,N_max=1500)
-    q = influence(panels;kwargs...)\components(panels.n,1);
-    plot!(-2:h:1,x->ζ(x,0,q,panels;kwargs...),label="h/L=1/$n";c)
+plot(); for (n,c) in zip((20,40,60,80),palette(:Blues_4))
+	h = 1/n; sys = solve(spheroid(h,N_max=1500),0.2)
+    plot!(-2:h:1,x->ζ(SA[x,0,0],sys),label="h/L=1/$n";c)
 end; plot!(xlabel="x/L",ylabel="ζg/U²",ylims=(-0.15,0.15))
 savefig("submerged_spheroid_WL_convergence.png")
 
 panels = spheroid(1/60)
 CwFn = map(0.15:0.05:1) do Fn
-	(Fn=Fn,Cw=Cw(panels;ϕ=∫kelvin_S₂,ℓ=Fn^2))
+	(Fn=Fn,Cw=Cw(solve(panels,Fn)))
 end |> Table;
 CSV.write("submerged_spheroid_Cw_Fn.csv",CwFn)
 scatter(CwFn.Fn,CwFn.Cw,ylims=(0,1e-2),title="submerged spheroid wavemaking drag",

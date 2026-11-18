@@ -9,7 +9,7 @@ Approximate ∫f(x)dx from x=[a,b] using the Gauss-Legendre weights and points `
 quadgl(f;x,w) = sum(i->w[i]*f(x[i]),eachindex(x,w))
 quadgl(f,a,b;x=xg32,w=wg32) = (b-a)/2*quadgl(t->f((b+a)/2+t*(b-a)/2);x,w)
 const xg16,wg16 = gausslegendre(16)
-# split at t=0, nearest the √(1+t²) branch points at t=±i
+# split at t=0, integrating on either side of the branch points at t=±i
 quadgl0(f::F,a,b) where F = a<0<b ? quadgl(f,a,0;x=xg16,w=wg16)+quadgl(f,0,b;x=xg16,w=wg16) : quadgl(f,a,b;x=xg16,w=wg16)
 
 """
@@ -32,16 +32,15 @@ points where `flag=true` are integrated to ±∞ in the complex-plane using `±n
     end; val
 end
 
-using Roots
 """
     nsp(h₀,g,dg,γ=one)
 
 Integrate the contributions of `imag(∫γ(h)exp(im*g(h))dh)` from
 `h = [h₀,∞]` using numerical stationary phase. The complex path
 is found as the roots of `ϵ(h)=g(h)-g(h₀)-im*p=0` where `p` are
-Gauss-Laguerre integration points. The pre-function `γ` must be
-slowly varying compared to `g` over `h`. Returns `NaN` if a root
-is not found, which happens when the path passes close to a saddle.
+Gauss-Laguerre integration points. Returns `NaN` if the path is 
+not found, which can happen when too near a saddle. The pre-
+function `γ` must be slowly varying compared to `g` over `h`.
 """
 @fastmath function nsp(h₀,g,dg,γ=one;xlag=xlag,wlag=wlag,atol=1e-3)
     # Sum over complex Gauss-Laguerre points
@@ -60,6 +59,7 @@ function newton(f,df,x;atol,n=10)
     end; x*NaN
 end
 
+using Roots
 """
     finite_ranges(S,g,Δg,R;atol=Δg/10)
 

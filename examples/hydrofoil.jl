@@ -41,8 +41,11 @@ paper = (CL=[1.11 0.57 0.765; 1.12 0.865 0.885; 1.072 0.976 0.932; 1.044 1.01 0.
 using GLMakie
 foil,te = wing(h=1)
 sys = PanelSystem(Lifting(foil,te),domain=Kelvin(0.5^2,sym_axes=2)) |> directsolve! # Frc=0.5, h/c=1
-waves = viz(sys,colorrange=(-1,1),fsargs=(x=-6:1/8:2,y=0:1/6:5)); resize!(waves,1200,600) # 6 chords downstream, 5 to the side
-ax3 = content(waves[1,1]); ax3.elevation = -π/5; ax3.viewmode = :stretch # fish-eye view from below, filling the figure
+waves = with_theme(Theme(fontsize=12)) do # 6 chords downstream, 5 to the side
+    viz(sys,colorrange=(-1,1),vectors=nothing,fsargs=(x=-6:1/16:2,y=0:1/16:5))
+end; resize!(waves,1600,800)
+foreach(cb->(cb.width=12; cb.height=Relative(0.45)), filter(c->c isa Colorbar, waves.content)) # slim colorbars
+ax3 = content(waves[1,1]); ax3.viewmode = :fitzoom; hidedecorations!(ax3); hidespines!(ax3)
 
 forces = Figure(size=(900,450))
 for (k,C) in enumerate(("L","D"))

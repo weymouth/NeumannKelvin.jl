@@ -260,9 +260,7 @@ Despite many advantages, the `Kelvin` domain does have its own limitations:
 - The perfect wave resolution can produce waves too small for the body panels near the free-surface to resolve, leading to convergence issues unless these are `filter`ed.
 - Kelvin panels can not be extended to inforce the Nonlinear FSBC, unlike `FreeSurface` panels which could potentially do so in the future.
 
-See the docs for `Kelvin`, `kelvin`, and the cited references for details.
-
-As a final application, let's simulate the classic Wigley hull in the `Kelvin` domain
+For a surface ship application, let's simulate the classic Wigley hull in the `Kelvin` domain
 ```julia
 function wigley(hᵤ,hᵥ=hᵤ;B=1/8,D=1/6,kwargs...)
     S(u,v) = SA[u-0.5,-2B*u*(1-u)*(v)*(2-v),D*(v-1)]
@@ -281,11 +279,11 @@ A `Lifting` boundary is a closed body of dipole panels (the derivative of a sour
 foil,te = wing(h=1) # define foil geometry and trailing edge at depth `h=1`
 sys = PanelSystem(Lifting(foil,te),domain=Kelvin(0.5^2,sym_axes=2)) |> directsolve! # Fn_chord = 0.5
 steadyforce(sys;S=2) # lift & drag on the half-wing area
-waves = viz(sys,colorrange=(-1,1),fsargs=(x=-6:1/8:2,y=0:1/6:5)); resize!(waves,1200,600)
+waves = viz(sys,colorrange=(-1,1),vectors=nothing,fsargs=(x=-6:1/8:2,y=0:1/6:5))
 ```
 ![H105 hydrofoil in the Kelvin domain](examples//hydrofoil_waves.png)
 
-This fisheye view shows the pressure side of the foil and its wave pattern. 
+The low pressure over the foil pulls down a trough just behind it, followed by the Kelvin wave train.
 
 Sweeping the depth and Froude number, the lift relative to its deep-water value matches the boundary element results of Nicolas et al. within 0.01 for h/c ≥ 1.5, including the gain at low Froude number and the loss at high Froude number, although the linear Neumann-Kelvin method diverges when the depth is very small.
 
